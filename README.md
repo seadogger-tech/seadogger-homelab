@@ -65,8 +65,8 @@ I am using a 64GB sdCard and transitioning the `/boot` and `/` mounts to a `4TB 
    ```
 3. Update the entries to match new `PARTUUID` from the `blkid` return values. `/etc/fstab`
 ```
-PARTUUID=3eea8674-a042-4467-a338-2776bd91343c  /boot/firmware  vfat  defaults  0  2
-PARTUUID=f597843b-69f4-4ddf-b0f1-d89310f6d4f1  /               ext4  defaults,noatime  0  1
+PARTUUID=<PUT THE NVMe EFI PARTITION (1) UUID HERE>  /boot/firmware  vfat  defaults  0  2
+PARTUUID=<PUT THE NVMe / PARTITION (2) UUID HERE>  /               ext4  defaults,noatime  0  1
 ```
 4. Save and exit.
 
@@ -81,7 +81,7 @@ PARTUUID=f597843b-69f4-4ddf-b0f1-d89310f6d4f1  /               ext4  defaults,no
 
 7. Update the `/boot/firmware/cmdline.txt` to put the `/` Partition UUID in the command line:
 ```
-console=serial0,115200 console=tty1 root=PARTUUID=f597843b-69f4-4ddf-b0f1-d89310f6d4f1 rootfstype=ext4 fsck.repair=yes rootwait 
+console=serial0,115200 console=tty1 root=PARTUUID=<PUT THE NVMe / PARTITION (2) UUID HERE> rootfstype=ext4 fsck.repair=yes rootwait 
 ```
 
 8. Save and exit
