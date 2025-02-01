@@ -1,0 +1,17 @@
+ollama:
+  ollama:
+    models:
+      pull: []
+      run: []
+
+persistentVolumeClaim:
+  enabled: true
+  size: 25Gi
+  storageClass: "longhorn"
+
+# Service configuration
+service:
+  type: LoadBalancer
+  loadBalancerIP: 192.168.1.243
+  port: 80
+  targetPort: 80

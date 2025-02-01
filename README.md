@@ -1,4 +1,4 @@
-# Prerequisites:
+# Prerequisites
 - **POE switch** to power the Raspberry Pi 5 via **POE HAT**.
 - **WireGuard** is set up for all clients to build **encrypted tunnels** into the network for services like **OpenWebUI**.
 - **Raspberry Pis** are attached to the network with **DHCP static IP assignments** and **SSH enabled**.
@@ -28,7 +28,7 @@
   - **ArgoCD**: Manages deployment of **PODs and Services** in the cluster.
 - **GitLab deployments are configured to pull arm64 Docker images**.
 
-# Bill of Materials:
+# Bill of Materials
 
 | Item | Quantity | Cost per Unit | Total Cost |
 |------|----------|--------------|------------|
@@ -41,8 +41,6 @@
 | Nylon Standoff Kit | 1 | $13 | $13 |
 | **Total Cost (Excludes POE Switch)** | **-** | **-** | **$1257** |
 
-### **Total Cost of Materials (Excluding POE Switch):** **$1257**
-
 # Raspberry Pi 5 4TB NVMe Drive Setup
 
 This guide will help you set up and use a **4TB NVMe drive** on a **Raspberry Pi 5**. This process involves partitioning, formatting, cloning partitions, updating `/etc/fstab`, and troubleshooting common issues.
@@ -50,7 +48,6 @@ This guide will help you set up and use a **4TB NVMe drive** on a **Raspberry Pi
 I could not get `rpi-clone` to work with a 4TB drive as it seems to reset the MBR and not use GPT.  This causes the paritions to be resized so this is a manual process to perform the copy from sdCard to NVMe drive.  This is very tedious and problematic to weave thru.  **Use at your own risk!**
 
 I am using a 64GB sdCard and transitioning the `/boot` and `/` mounts to a `4TB NVMe` using the `52Pi POE w/PCIe HAT`.  This will partition the NVMe just slifhtly larger than the partitions on the sdCard so the dd transfers complete without error but we do not waster a ton of space.  All the sector definitions are based on this size sdCard for gdisk.  If you are using a smaller or larger sdCard you will need to modify the partition tables.  Be carefull as there is a small and unnoticeable error messages after you dd the files over that is easy to miss and will foobar the whole thing.
-
 
 ### 1. Prepare the 4TB NVMe Drive
 
