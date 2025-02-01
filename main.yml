@@ -107,27 +107,27 @@
     - config.yml
 
   tasks:
-#    - name: Install K3s on control plane (takes a while).
-#      ansible.builtin.shell: >-
-#        ~/k3s_install.sh >> ~/k3s_install_log.txt
-#      args:
-#        chdir: "~"
-#        creates: /var/lib/rancher/k3s/server/node-token
+    - name: Install K3s on control plane (takes a while).
+      ansible.builtin.shell: >-
+        ~/k3s_install.sh >> ~/k3s_install_log.txt
+      args:
+        chdir: "~"
+        creates: /var/lib/rancher/k3s/server/node-token
 
-#    - name: Get node token.
-#      ansible.builtin.command: cat /var/lib/rancher/k3s/server/node-token
-#      changed_when: false
-#      register: node_token_output
+    - name: Get node token.
+      ansible.builtin.command: cat /var/lib/rancher/k3s/server/node-token
+      changed_when: false
+      register: node_token_output
 
-#    - name: Set node_token fact.
-#      ansible.builtin.set_fact:
-#        node_token: "{{ node_token_output.stdout_lines[0] }}"
+    - name: Set node_token fact.
+      ansible.builtin.set_fact:
+        node_token: "{{ node_token_output.stdout_lines[0] }}"
 
-#    - name: Ignore PEP 668 because it's silly.
-#      ansible.builtin.file:
-#        path: /usr/lib/python3.11/EXTERNALLY-MANAGED
-#        state: absent
-#      become: true
+    - name: Ignore PEP 668 because it's silly.
+      ansible.builtin.file:
+        path: /usr/lib/python3.11/EXTERNALLY-MANAGED
+        state: absent
+      become: true
 
 
 - name: Configure the worker nodes.

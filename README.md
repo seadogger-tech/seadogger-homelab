@@ -4,7 +4,7 @@ This guide will help you set up and use a **4TB NVMe drive** on a **Raspberry Pi
 
 I could not get `rpi-clone` to work with a 4TB drive as it seems to reset the MBR and not use GPT.  This causes the paritions to be resized so this is a manual process to perform the copy from sdCard to NVMe drive.  This is very tedious and problematic to weave thru.  **Use at your own risk!**
 
-I am using a 64GB sdCard and transitioning the `/boot` and `/` mounts to a `4TB NVMe` using the `52Pi POE plus PCIe HAT`.  This will partition the NVMe just slifhtly larger than the partitions on the sdCard so the dd transfers complete without error but we do not waster a ton of space.  All the sector definitions are based on this size sdCard for gdisk.  If you are using a smaller or larger sdCard you will need to modify the partition tables.  Be carefull as there is a small and unnoticeable error messages after you dd the files over that is easy to miss and will foobar the whole thing.
+I am using a 64GB sdCard and transitioning the `/boot` and `/` mounts to a `4TB NVMe` using the `52Pi POE w/PCIe HAT`.  This will partition the NVMe just slifhtly larger than the partitions on the sdCard so the dd transfers complete without error but we do not waster a ton of space.  All the sector definitions are based on this size sdCard for gdisk.  If you are using a smaller or larger sdCard you will need to modify the partition tables.  Be carefull as there is a small and unnoticeable error messages after you dd the files over that is easy to miss and will foobar the whole thing.
 
 
 ### 1. Prepare the 4TB NVMe Drive
@@ -61,7 +61,7 @@ I am using a 64GB sdCard and transitioning the `/boot` and `/` mounts to a `4TB 
    ```
 2. Edit `/etc/fstab`:
    ```bash
-   sudo nano /mnt/root/etc/fstab
+   sudo nano /etc/fstab
    ```
 3. Update the entries to match new `PARTUUID` from the `blkid` return values. `/etc/fstab`
 ```
@@ -96,7 +96,7 @@ console=serial0,115200 console=tty1 root=PARTUUID=f597843b-69f4-4ddf-b0f1-d89310
    sudo dd if=/dev/mmcblk0p2 of=/dev/nvme0n1p2 bs=4M status=progress
    ```
 
-### 5. Run `e2fsck` to verify the NVMe Partitions are intact and ready to support booting
+### 5. Verify the NVMe partitions are ready to support booting
 1. Run `e2fsck`:
    ```bash
    sudo e2fsck -f /dev/nvme0n1p2
@@ -113,7 +113,7 @@ console=serial0,115200 console=tty1 root=PARTUUID=f597843b-69f4-4ddf-b0f1-d89310
 
 5. Check `/boot/firmware/config.txt` and `/boot/firmware/cmdline.txt` files if this had any failures
 
-### 6. Mount the Partitions
+### 6. Manually Mount the NVMe Partitions to Verify Readiness
 1. Reload systemd:
    ```bash
    sudo systemctl daemon-reload
@@ -132,8 +132,8 @@ console=serial0,115200 console=tty1 root=PARTUUID=f597843b-69f4-4ddf-b0f1-d89310
    sudo mount /dev/nvme0n1p2 /mnt/root
    ```
 
-### 7. Make sure the '/etc/fstab' is correct 
-1. Un Mount the partitions:
+### 7. Make sure the '/etc/fstab' is correct (so they mount on reboot)
+1. Un-Mount the partitions:
    ```bash
    sudo umount /mnt/boot/firmware
    sudo umount /mnt/root
@@ -145,12 +145,18 @@ console=serial0,115200 console=tty1 root=PARTUUID=f597843b-69f4-4ddf-b0f1-d89310
    ```
 Make sure this mounts everything without errors otherwise there is a problem in the /etc/fstab and you need to to look into that problem before proceeding
 
-### 8. Setup the NVMe to boot first and Reboot the System
-1. `sudo raspi-config` 
-Under advanced options set the boot order to boot the NVMe first.  When prompted to reboot `decline`.  
-We will reboot in the next step.
+### 8. Setup the NVMe to boot first and Reboot
+1. Set the NVMe first in the boot order 
+    ```bash
+     sudo raspi-config
+    ``` 
+Under advanced options set the boot order to boot the NVMe first.  When prompted to reboot **`decline`**.  
+**We will reboot in the next step.**
 
-2. `sudo rpi-eeprom-config --edit`
+2. Set the NVMe first in the boot order and tell the bootloader to detect PCIE
+    ```bash
+    sudo rpi-eeprom-config --edit
+    ```
 
 3. Add and modify the following to set the boot order:
     ```
@@ -296,6 +302,28 @@ TODO:  We will use gitOps design pattern to deploy apps, update, manage the clus
 
 # Cluster App Deployment using GitOps with ArgoCD
 `TODO`
+
+# Helpful Links and References
+1. [Network Chuck](https://youtu.be/Wjrdr0NU4Sk)
+2. [Jeff Geerling's Blog](https://www.jeffgeerling.com/blog)
+3. [Alex's cloud blog](https://alexstan.cloud/posts/homelab/homelab-setup/)
+4. [debontonline tech blog](https://www.debontonline.com/2021/01/part-14-deploy-plexserver-yaml-with.html)
+
+## Things you should understand before you embark on this journey
+1. [Docker](https://www.freecodecamp.org/news/a-beginner-friendly-introduction-to-containers-vms-and-docker-79a9e3e119b)
+2. [AWS](https://aws.amazon.com) - You will need an AWS account
+3. [Github](https://cli.github.com) and command line
+
+## What can you learn from this HomeLab
+1. [kubernetes](https://docs.k3s.io/architecture) (In particular k3s) architecture
+2. [kubectl](https://kubernetes.io/docs/reference/kubectl/) (kubernetes command line tool)
+3. [Helm](https://helm.sh) (kubernetes container deployments)
+4. [Longhorn](https://longhorn.io) (Network Distributed Block Storage)
+5. Monitoring your cluster with [Prometheus](https://prometheus.io) and [Grafana](https://grafana.com)
+6. Continuous delivery and CM control of the cluster using GitOps design patterns with [argoCD](https://argo-cd.readthedocs.io/en/stable/)
+7. [Ansible](https://docs.ansible.com) for managing your cluster
+
+
 
 ## Author
 
