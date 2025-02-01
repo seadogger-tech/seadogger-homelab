@@ -73,8 +73,8 @@
         - "dm_crypt"
         - "rbd"
 
-    - name: Update Raspberry Pi firmware to rpi-6.6.y
-      command: rpi-update rpi-6.6.y
+    - name: Update Raspberry Pi firmware to latest
+      command: rpi-update
       register: rpi_update
       changed_when: "'Firmware update' in rpi_update.stdout"
 
