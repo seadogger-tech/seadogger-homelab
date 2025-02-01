@@ -246,6 +246,17 @@ Run the playbook:
 ```
 ansible-playbook main.yml
 ```
+   1.  Update apt package cache
+   2.  Ensure cgroups are configured correctly in cmdline.txt.
+   3.  Install necessary packages
+   4.  Enable and start iscsid service
+   5.  Ensure PCIe settings exist in config.txt
+   6.  Load dm_crypt kernel module
+   7.  Load rbd kernel module
+   8.  Append dm_crypt and rbd to /etc/modules
+   9.  Update Raspberry Pi firmware to rpi-6.6.y
+   10. Setup/deploy k3s to the control_plane (e.g. server node)
+   11. Setup/deploy k3s to the worker node(s)
 
 ### Upgrading the cluster
 
@@ -257,7 +268,7 @@ ansible-playbook upgrade.yml
 
 ### Benchmarking the cluster
 
-See the README file within the `benchmarks` folder.  Credit and Thanks to [Jeff Geerling](https://www.jeffgeerling.com)
+See the README file within the `benchmarks` folder.  **Credit and Thanks to [Jeff Geerling](https://www.jeffgeerling.com)**
 
 ### Shutting down the cluster
 
@@ -283,7 +294,7 @@ This configuration is not yet integrated into the general K3s setup.
 TODO:  We will use gitOps design pattern to deploy apps, update, manage the cluster
 
 
-# Raspberry Pi Cluster App Deployment with ArgoCD
+# Cluster App Deployment using GitOps with ArgoCD
 `TODO`
 
 ## Author
