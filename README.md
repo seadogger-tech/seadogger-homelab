@@ -1,3 +1,48 @@
+# Prerequisites:
+- **POE switch** to power the Raspberry Pi 5 via **POE HAT**.
+- **WireGuard** is set up for all clients to build **encrypted tunnels** into the network for services like **OpenWebUI**.
+- **Raspberry Pis** are attached to the network with **DHCP static IP assignments** and **SSH enabled**.
+  - Static IPs may still be needed for **k3s cluster nodes**, but DHCP simplifies maintenance.
+  - **WiFi is disabled** since all Pis are **hardwired via POE**.
+  - **(WiFi is not recommended for k3s clusters)**.
+- **Raspberry Pi must be booted with the root filesystem on an SSD**, not an SD card:
+  - **SD cards are unreliable** for the k3s control plane and fail early due to high read/write cycles.
+  - Moving to **SSD improves performance** and **prevents failures**.
+  - Issues encountered with **Longhorn storage** due to SD card failures, leading to corrupted Helm installs/uninstalls.
+- **Bill of Materials includes POE HATs with PCIe support for NVMe 2280 SSDs**:
+  - **100x performance improvement** over SD cards.
+  - **2x improvement** compared to USB-to-SATA interfaces.
+- **NVMe drives have three partitions**:
+  - **Boot partition**
+  - **Root partition**
+  - **Longhorn storage partition** (uniform across all nodes).
+- **AWS account setup with Bedrock API tokens** (for **Bedrock** and **OpenWebUI installs** in AWS).
+- **Recommended IDE setup**: VS Code with:
+  - **Continue Extension**
+  - **SSH Remote Extension**
+  - **Kubernetes Extension**
+  - (All tasks can still be completed via **SSH terminal** if preferred).
+- **DHCP server must not allocate IPs in the same range as MetalLB**.
+- **Automation tools**:
+  - **Ansible**: Configures dependencies and deploys k3s.
+  - **ArgoCD**: Manages deployment of **PODs and Services** in the cluster.
+- **GitLab deployments are configured to pull arm64 Docker images**.
+
+# Bill of Materials:
+
+| Item | Quantity | Cost per Unit | Total Cost |
+|------|----------|--------------|------------|
+| Raspberry Pi 5 8GB | 4 | $80 | $320 |
+| Raspberry Pi Rack with SSD Storage | 1 | $53 | $53 |
+| GPIO Header with shorter standoff | 1 | $10 | $10 |
+| Raspberry Pi 5 POE HAT with PCIe | 4 | $37 | $148 |
+| Crucial P3 4TB NVMe SSD | 3 | $225 | $675 |
+| Crucial P3 500GB NVMe SSD | 1 | $38 | $38 |
+| Nylon Standoff Kit | 1 | $13 | $13 |
+| **Total Cost (Excludes POE Switch)** | **-** | **-** | **$1257** |
+
+### **Total Cost of Materials (Excluding POE Switch):** **$1257**
+
 # Raspberry Pi 5 4TB NVMe Drive Setup
 
 This guide will help you set up and use a **4TB NVMe drive** on a **Raspberry Pi 5**. This process involves partitioning, formatting, cloning partitions, updating `/etc/fstab`, and troubleshooting common issues.
