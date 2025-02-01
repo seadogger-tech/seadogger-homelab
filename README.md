@@ -2,7 +2,7 @@
 
 This guide will help you set up and use a **4TB NVMe drive** on a **Raspberry Pi 5**. This process involves partitioning, formatting, cloning partitions, updating `/etc/fstab`, and troubleshooting common issues.
 
-I could not get `rpi-clone` to work with a 4TB drive as it seems to reset the MBR and not use GPT.  This causes the paritions to be resized so I have developed a process to perform the copy from sdCard to NVMe drive manually.  This is very tedious and problematic to weave thru.  Use at your own risk
+I could not get `rpi-clone` to work with a 4TB drive as it seems to reset the MBR and not use GPT.  This causes the paritions to be resized so this is a manual process to perform the copy from sdCard to NVMe drive.  This is very tedious and problematic to weave thru.  **Use at your own risk!**
 
 I am using a 64GB sdCard and transitioning the `/boot` and `/` mounts to a `4TB NVMe` using the `52Pi POE plus PCIe HAT`.  This will partition the NVMe just slifhtly larger than the partitions on the sdCard so the dd transfers complete without error but we do not waster a ton of space.  All the sector definitions are based on this size sdCard for gdisk.  If you are using a smaller or larger sdCard you will need to modify the partition tables.  Be carefull as there is a small and unnoticeable error messages after you dd the files over that is easy to miss and will foobar the whole thing.
 
@@ -86,7 +86,7 @@ console=serial0,115200 console=tty1 root=PARTUUID=f597843b-69f4-4ddf-b0f1-d89310
 
 8. Save and exit
 
-### 4. Clone the Partitions Using `dd`
+### 4. Clone the sdCard Partitions to the NVMe Partitions Using `dd`
 1. **Clone the EFI partition**:
    ```bash
    sudo dd if=/dev/mmcblk0p1 of=/dev/nvme0n1p1 bs=4M status=progress
@@ -96,7 +96,7 @@ console=serial0,115200 console=tty1 root=PARTUUID=f597843b-69f4-4ddf-b0f1-d89310
    sudo dd if=/dev/mmcblk0p2 of=/dev/nvme0n1p2 bs=4M status=progress
    ```
 
-### 5. Run `e2fsck` Check the Partitions to make sure they will boot!!!!
+### 5. Run `e2fsck` to verify the NVMe Partitions are intact and ready to support booting
 1. Run `e2fsck`:
    ```bash
    sudo e2fsck -f /dev/nvme0n1p2
@@ -132,7 +132,7 @@ console=serial0,115200 console=tty1 root=PARTUUID=f597843b-69f4-4ddf-b0f1-d89310
    sudo mount /dev/nvme0n1p2 /mnt/root
    ```
 
-### 7. Make sure the /etcfstad is correct 
+### 7. Make sure the '/etc/fstab' is correct 
 1. Un Mount the partitions:
    ```bash
    sudo umount /mnt/boot/firmware
@@ -181,7 +181,7 @@ We will reboot in the next step.
    sudo reboot
    ```
 
-### 10. Summary
+## Summary
 1. Partition the NVMe drive using GPT.
 2. Format partitions (`vfat` for EFI, `ext4` for root).
 3. Clone partitions from the SD card using `dd`.
@@ -223,7 +223,7 @@ After setting all those options, and the hostname is unique to each node (and ma
 
 ### SSH connection test
 
-To test the SSH connection from my Ansible controller (my main workstation, where I'm running all the playbooks), I connected to each server individually, and accepted the hostkey.  This must be done for all nodes so password is not requested by the nodes during the Ansible playbook run:
+To test the SSH connection from the host or PC you intend to run Ansible from, connect to each server individually, and accepted the hostkey.  This must be done for all nodes so password is not requested by the nodes during the Ansible playbook run:
 
 ```
 ssh-copy-id pi@node[X].local
@@ -238,13 +238,6 @@ ansible all -m ping
 
 It should respond with a 'SUCCESS' message for each node.
 
-### Storage Configuration
-
-#### Ceph Storage Configuration
-
-You could also run Ceph on a Pi cluster—see the storage configuration playbook inside the `ceph` directory.
-
-This configuration is not yet integrated into the general K3s setup.
 
 ### Cluster configuration and K3s installation
 
@@ -279,6 +272,19 @@ You can reboot all the nodes with:
 ```
 ansible all -m reboot -b
 ```
+
+### CEPH-ROOK Storage Configuration
+
+TODO You could also run Ceph on a Pi cluster—see the storage configuration playbook inside the `ceph` directory.
+
+This configuration is not yet integrated into the general K3s setup.
+
+### ArgoCD Deployment 
+TODO:  We will use gitOps design pattern to deploy apps, update, manage the cluster
+
+
+# Raspberry Pi Cluster App Deployment with ArgoCD
+`TODO`
 
 ## Author
 
