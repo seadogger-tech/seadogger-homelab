@@ -1,0 +1,23 @@
+project: default
+source:
+  repoURL: https://mojo2600.github.io/pihole-kubernetes/
+  targetRevision: 2.27.0
+  helm:
+    valueFiles:
+      - >-
+        https://raw.githubusercontent.com/seadogger/seadogger-homelab/master/helm-deployments/pihole/pihole-values.yaml
+  chart: pihole
+destination:
+  server: https://kubernetes.default.svc
+  namespace: pihole
+syncPolicy:
+  automated:
+    prune: true
+    selfHeal: true
+  syncOptions:
+    - CreateNamespace=true
+  # Add refresh settings to detect changes in values.yaml
+  refreshTargets:
+    - valueFiles:
+        - >-
+          https://raw.githubusercontent.com/seadogger/seadogger-homelab/master/helm-deployments/pihole/pihole-values.yaml

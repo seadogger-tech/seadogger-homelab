@@ -8,17 +8,18 @@ server:
     requests:
       cpu: 200m
       memory: 256Mi
-  service:
-    type: LoadBalancer
-    loadBalancerIP: "192.168.1.246"
-    annotations:
-      metallb.universe.tf/allow-shared-ip: prometheus
-    labels: {}
-    ports:
-      - name: http
-        port: 80
-        targetPort: 9090
-        protocol: TCP
+  
+service:
+  type: LoadBalancer
+  loadBalancerIP: "192.168.1.245"
+  annotations:
+    metallb.universe.tf/allow-shared-ip: prometheus
+  labels: {}
+  ports:
+    - name: http
+      port: 80
+      targetPort: 9090
+      protocol: TCP
 
 # Reduce resource usage for components
 alertmanager:
