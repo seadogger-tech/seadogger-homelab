@@ -40,9 +40,9 @@ resources:
     memory: 512Mi
 
 adlists:
-#    - https://reddestdream.github.io/Projects/MinimalHosts/etc/MinimalHostsBlocker/minimalhosts
-#    - https://raw.githubusercontent.com/StevenBlack/hosts/master/data/KADhosts/hosts
-#    - https://raw.githubusercontent.com/StevenBlack/hosts/master/data/add.Spam/hosts
+    - https://reddestdream.github.io/Projects/MinimalHosts/etc/MinimalHostsBlocker/minimalhosts
+    - https://raw.githubusercontent.com/StevenBlack/hosts/master/data/KADhosts/hosts
+    - https://raw.githubusercontent.com/StevenBlack/hosts/master/data/add.Spam/hosts
     - https://v.firebog.net/hosts/static/w3kbl.txt
     - http://sysctl.org/cameleon/hosts
     - https://www.dshield.org/feeds/suspiciousdomains_Low.txt
