@@ -11,6 +11,10 @@ server:
   service:
     type: LoadBalancer
     loadBalancerIP: "192.168.1.245"
+    annotations: {}
+    labels: {}
+    externalPort: 9090
+    targetPort: 9090
 
 # Reduce resource usage for components
 alertmanager:
