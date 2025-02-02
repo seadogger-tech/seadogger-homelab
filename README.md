@@ -1,32 +1,62 @@
-# Prerequisites
-- **POE switch** to power the Raspberry Pi 5 via **POE HAT**.
-- **WireGuard** is set up for all clients to build **encrypted tunnels** into the network for services like **OpenWebUI**.
-- **Raspberry Pis** are attached to the network with **DHCP static IP assignments** and **SSH enabled**.
-  - Static IPs may still be needed for **k3s cluster nodes**, but DHCP simplifies maintenance.
-  - **WiFi is disabled** since all Pis are **hardwired via POE**.
-  - **(WiFi is not recommended for k3s clusters)**.
-- **Raspberry Pi must be booted with the root filesystem on an SSD**, not an SD card:
-  - **SD cards are unreliable** for the k3s control plane and fail early due to high read/write cycles.
-  - Moving to **SSD improves performance** and **prevents failures**.
-  - Issues encountered with **Longhorn storage** due to SD card failures, leading to corrupted Helm installs/uninstalls.
-- **Bill of Materials includes POE HATs with PCIe support for NVMe 2280 SSDs**:
-  - **100x performance improvement** over SD cards.
-  - **2x improvement** compared to USB-to-SATA interfaces.
-- **NVMe drives have three partitions**:
-  - **Boot partition**
-  - **Root partition**
-  - **Longhorn storage partition** (uniform across all nodes).
-- **AWS account setup with Bedrock API tokens** (for **Bedrock** and **OpenWebUI installs** in AWS).
-- **Recommended IDE setup**: VS Code with:
-  - **Continue Extension**
-  - **SSH Remote Extension**
-  - **Kubernetes Extension**
-  - (All tasks can still be completed via **SSH terminal** if preferred).
-- **DHCP server must not allocate IPs in the same range as MetalLB**.
-- **Automation tools**:
-  - **Ansible**: Configures dependencies and deploys k3s.
-  - **ArgoCD**: Manages deployment of **PODs and Services** in the cluster.
-- **GitLab deployments are configured to pull arm64 Docker images**.
+# HomeLab Raspberry Pi k3s Deployment Guide
+
+## Prerequisites
+
+### Hardware Requirements
+- Raspberry Pi5 nodes (1 server node and 3 worker nodes)
+- POE switch (recommended: Ubiquiti Dream Machine SE)
+  - Powers Raspberry Pis via POE HAT
+  - Simplifies the wiring and setup, but not totally neccessary.  
+  - **If you do not use POE, adjust the BoM (e.g. rack mounted solution will be different, likely)**
+- Ethernet cables for hardwired connections
+  - WiFi is disabled and not recommended for k3s clusters
+
+### Network Setup
+- DHCP static IP assignments for all Raspberry Pis
+  - Configured on network switch for centralized management
+  - Static IPs required for k3s cluster nodes
+- DHCP service range configuration
+  - Reserve IPs up to 192.168.1.239
+  - Leaves space for MetalLB allocation above this range
+  - NOTE - If you are using a different subnet, there is a lot of changes to apply throughout this deployment.  
+  - TODO: centralize the subnet in the ansible manifest config.yaml
+- WireGuard (optional)
+  - Required only for remote access
+  - Provides encrypted tunnels for services like OpenWebUI, PiHole when you are not on your network
+
+### Software Requirements
+- SSH enabled on all Raspberry Pis
+- AWS account with Bedrock API tokens
+- Working knowledge of:
+  - Docker containers and orchestration
+  - Basic AWS services
+  - Git and GitHub CLI tools
+
+### Development Environment
+- VS Code (recommended) with:
+  - Continue Extension
+  - SSH Remote Extension
+- Alternative: SSH terminal access
+
+## Learning Outcomes
+
+### Core Technologies
+- [Kubernetes (k3s)](https://docs.k3s.io/architecture) architecture and deployment
+- [kubectl](https://kubernetes.io/docs/reference/kubectl/) for cluster management
+- [Helm](https://helm.sh) package management
+
+### Infrastructure Components
+- [Longhorn](https://longhorn.io) distributed storage
+- [Prometheus](https://prometheus.io) & [Grafana](https://grafana.com) monitoring stack 
+- [ArgoCD](https://argo-cd.readthedocs.io/en/stable/) for GitOps
+- [Ansible](https://docs.ansible.com) for Infrastructure as Code
+
+### Essential Reading
+- [Docker Containers for Beginners](https://www.freecodecamp.org/news/a-beginner-friendly-introduction-to-containers-vms-and-docker-79a9e3e119b)
+- [Network Chuck's Raspberry Pi Cluster Guide](https://youtu.be/Wjrdr0NU4Sk)
+- [Jeff Geerling's Homelab Blog](https://www.jeffgeerling.com/blog)
+- [Alex's Cloud Infrastructure Guide](https://alexstan.cloud/posts/homelab/homelab-setup/)
+- [Deploying Plex on Kubernetes](https://www.debontonline.com/2021/01/part-14-deploy-plexserver-yaml-with.html)
 
 # Bill of Materials
 
@@ -40,6 +70,45 @@
 | Crucial P3 500GB NVMe SSD | 1 | $38 | $38 |
 | Nylon Standoff Kit | 1 | $13 | $13 |
 | **Total Cost (Excludes POE Switch)** | **-** | **-** | **$1257** |
+
+# Deployment Overview (Cold Start Sequence)
+
+This guide outlines the steps to set up a Kubernetes cluster on Raspberry Pi 5 nodes, from initial hardware setup through application deployment using GitOps practices.
+
+## 1. Hardware Preparation
+- Install POE HAT with NVMe PCIe adapter on all Raspberry Pi 5s
+- Configure SSD boot and remove SD cards to supercharge our cluster performance 
+  - Some apps will need persistent storage and we do not want those to be slowed down by sdCard IO
+  - Also sdCards are not made to support that kind of IO and your cluster may fail prematurely
+
+## 2. Kubernetes Infrastructure (Ansible-managed)
+1. Clone configuration repository:
+   ```bash
+   git clone https://github.com/seadogger/seadogger-homelab.git
+   ```
+2. Deploy core infrastructure:
+   - k3s dependencies and hardware configurations (cgroups)
+   - k3s cluster (server and worker nodes)
+   - MetalLB load balancer
+   - ArgoCD for GitOps
+
+## 3. Application Stack (ArgoCD-managed)
+The following applications are deployed via GitOps pipeline using ArgoCD:
+
+### Core Services
+- Bedrock Pod (AWS Bedrock API for AI Inferencing)
+- PiHole (DNS/DNSSEC and ad blocking)
+- Rook with Ceph (distributed storage)
+
+### Monitoring Stack
+- Prometheus (metrics collection)
+- Grafana (Cluster visualization and dashboards from the prometheus metrics collection)
+
+### Media & Applications
+- OpenWebUI Pod
+- PlexMedia Server
+
+> **Note**: Applications are deployed declaratively through ArgoCD, ensuring infrastructure-as-code best practices
 
 # Raspberry Pi 5 4TB NVMe Drive Setup
 
@@ -344,26 +413,6 @@ TODO:  We will use gitOps design pattern to deploy apps, update, manage the clus
 
 # Cluster App Deployment using GitOps with ArgoCD
 `TODO`
-
-# Helpful Links and References
-1. [Network Chuck](https://youtu.be/Wjrdr0NU4Sk)
-2. [Jeff Geerling's Blog](https://www.jeffgeerling.com/blog)
-3. [Alex's cloud blog](https://alexstan.cloud/posts/homelab/homelab-setup/)
-4. [debontonline tech blog](https://www.debontonline.com/2021/01/part-14-deploy-plexserver-yaml-with.html)
-
-## Things you should understand before you embark on this journey
-1. [Docker](https://www.freecodecamp.org/news/a-beginner-friendly-introduction-to-containers-vms-and-docker-79a9e3e119b)
-2. [AWS](https://aws.amazon.com) - You will need an AWS account
-3. [Github](https://cli.github.com) and command line
-
-## What can you learn from this HomeLab
-1. [kubernetes](https://docs.k3s.io/architecture) (In particular k3s) architecture
-2. [kubectl](https://kubernetes.io/docs/reference/kubectl/) (kubernetes command line tool)
-3. [Helm](https://helm.sh) (kubernetes container deployments)
-4. [Longhorn](https://longhorn.io) (Network Distributed Block Storage)
-5. Monitoring your cluster with [Prometheus](https://prometheus.io) and [Grafana](https://grafana.com)
-6. Continuous delivery and CM control of the cluster using GitOps design patterns with [argoCD](https://argo-cd.readthedocs.io/en/stable/)
-7. [Ansible](https://docs.ansible.com) for managing your cluster
 
 
 

@@ -1,0 +1,50 @@
+---
+    - name: Install K3s on control plane (takes a while) with etcd.
+      ansible.builtin.shell: >-
+        curl -sfL https://get.k3s.io | sh -s - server --cluster-init --write-kubeconfig-mode 644
+      args:
+        chdir: "~"
+        creates: /var/lib/rancher/k3s/server/node-token
+
+    - name: Ensure K3s service is restarted
+      ansible.builtin.systemd:
+        name: k3s
+        state: restarted
+        enabled: yes
+
+    - name: Get node token.
+      ansible.builtin.command: cat /var/lib/rancher/k3s/server/node-token
+      changed_when: false
+      register: node_token_output
+
+    - name: Set node_token fact.
+      ansible.builtin.set_fact:
+        node_token: "{{ node_token_output.stdout | trim }}"
+
+    - name: Allow incoming traffic on port 6443 (K3s API)
+      ansible.builtin.iptables:
+        chain: INPUT
+        protocol: tcp
+        destination_port: 6443
+        jump: ACCEPT
+
+    - name: Install pip3 (if not installed)
+      ansible.builtin.apt:
+        name: python3-pip
+        state: present
+
+    - name: Install Kubernetes Python client
+      ansible.builtin.pip:
+        name: kubernetes
+        state: present
+        executable: /usr/bin/pip3  # Make sure pip3 is being used
+
+    # Step 3: Download and install Helm for ARM64
+    - name: Download and install Helm for ARM64
+      ansible.builtin.shell:
+        cmd: |
+          curl -fsSL https://get.helm.sh/helm-v3.9.0-linux-arm64.tar.gz -o helm-arm64.tar.gz
+          tar -xzf helm-arm64.tar.gz
+          mv linux-arm64/helm /usr/local/bin/helm
+          rm -rf linux-arm64 helm-arm64.tar.gz
+      become: true

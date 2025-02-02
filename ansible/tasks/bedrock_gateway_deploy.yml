@@ -1,0 +1,31 @@
+---
+    # Step 1: Set KUBECONFIG globally
+    - name: Set KUBECONFIG global
+      ansible.builtin.set_fact:
+        KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+
+    # Step 2: Expose ArgoCD as a LoadBalancer service with MetalLB
+    - name: Use ArgoCD to deploy the Bedrock API Gateway Application
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: argoproj.io/v1alpha1
+          kind: Application
+          metadata:
+            name: bedrock-access-gateway
+            namespace: bedrock-gateway
+          spec:
+            project: default
+            source:
+              repoURL: https://github.com/seadogger/seadogger-homelab
+              path: kubectl-deployments/bedrock-access-gateway
+              targetRevision: HEAD
+            destination:
+              server: https://kubernetes.default.svc
+              namespace: bedrock-gateway
+            syncPolicy:
+              automated:
+                prune: true
+                selfHeal: true
+              syncOptions:
+                - CreateNamespace=true

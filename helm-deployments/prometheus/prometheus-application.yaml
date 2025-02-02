@@ -1,26 +1,25 @@
-apiVersion: argoproj.io/v1alpha1
-kind: Application
-metadata:
-  name: prometheus
-  namespace: argocd
-spec:
-  project: default
-  source:
-    chart: prometheus
-    repoURL: https://prometheus-community.github.io/helm-charts
-    targetRevision: 25.3.1  # You may want to check for the latest version
-    helm:
-      valueFiles:
-        - helm-deployments/prometheus/prometheus-values.yaml
-    repoURL: https://github.com/seadogger/seadogger-homelab.git
-    targetRevision: master
-    path: .
-  destination:
-    server: https://kubernetes.default.svc
-    namespace: monitoring
-  syncPolicy:
-    automated:
-      prune: true
-      selfHeal: true
-    syncOptions:
-      - CreateNamespace=true
+project: default
+source:
+  repoURL: https://prometheus-community.github.io/helm-charts
+  targetRevision: 27.2.0
+  helm:
+    valueFiles:
+      - >-
+        https://raw.githubusercontent.com/seadogger/seadogger-homelab/master/helm-deployments/prometheus/prometheus-values.yaml
+  chart: prometheus
+destination:
+  server: https://kubernetes.default.svc
+  namespace: monitoring
+syncPolicy:
+  automated:
+    prune: true
+    selfHeal: true
+  syncOptions:
+    - CreateNamespace=true
+  sources:
+    - chart:
+        repoURL: https://prometheus-community.github.io/helm-charts
+        targetRevision: 27.2.0
+    - repoURL: https://github.com/seadogger/seadogger-homelab
+      targetRevision: HEAD
+      path: helm-deployments/prometheus

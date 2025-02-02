@@ -1,400 +1,50 @@
 ---
-- name: Configure Raspberry Pi Cluster
-  hosts: cluster
+- hosts: cluster
   gather_facts: true
   become: true
-
-  handlers:
-    - name: Reboot Raspberry Pi
-      ansible.builtin.reboot:
-
-  vars_files:
-    - config.yml
-
   tasks:
-    - name: Update apt package cache
-      ansible.builtin.apt:
-        update_cache: yes
-        cache_valid_time: 3600  # Cache for 1 hour
-      when: ansible_os_family == "Debian"
+    - name: Configure Raspberry Pi Cluster
+      import_tasks: tasks/raspberry_pi_config.yml
+      when: enable_raspberry_pi_config | default(true)
 
-    - name: Ignore PEP 668 because it's silly.
-      ansible.builtin.file:
-        path: /usr/lib/python3.11/EXTERNALLY-MANAGED
-        state: absent
-      become: true
-
-    - name: Ensure cgroups are configured correctly in cmdline.txt.
-      ansible.builtin.replace:
-        path: /boot/firmware/cmdline.txt
-        regexp: '^([\w](?!.*\b{{ item }}\b).*)$'
-        replace: '\1 {{ item }}'
-      with_items:
-        - "cgroup_memory=1"
-        - "cgroup_enable=memory"
-      notify: reboot-pi
-      when: ansible_distribution == 'Debian'
-
-    - name: Install system packages
-      ansible.builtin.apt:
-        name:
-          - btop
-          - iptables
-          - open-iscsi
-          - nfs-common
-          - util-linux
-          - cryptsetup
-          - git
-        state: present
-        force_apt_get: yes
-
-    - name: Enable and start iscsid service
-      ansible.builtin.systemd:
-        name: iscsid
-        enabled: yes
-        state: started
-
-    - name: Ensure PCIe settings exist in config.txt
-      ansible.builtin.blockinfile:
-        path: /boot/firmware/config.txt
-        block: |
-          dtparam=pciex1
-          dtparam=pciex1_gen=3
-          boot_delay=1
-          rootwait
-        marker: "# {mark} NVMe Boot Settings"
-      notify: Reboot Raspberry Pi    
-
-    - name: Ensure dm_crypt and rbd kernel modules are loaded
-      community.general.modprobe:
-        name: "{{ item }}"
-        state: present
-      loop:
-        - dm_crypt
-        - rbd
-
-    - name: Ensure dm_crypt and rbd modules are persisted in /etc/modules
-      ansible.builtin.lineinfile:
-        path: /etc/modules
-        line: "{{ item }}"
-        state: present
-      loop:
-        - dm_crypt
-        - rbd
-
-    - name: Conditionally update Raspberry Pi firmware
-      ansible.builtin.command: rpi-update rpi-6.6.y
-      when: update_rpi_firmware | default(false) | bool
-      register: rpi_update
-      changed_when: "'Firmware update' in rpi_update.stdout"
-
-
-- name: Deploy and Configure k3s control plane to the sedrver node.
-  hosts: control_plane
+- hosts: control_plane
   gather_facts: false
   become: true
-
   vars_files:
     - config.yml
-
   tasks:
-    - name: Install K3s on control plane (takes a while) with etcd.
-      ansible.builtin.shell: >-
-        curl -sfL https://get.k3s.io | sh -s - server --cluster-init --write-kubeconfig-mode 644
-      args:
-        chdir: "~"
-        creates: /var/lib/rancher/k3s/server/node-token
+    - name: Deploy and Configure k3s control plane
+      import_tasks: tasks/k3s_control_plane.yml
+      when: enable_k3s_control_plane | default(true)
 
-    - name: Ensure K3s service is restarted
-      ansible.builtin.systemd:
-        name: k3s
-        state: restarted
-        enabled: yes
-
-    - name: Get node token.
-      ansible.builtin.command: cat /var/lib/rancher/k3s/server/node-token
-      changed_when: false
-      register: node_token_output
-
-    - name: Set node_token fact.
-      ansible.builtin.set_fact:
-        node_token: "{{ node_token_output.stdout | trim }}"
-
-    - name: Allow incoming traffic on port 6443 (K3s API)
-      ansible.builtin.iptables:
-        chain: INPUT
-        protocol: tcp
-        destination_port: 6443
-        jump: ACCEPT
-
-    - name: Install pip3 (if not installed)
-      ansible.builtin.apt:
-        name: python3-pip
-        state: present
-
-    - name: Install Kubernetes Python client
-      ansible.builtin.pip:
-        name: kubernetes
-        state: present
-        executable: /usr/bin/pip3  # Make sure pip3 is being used
-
-- name: Deploy and Configure k3s to the worker nodes.
-  hosts: nodes
+- hosts: nodes
   gather_facts: false
   become: true
-
   vars_files:
     - config.yml
-
   tasks:
-    - name: Install K3s on nodes (takes a while).
-      ansible.builtin.shell: >-
-        curl -sfL https://get.k3s.io |
-        K3S_URL="https://{{ hostvars[groups['control_plane'][0]]['ansible_host'] }}:6443"
-        K3S_TOKEN="{{ hostvars[groups['control_plane'][0]]['node_token'] }}" sh -s - agent
-      args:
-        chdir: "~"
-        creates: /var/lib/rancher/k3s/agent/kubelet.kubeconfig
+    - name: Deploy and Configure k3s workers
+      import_tasks: tasks/k3s_workers.yml
+      when: enable_k3s_workers | default(true)
 
-- name: Deploy MetalLB to the cluster using Helm
-  hosts: control_plane
+- hosts: control_plane
   gather_facts: false
   become: true
-
   vars_files:
     - config.yml
-
   tasks:
-    # Step 1: Set KUBECONFIG globally
-    - name: Set KUBECONFIG global
-      ansible.builtin.set_fact:
-        KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+    - name: Deploy ArgoCD
+      import_tasks: tasks/argocd_deploy.yml
+      when: enable_argocd | default(true)
 
-    # Step 2: Delete existing MetalLB resources to fix ownership issues
-    - name: Delete existing MetalLB resources
-      ansible.builtin.shell:
-        cmd: |
-          kubectl delete daemonset metallb-speaker -n metallb-system || true
-          kubectl delete deployment metallb-controller -n metallb-system || true
-          kubectl delete service metallb-service -n metallb-system || true
-          kubectl delete namespace metallb-system || true
-      become: true
+    - name: Deploy MetalLB
+      import_tasks: tasks/metallb_deploy.yml
+      when: enable_metallb | default(true)
 
-    # Step 3: Download and install Helm for ARM64
-    - name: Download and install Helm for ARM64
-      ansible.builtin.shell:
-        cmd: |
-          curl -fsSL https://get.helm.sh/helm-v3.9.0-linux-arm64.tar.gz -o helm-arm64.tar.gz
-          tar -xzf helm-arm64.tar.gz
-          mv linux-arm64/helm /usr/local/bin/helm
-          rm -rf linux-arm64 helm-arm64.tar.gz
-      become: true
+    - name: Deploy ArgoCD SVC
+      import_tasks: tasks/argocd_svc_metallb_deploy.yml
+      when: enable_argocd_svc | default(true)
 
-    # Step 4: Create MetalLB namespace
-    - name: Create MetalLB namespace
-      ansible.builtin.k8s:
-        kubeconfig: "{{ KUBECONFIG }}"
-        state: present
-        definition:
-          apiVersion: v1
-          kind: Namespace
-          metadata:
-            name: metallb-system
-
-    # Step 5: Add MetalLB Helm repository using shell module
-    - name: Add MetalLB Helm repository
-      ansible.builtin.shell:
-        cmd: helm repo add metallb https://metallb.github.io/metallb
-      environment:
-        KUBECONFIG: "{{ KUBECONFIG }}"  # Use the globally set KUBECONFIG
-      become: true
-
-    # Step 6: Update Helm repositories using shell module
-    - name: Update Helm repositories
-      ansible.builtin.shell:
-        cmd: helm repo update
-      environment:
-        KUBECONFIG: "{{ KUBECONFIG }}"  # Use the globally set KUBECONFIG
-      become: true
-
-    # Step 7: Download metallb-values.yaml from GitHub
-    - name: Download metallb-values.yaml from GitHub
-      ansible.builtin.get_url:
-        url: https://github.com/seadogger/seadogger-homelab/raw/master/helm-deployments/metallb-values.yaml
-        dest: /tmp/metallb-values.yaml
-      become: true
-
-    # Step 8: Install MetalLB using Helm with custom values
-    - name: Install MetalLB using Helm with custom values
-      ansible.builtin.shell:
-        cmd: helm install metallb metallb/metallb --namespace metallb-system -f /tmp/metallb-values.yaml
-      environment:
-        KUBECONFIG: "{{ KUBECONFIG }}"  # Use the globally set KUBECONFIG
-      become: true
-
-    # Step 9: Pause for 1 minute to ensure all MetalLB components are ready
-    # TODO this is a hack job.  We need get better status on the running metallb components and transition of something there
-    - name: Pause for 1 minute to allow MetalLB components to initialize
-      ansible.builtin.pause:
-        minutes: 1
-      become: true
-
-    # Step 10: Apply the custom IPAddressPool and L2Advertisement
-    - name: Create IPAddressPool and L2Advertisement via kubectl
-      ansible.builtin.k8s:
-        kubeconfig: "{{ KUBECONFIG }}"  # Use the globally set KUBECONFIG
-        state: present
-        definition:
-          apiVersion: metallb.io/v1beta1
-          kind: IPAddressPool
-          metadata:
-            name: default
-            namespace: metallb-system
-          spec:
-            addresses:
-              - 192.168.1.241-192.168.1.250  # Replace with your IP range
-
-    - name: Create L2Advertisement
-      ansible.builtin.k8s:
-        kubeconfig: "{{ KUBECONFIG }}"  # Use the globally set KUBECONFIG
-        state: present
-        definition:
-          apiVersion: metallb.io/v1beta1
-          kind: L2Advertisement
-          metadata:
-            name: default
-            namespace: metallb-system
-          spec:
-            ipAddressPools:
-              - default
-
-- name: Deploy ArgoCD to the cluster using Helm
-  hosts: control_plane
-  gather_facts: false
-  become: true
-
-  vars_files:
-    - config.yml
-
-  tasks:
-    # Step 1: Set KUBECONFIG globally
-    - name: Set KUBECONFIG global
-      ansible.builtin.set_fact:
-        KUBECONFIG: /etc/rancher/k3s/k3s.yaml
-
-    # Step 2: Clean up existing ArgoCD resources (if any)
-    - name: Delete ArgoCD service if it exists
-      ansible.builtin.k8s:
-        kubeconfig: "{{ KUBECONFIG }}"
-        state: absent
-        definition:
-          apiVersion: v1
-          kind: Service
-          metadata:
-            name: argocd-server
-            namespace: argocd
-      become: true
-
-    - name: Delete ArgoCD deployment if it exists
-      ansible.builtin.k8s:
-        kubeconfig: "{{ KUBECONFIG }}"
-        state: absent
-        definition:
-          apiVersion: apps/v1
-          kind: Deployment
-          metadata:
-            name: argocd-server
-            namespace: argocd
-      become: true
-
-    - name: Delete ArgoCD namespace if it exists (optional)
-      ansible.builtin.k8s:
-        kubeconfig: "{{ KUBECONFIG }}"
-        state: absent
-        definition:
-          apiVersion: v1
-          kind: Namespace
-          metadata:
-            name: argocd
-      become: true
-
-    # Step 3: Install Helm if it's not installed already (you can skip this step if Helm is already installed)
-    - name: Download and install Helm for ARM64
-      ansible.builtin.shell:
-        cmd: |
-          curl -fsSL https://get.helm.sh/helm-v3.9.0-linux-arm64.tar.gz -o helm-arm64.tar.gz
-          tar -xzf helm-arm64.tar.gz
-          mv linux-arm64/helm /usr/local/bin/helm
-          rm -rf linux-arm64 helm-arm64.tar.gz
-      become: true
-
-    # Step 4: Add the ArgoCD Helm repository
-    - name: Add ArgoCD Helm repository
-      ansible.builtin.shell:
-        cmd: helm repo add argo https://argoproj.github.io/argo-helm
-      environment:
-        KUBECONFIG: "{{ KUBECONFIG }}"
-      become: true
-
-    # Step 5: Update Helm repositories
-    - name: Update Helm repositories
-      ansible.builtin.shell:
-        cmd: helm repo update
-      environment:
-        KUBECONFIG: "{{ KUBECONFIG }}"
-      become: true
-
-    # Step 6: Download and modify the values.yaml to enable insecure mode
-    - name: Download ArgoCD values.yaml from Helm repository
-      ansible.builtin.shell:
-        cmd: helm show values argo/argo-cd > /tmp/argocd-values.yaml
-      environment:
-        KUBECONFIG: "{{ KUBECONFIG }}"
-      become: true
-
-    - name: Enable insecure mode in ArgoCD values.yaml
-      ansible.builtin.lineinfile:
-        path: /tmp/argocd-values.yaml
-        regexp: '^#?insecure:.*'
-        line: 'insecure: true'
-      become: true
-
-    # Step 7: Install ArgoCD using Helm with the updated values.yaml
-    - name: Install ArgoCD using Helm with custom values
-      ansible.builtin.shell:
-        cmd: helm install argocd argo/argo-cd --namespace argocd --create-namespace -f /tmp/argocd-values.yaml
-      environment:
-        KUBECONFIG: "{{ KUBECONFIG }}"
-      become: true
-
-    # Step 8: Expose ArgoCD as a LoadBalancer service with MetalLB
-    - name: Expose ArgoCD as a LoadBalancer service
-      ansible.builtin.k8s:
-        kubeconfig: "{{ KUBECONFIG }}"
-        state: present
-        definition:
-          apiVersion: v1
-          kind: Service
-          metadata:
-            name: argocd-server
-            namespace: argocd
-          spec:
-            type: LoadBalancer
-            selector:
-              app.kubernetes.io/name: argocd-server
-            ports:
-              - port: 80
-                targetPort: 8080
-                protocol: TCP
-            loadBalancerIP: 192.168.1.247
-      become: true
-
-    # Step 9: Wait for ArgoCD pods to be running
-    - name: Wait for ArgoCD pods to be running
-      ansible.builtin.shell:
-        cmd: |
-          while [[ $(kubectl get pods -n argocd -l app.kubernetes.io/name=argocd-server -o 'jsonpath={.items[?(@.status.phase!="Running")].metadata.name}' | wc -w) -gt 0 ]]; do
-            echo "Waiting for ArgoCD pods to be running..."
-            sleep 5
-          done
-      become: true
+    - name: Deploy Bedrock Gateway
+      import_tasks: tasks/bedrock_gateway_deploy.yml
+      when: enable_bedrock | default(true)

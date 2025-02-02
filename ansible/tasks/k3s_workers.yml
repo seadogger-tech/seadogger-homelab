@@ -1,0 +1,9 @@
+---
+    - name: Install K3s on nodes (takes a while).
+      ansible.builtin.shell: >-
+        curl -sfL https://get.k3s.io |
+        K3S_URL="https://{{ hostvars[groups['control_plane'][0]]['ansible_host'] }}:6443"
+        K3S_TOKEN="{{ hostvars[groups['control_plane'][0]]['node_token'] }}" sh -s - agent
+      args:
+        chdir: "~"
+        creates: /var/lib/rancher/k3s/agent/kubelet.kubeconfig

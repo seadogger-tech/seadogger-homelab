@@ -1,0 +1,27 @@
+---
+    # Step 1: Set KUBECONFIG globally
+    - name: Set KUBECONFIG global
+      ansible.builtin.set_fact:
+        KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+
+    # Step 2: Expose ArgoCD as a LoadBalancer service with MetalLB
+    - name: Expose ArgoCD as a LoadBalancer service
+      ansible.builtin.k8s:
+        kubeconfig: "{{ KUBECONFIG }}"
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: argocd-server
+            namespace: argocd
+          spec:
+            type: LoadBalancer
+            selector:
+              app.kubernetes.io/name: argocd-server
+            ports:
+              - port: 80
+                targetPort: 8080
+                protocol: TCP
+            loadBalancerIP: 192.168.1.247
+      become: true

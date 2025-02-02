@@ -1,0 +1,76 @@
+---
+    - name: Update apt package cache
+      ansible.builtin.apt:
+        update_cache: yes
+        cache_valid_time: 3600  # Cache for 1 hour
+      when: ansible_os_family == "Debian"
+
+    - name: Ignore PEP 668 because it's silly.
+      ansible.builtin.file:
+        path: /usr/lib/python3.11/EXTERNALLY-MANAGED
+        state: absent
+      become: true
+
+    - name: Ensure cgroups are configured correctly in cmdline.txt.
+      ansible.builtin.replace:
+        path: /boot/firmware/cmdline.txt
+        regexp: '^([\w](?!.*\b{{ item }}\b).*)$'
+        replace: '\1 {{ item }}'
+      with_items:
+        - "cgroup_memory=1"
+        - "cgroup_enable=memory"
+      notify: reboot-pi
+      when: ansible_distribution == 'Debian'
+
+    - name: Install system packages
+      ansible.builtin.apt:
+        name:
+          - btop
+          - iptables
+          - open-iscsi
+          - nfs-common
+          - util-linux
+          - cryptsetup
+          - git
+        state: present
+        force_apt_get: yes
+
+    - name: Enable and start iscsid service
+      ansible.builtin.systemd:
+        name: iscsid
+        enabled: yes
+        state: started
+
+    - name: Ensure PCIe settings exist in config.txt
+      ansible.builtin.blockinfile:
+        path: /boot/firmware/config.txt
+        block: |
+          dtparam=pciex1
+          dtparam=pciex1_gen=3
+          boot_delay=1
+          rootwait
+        marker: "# {mark} NVMe Boot Settings"
+      notify: Reboot Raspberry Pi    
+
+    - name: Ensure dm_crypt and rbd kernel modules are loaded
+      community.general.modprobe:
+        name: "{{ item }}"
+        state: present
+      loop:
+        - dm_crypt
+        - rbd
+
+    - name: Ensure dm_crypt and rbd modules are persisted in /etc/modules
+      ansible.builtin.lineinfile:
+        path: /etc/modules
+        line: "{{ item }}"
+        state: present
+      loop:
+        - dm_crypt
+        - rbd
+
+    - name: Conditionally update Raspberry Pi firmware
+      ansible.builtin.command: rpi-update rpi-6.6.y
+      when: update_rpi_firmware | default(false) | bool
+      register: rpi_update
+      changed_when: "'Firmware update' in rpi_update.stdout"
