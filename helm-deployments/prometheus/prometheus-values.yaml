@@ -1,4 +1,6 @@
 server:
+  persistentVolume:
+    enabled: false
   resources:
     limits:
       cpu: 500m
@@ -13,6 +15,8 @@ service:
 
 # Reduce resource usage for components
 alertmanager:
+  persistentVolume:
+    enabled: false
   resources:
     limits:
       cpu: 200m
@@ -42,3 +46,5 @@ kubeStateMetrics:
 # Disable components not needed
 pushgateway:
   enabled: false
+  persistentVolume:
+    enabled: false
