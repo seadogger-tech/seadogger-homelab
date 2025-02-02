@@ -89,27 +89,7 @@
       changed_when: "'Firmware update' in rpi_update.stdout"
 
 
-#- name: Configure storage node.
-#  hosts: storage
-#  gather_facts: false
-#  become: true
-
-#  handlers:
-#    - name: restart nfs
-#      ansible.builtin.service:
-#        name: nfs-server
-#        state: restarted
-
-#  vars_files:
-#    - config.yml
-
-#  tasks:
-#    - name: Set up storage.
-#      include_tasks: tasks/storage/{{ storage_type }}.yml
-
-
-
-- name: Configure the control plane.
+- name: Deploy and Configure k3s control plane to the sedrver node.
   hosts: control_plane
   gather_facts: false
   become: true
@@ -158,7 +138,7 @@
         state: present
         executable: /usr/bin/pip3  # Make sure pip3 is being used
 
-- name: Configure the worker nodes.
+- name: Deploy and Configure k3s to the worker nodes.
   hosts: nodes
   gather_facts: false
   become: true
@@ -287,3 +267,134 @@
           spec:
             ipAddressPools:
               - default
+
+- name: Deploy ArgoCD to the cluster using Helm
+  hosts: control_plane
+  gather_facts: false
+  become: true
+
+  vars_files:
+    - config.yml
+
+  tasks:
+    # Step 1: Set KUBECONFIG globally
+    - name: Set KUBECONFIG global
+      ansible.builtin.set_fact:
+        KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+
+    # Step 2: Clean up existing ArgoCD resources (if any)
+    - name: Delete ArgoCD service if it exists
+      ansible.builtin.k8s:
+        kubeconfig: "{{ KUBECONFIG }}"
+        state: absent
+        definition:
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: argocd-server
+            namespace: argocd
+      become: true
+
+    - name: Delete ArgoCD deployment if it exists
+      ansible.builtin.k8s:
+        kubeconfig: "{{ KUBECONFIG }}"
+        state: absent
+        definition:
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: argocd-server
+            namespace: argocd
+      become: true
+
+    - name: Delete ArgoCD namespace if it exists (optional)
+      ansible.builtin.k8s:
+        kubeconfig: "{{ KUBECONFIG }}"
+        state: absent
+        definition:
+          apiVersion: v1
+          kind: Namespace
+          metadata:
+            name: argocd
+      become: true
+
+    # Step 3: Install Helm if it's not installed already (you can skip this step if Helm is already installed)
+    - name: Download and install Helm for ARM64
+      ansible.builtin.shell:
+        cmd: |
+          curl -fsSL https://get.helm.sh/helm-v3.9.0-linux-arm64.tar.gz -o helm-arm64.tar.gz
+          tar -xzf helm-arm64.tar.gz
+          mv linux-arm64/helm /usr/local/bin/helm
+          rm -rf linux-arm64 helm-arm64.tar.gz
+      become: true
+
+    # Step 4: Add the ArgoCD Helm repository
+    - name: Add ArgoCD Helm repository
+      ansible.builtin.shell:
+        cmd: helm repo add argo https://argoproj.github.io/argo-helm
+      environment:
+        KUBECONFIG: "{{ KUBECONFIG }}"
+      become: true
+
+    # Step 5: Update Helm repositories
+    - name: Update Helm repositories
+      ansible.builtin.shell:
+        cmd: helm repo update
+      environment:
+        KUBECONFIG: "{{ KUBECONFIG }}"
+      become: true
+
+    # Step 6: Download and modify the values.yaml to enable insecure mode
+    - name: Download ArgoCD values.yaml from Helm repository
+      ansible.builtin.shell:
+        cmd: helm show values argo/argo-cd > /tmp/argocd-values.yaml
+      environment:
+        KUBECONFIG: "{{ KUBECONFIG }}"
+      become: true
+
+    - name: Enable insecure mode in ArgoCD values.yaml
+      ansible.builtin.lineinfile:
+        path: /tmp/argocd-values.yaml
+        regexp: '^#?insecure:.*'
+        line: 'insecure: true'
+      become: true
+
+    # Step 7: Install ArgoCD using Helm with the updated values.yaml
+    - name: Install ArgoCD using Helm with custom values
+      ansible.builtin.shell:
+        cmd: helm install argocd argo/argo-cd --namespace argocd --create-namespace -f /tmp/argocd-values.yaml
+      environment:
+        KUBECONFIG: "{{ KUBECONFIG }}"
+      become: true
+
+    # Step 8: Expose ArgoCD as a LoadBalancer service with MetalLB
+    - name: Expose ArgoCD as a LoadBalancer service
+      ansible.builtin.k8s:
+        kubeconfig: "{{ KUBECONFIG }}"
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: argocd-server
+            namespace: argocd
+          spec:
+            type: LoadBalancer
+            selector:
+              app.kubernetes.io/name: argocd-server
+            ports:
+              - port: 80
+                targetPort: 8080
+                protocol: TCP
+            loadBalancerIP: 192.168.1.247
+      become: true
+
+    # Step 9: Wait for ArgoCD pods to be running
+    - name: Wait for ArgoCD pods to be running
+      ansible.builtin.shell:
+        cmd: |
+          while [[ $(kubectl get pods -n argocd -l app.kubernetes.io/name=argocd-server -o 'jsonpath={.items[?(@.status.phase!="Running")].metadata.name}' | wc -w) -gt 0 ]]; do
+            echo "Waiting for ArgoCD pods to be running..."
+            sleep 5
+          done
+      become: true
