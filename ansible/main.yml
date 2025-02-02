@@ -5,7 +5,7 @@
   become: true
 
   handlers:
-    - name: reboot-pi
+    - name: Reboot Raspberry Pi
       ansible.builtin.reboot:
 
   vars_files:
@@ -13,8 +13,16 @@
 
   tasks:
     - name: Update apt package cache
-      apt:
+      ansible.builtin.apt:
         update_cache: yes
+        cache_valid_time: 3600  # Cache for 1 hour
+      when: ansible_os_family == "Debian"
+
+    - name: Ignore PEP 668 because it's silly.
+      ansible.builtin.file:
+        path: /usr/lib/python3.11/EXTERNALLY-MANAGED
+        state: absent
+      become: true
 
     - name: Ensure cgroups are configured correctly in cmdline.txt.
       ansible.builtin.replace:
@@ -27,8 +35,8 @@
       notify: reboot-pi
       when: ansible_distribution == 'Debian'
 
-    - name: Install necessary packages
-      apt:
+    - name: Install system packages
+      ansible.builtin.apt:
         name:
           - btop
           - iptables
@@ -38,15 +46,16 @@
           - cryptsetup
           - git
         state: present
+        force_apt_get: yes
 
     - name: Enable and start iscsid service
-      systemd:
+      ansible.builtin.systemd:
         name: iscsid
         enabled: yes
         state: started
 
     - name: Ensure PCIe settings exist in config.txt
-      blockinfile:
+      ansible.builtin.blockinfile:
         path: /boot/firmware/config.txt
         block: |
           dtparam=pciex1
@@ -54,27 +63,28 @@
           boot_delay=1
           rootwait
         marker: "# {mark} NVMe Boot Settings"
-      notify: reboot-pi    
+      notify: Reboot Raspberry Pi    
 
-    - name: Load dm_crypt kernel module
-      command: modprobe dm_crypt
-      changed_when: false
+    - name: Ensure dm_crypt and rbd kernel modules are loaded
+      community.general.modprobe:
+        name: "{{ item }}"
+        state: present
+      loop:
+        - dm_crypt
+        - rbd
 
-    - name: Load rbd kernel module
-      command: modprobe rbd
-      changed_when: false
-
-    - name: Append dm_crypt and rbd to /etc/modules
-      lineinfile:
+    - name: Ensure dm_crypt and rbd modules are persisted in /etc/modules
+      ansible.builtin.lineinfile:
         path: /etc/modules
         line: "{{ item }}"
-        create: yes
+        state: present
       loop:
-        - "dm_crypt"
-        - "rbd"
+        - dm_crypt
+        - rbd
 
-    - name: Update Raspberry Pi firmware to rpi-6.6.y
-      command: rpi-update rpi-6.6.y
+    - name: Conditionally update Raspberry Pi firmware
+      ansible.builtin.command: rpi-update rpi-6.6.y
+      when: update_rpi_firmware | default(false) | bool
       register: rpi_update
       changed_when: "'Firmware update' in rpi_update.stdout"
 
@@ -98,6 +108,7 @@
 #      include_tasks: tasks/storage/{{ storage_type }}.yml
 
 
+
 - name: Configure the control plane.
   hosts: control_plane
   gather_facts: false
@@ -107,12 +118,18 @@
     - config.yml
 
   tasks:
-    - name: Install K3s on control plane (takes a while).
+    - name: Install K3s on control plane (takes a while) with etcd.
       ansible.builtin.shell: >-
-        ~/k3s_install.sh >> ~/k3s_install_log.txt
+        curl -sfL https://get.k3s.io | sh -s - server --cluster-init --write-kubeconfig-mode 644
       args:
         chdir: "~"
         creates: /var/lib/rancher/k3s/server/node-token
+
+    - name: Ensure K3s service is restarted
+      ansible.builtin.systemd:
+        name: k3s
+        state: restarted
+        enabled: yes
 
     - name: Get node token.
       ansible.builtin.command: cat /var/lib/rancher/k3s/server/node-token
@@ -121,14 +138,25 @@
 
     - name: Set node_token fact.
       ansible.builtin.set_fact:
-        node_token: "{{ node_token_output.stdout_lines[0] }}"
+        node_token: "{{ node_token_output.stdout | trim }}"
 
-    - name: Ignore PEP 668 because it's silly.
-      ansible.builtin.file:
-        path: /usr/lib/python3.11/EXTERNALLY-MANAGED
-        state: absent
-      become: true
+    - name: Allow incoming traffic on port 6443 (K3s API)
+      ansible.builtin.iptables:
+        chain: INPUT
+        protocol: tcp
+        destination_port: 6443
+        jump: ACCEPT
 
+    - name: Install pip3 (if not installed)
+      ansible.builtin.apt:
+        name: python3-pip
+        state: present
+
+    - name: Install Kubernetes Python client
+      ansible.builtin.pip:
+        name: kubernetes
+        state: present
+        executable: /usr/bin/pip3  # Make sure pip3 is being used
 
 - name: Configure the worker nodes.
   hosts: nodes
@@ -139,11 +167,123 @@
     - config.yml
 
   tasks:
-#    - name: Install K3s on nodes (takes a while).
-#      ansible.builtin.shell: >-
-#        K3S_URL="https://{{ groups['control_plane'][0] }}:6443"
-#        K3S_TOKEN="{{ hostvars[groups['control_plane'][0]]['node_token'] }}"
-#        ~/k3s_install.sh >> ~/k3s_install_log.txt
-#      args:
-#        chdir: "~"
-#        creates: /var/lib/rancher/k3s/agent/kubelet.kubeconfig
+    - name: Install K3s on nodes (takes a while).
+      ansible.builtin.shell: >-
+        curl -sfL https://get.k3s.io |
+        K3S_URL="https://{{ hostvars[groups['control_plane'][0]]['ansible_host'] }}:6443"
+        K3S_TOKEN="{{ hostvars[groups['control_plane'][0]]['node_token'] }}" sh -s - agent
+      args:
+        chdir: "~"
+        creates: /var/lib/rancher/k3s/agent/kubelet.kubeconfig
+
+- name: Deploy MetalLB to the cluster using Helm
+  hosts: control_plane
+  gather_facts: false
+  become: true
+
+  vars_files:
+    - config.yml
+
+  tasks:
+    # Step 1: Set KUBECONFIG globally
+    - name: Set KUBECONFIG global
+      ansible.builtin.set_fact:
+        KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+
+    # Step 2: Delete existing MetalLB resources to fix ownership issues
+    - name: Delete existing MetalLB resources
+      ansible.builtin.shell:
+        cmd: |
+          kubectl delete daemonset metallb-speaker -n metallb-system || true
+          kubectl delete deployment metallb-controller -n metallb-system || true
+          kubectl delete service metallb-service -n metallb-system || true
+          kubectl delete namespace metallb-system || true
+      become: true
+
+    # Step 3: Download and install Helm for ARM64
+    - name: Download and install Helm for ARM64
+      ansible.builtin.shell:
+        cmd: |
+          curl -fsSL https://get.helm.sh/helm-v3.9.0-linux-arm64.tar.gz -o helm-arm64.tar.gz
+          tar -xzf helm-arm64.tar.gz
+          mv linux-arm64/helm /usr/local/bin/helm
+          rm -rf linux-arm64 helm-arm64.tar.gz
+      become: true
+
+    # Step 4: Create MetalLB namespace
+    - name: Create MetalLB namespace
+      ansible.builtin.k8s:
+        kubeconfig: "{{ KUBECONFIG }}"
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Namespace
+          metadata:
+            name: metallb-system
+
+    # Step 5: Add MetalLB Helm repository using shell module
+    - name: Add MetalLB Helm repository
+      ansible.builtin.shell:
+        cmd: helm repo add metallb https://metallb.github.io/metallb
+      environment:
+        KUBECONFIG: "{{ KUBECONFIG }}"  # Use the globally set KUBECONFIG
+      become: true
+
+    # Step 6: Update Helm repositories using shell module
+    - name: Update Helm repositories
+      ansible.builtin.shell:
+        cmd: helm repo update
+      environment:
+        KUBECONFIG: "{{ KUBECONFIG }}"  # Use the globally set KUBECONFIG
+      become: true
+
+    # Step 7: Download metallb-values.yaml from GitHub
+    - name: Download metallb-values.yaml from GitHub
+      ansible.builtin.get_url:
+        url: https://github.com/seadogger/seadogger-homelab/raw/master/helm-deployments/metallb-values.yaml
+        dest: /tmp/metallb-values.yaml
+      become: true
+
+    # Step 8: Install MetalLB using Helm with custom values
+    - name: Install MetalLB using Helm with custom values
+      ansible.builtin.shell:
+        cmd: helm install metallb metallb/metallb --namespace metallb-system -f /tmp/metallb-values.yaml
+      environment:
+        KUBECONFIG: "{{ KUBECONFIG }}"  # Use the globally set KUBECONFIG
+      become: true
+
+    # Step 9: Pause for 1 minute to ensure all MetalLB components are ready
+    # TODO this is a hack job.  We need get better status on the running metallb components and transition of something there
+    - name: Pause for 1 minute to allow MetalLB components to initialize
+      ansible.builtin.pause:
+        minutes: 1
+      become: true
+
+    # Step 10: Apply the custom IPAddressPool and L2Advertisement
+    - name: Create IPAddressPool and L2Advertisement via kubectl
+      ansible.builtin.k8s:
+        kubeconfig: "{{ KUBECONFIG }}"  # Use the globally set KUBECONFIG
+        state: present
+        definition:
+          apiVersion: metallb.io/v1beta1
+          kind: IPAddressPool
+          metadata:
+            name: default
+            namespace: metallb-system
+          spec:
+            addresses:
+              - 192.168.1.241-192.168.1.250  # Replace with your IP range
+
+    - name: Create L2Advertisement
+      ansible.builtin.k8s:
+        kubeconfig: "{{ KUBECONFIG }}"  # Use the globally set KUBECONFIG
+        state: present
+        definition:
+          apiVersion: metallb.io/v1beta1
+          kind: L2Advertisement
+          metadata:
+            name: default
+            namespace: metallb-system
+          spec:
+            ipAddressPools:
+              - default
