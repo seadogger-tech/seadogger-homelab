@@ -8,20 +8,14 @@ spec:
   mon:
     count: 1
     allowMultiplePerNode: true
-    # Add port configuration for mon
-    port: 6789
   cephVersion:
     image: quay.io/ceph/ceph:v19.2.0
     allowUnsupported: true
   dashboard:
     enabled: true
     ssl: false
-    port: 7000  # Explicitly set dashboard port
   network:
-    provider: host  # This should help with port conflicts
-    connections:
-      compression:
-        enabled: false
+    provider: host
   crashCollector:
     disable: true
   monitoring:
@@ -29,10 +23,6 @@ spec:
   storage:
     useAllNodes: false
     useAllDevices: false
-    config:
-      osdsPerDevice: "1"
-      encryptedDevice: "false"
-      allowPartitons: "true"
     nodes:
     - name: "obiwan"
       devices:
@@ -40,44 +30,7 @@ spec:
     - name: "anakin"
       devices:
         - name: "nvme0n1p3"
-  resources:
-    mgr:
-      limits:
-        cpu: "500m"
-        memory: "512Mi"
-      requests:
-        cpu: "250m"
-        memory: "256Mi"
-    mon:
-      limits:
-        cpu: "500m"
-        memory: "512Mi"
-      requests:
-        cpu: "250m"
-        memory: "256Mi"
-    osd:
-      limits:
-        cpu: "500m"
-        memory: "1Gi"
-      requests:
-        cpu: "250m"
-        memory: "512Mi"
   placement:
     all:
-      tolerations:
-      - operator: "Exists"
-    mon:
-      tolerations:
-      - operator: "Exists"
-      nodeAffinity:
-        requiredDuringSchedulingIgnoredDuringExecution:
-          nodeSelectorTerms:
-          - matchExpressions:
-            - key: kubernetes.io/hostname
-              operator: In
-              values:
-                - anakin
-                - obiwan
-    osd:
       tolerations:
       - operator: "Exists"
