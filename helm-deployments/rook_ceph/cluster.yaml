@@ -64,6 +64,16 @@ spec:
           - matchExpressions:
             - key: node-role.kubernetes.io/control-plane
               operator: DoesNotExist
+    mon:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+          - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values:
+                - anakin
+                - obiwan
     osd:
       nodeAffinity:
         requiredDuringSchedulingIgnoredDuringExecution:
