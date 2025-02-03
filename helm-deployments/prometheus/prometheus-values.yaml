@@ -49,6 +49,15 @@ prometheusOperator:
     requests:
       cpu: 100m
       memory: 128Mi
+  createCustomResource: true
+  admissionWebhooks:
+    enabled: true
+    patch:
+      enabled: true
+  crds:
+    enabled: true
+    create: true
+
 
 alertmanager:
   alertmanagerSpec:
