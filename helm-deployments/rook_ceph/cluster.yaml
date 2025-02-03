@@ -9,17 +9,17 @@ spec:
     count: 1
     allowMultiplePerNode: true
   cephVersion:
-    image: quay.io/ceph/ceph:v19.2.0-20240927
+    image: quay.io/ceph/ceph:v19.2.0
     allowUnsupported: true
   dashboard:
     enabled: true
-    ssl: false  # Add this for easier initial setup
+    ssl: false
   network:
-    provider: host  # Add this for better performance
+    provider: host
   crashCollector:
-    disable: true  # Add this to reduce resource usage
+    disable: true
   monitoring:
-    enabled: false  # Add this explicitly
+    enabled: false
   storage:
     useAllNodes: false
     useAllDevices: false
@@ -40,21 +40,21 @@ spec:
         cpu: "500m"
         memory: "512Mi"
       requests:
-        cpu: "100m"
+        cpu: "250m"
         memory: "256Mi"
     mon:
       limits:
         cpu: "500m"
         memory: "512Mi"
       requests:
-        cpu: "100m"
+        cpu: "250m"
         memory: "256Mi"
-    osd:  # Add OSD resources
+    osd:
       limits:
         cpu: "500m"
         memory: "1Gi"
       requests:
-        cpu: "100m"
+        cpu: "250m"
         memory: "512Mi"
   placement:
     all:
