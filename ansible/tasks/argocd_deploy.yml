@@ -16,20 +16,10 @@
             name: argocd
       become: true
 
-    # Add wait step after cleanup
-    - name: Wait for ArgoCD namespace to be completely removed
-      ansible.builtin.shell:
-        cmd: |
-          while kubectl get ns argocd 2>/dev/null; do
-            echo "Waiting for ArgoCD namespace to be removed..."
-            sleep 5
-          done
-      become: true
-      ignore_errors: true
-      register: wait_result
-      until: wait_result.rc != 0
-      retries: 12
-      delay: 5
+    # Step 3: Wait for namespace deletion
+    - name: Wait for namespace deletion
+      ansible.builtin.pause:
+        seconds: 30
 
     # Step 3: Install Helm if it's not installed already (you can skip this step if Helm is already installed)
     - name: Download and install Helm for ARM64
@@ -89,3 +79,19 @@
             sleep 5
           done
       become: true
+
+          # Step 9: Get and display ArgoCD initial admin password
+    - name: Get ArgoCD initial admin password
+      ansible.builtin.shell:
+        cmd: kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d
+      environment:
+        KUBECONFIG: "{{ KUBECONFIG }}"
+      become: true
+      register: argocd_password
+
+    - name: Display ArgoCD login credentials
+      ansible.builtin.debug:
+        msg: |
+          ArgoCD Login Credentials:
+          Username: admin
+          Password: {{ argocd_password.stdout }}

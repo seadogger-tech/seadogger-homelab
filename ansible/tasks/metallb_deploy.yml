@@ -94,5 +94,5 @@
 # Step 7: Pause for 2 minutes to allow ArgoCD to sync and deploy MetalLB
 - name: Wait for MetalLB deployment through ArgoCD
   ansible.builtin.pause:
-    minutes: 2
+    minutes: 1
   become: true
