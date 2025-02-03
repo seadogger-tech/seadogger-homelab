@@ -8,14 +8,20 @@ spec:
   mon:
     count: 1
     allowMultiplePerNode: true
+    # Add port configuration for mon
+    port: 6789
   cephVersion:
     image: quay.io/ceph/ceph:v19.2.0
     allowUnsupported: true
   dashboard:
     enabled: true
     ssl: false
+    port: 7000  # Explicitly set dashboard port
   network:
-    provider: host
+    provider: host  # This should help with port conflicts
+    connections:
+      compression:
+        enabled: false
   crashCollector:
     disable: true
   monitoring:
@@ -58,13 +64,11 @@ spec:
         memory: "512Mi"
   placement:
     all:
-      nodeAffinity:
-        requiredDuringSchedulingIgnoredDuringExecution:
-          nodeSelectorTerms:
-          - matchExpressions:
-            - key: node-role.kubernetes.io/control-plane
-              operator: DoesNotExist
+      tolerations:
+      - operator: "Exists"
     mon:
+      tolerations:
+      - operator: "Exists"
       nodeAffinity:
         requiredDuringSchedulingIgnoredDuringExecution:
           nodeSelectorTerms:
@@ -75,9 +79,5 @@ spec:
                 - anakin
                 - obiwan
     osd:
-      nodeAffinity:
-        requiredDuringSchedulingIgnoredDuringExecution:
-          nodeSelectorTerms:
-          - matchExpressions:
-            - key: node-role.kubernetes.io/control-plane
-              operator: DoesNotExist
+      tolerations:
+      - operator: "Exists"
