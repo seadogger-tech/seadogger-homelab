@@ -9,9 +9,10 @@ spec:
   type: LoadBalancer
   ports:
     - name: dashboard
-      port: 80           # Changed from 7000 to 80
-      targetPort: 7000   # Keep this as 7000 since that's what the dashboard pod uses
+      port: 80
+      targetPort: 7000
       protocol: TCP
   selector:
     app: rook-ceph-mgr
-    mgr: dashboard
+    mgr_role: active
+    rook_cluster: rook-ceph
