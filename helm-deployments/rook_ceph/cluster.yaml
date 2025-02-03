@@ -9,40 +9,53 @@ spec:
     count: 1
     allowMultiplePerNode: true
   cephVersion:
-    image: quay.io/ceph/ceph:v17.2.6
+    image: quay.io/ceph/ceph:latest
     allowUnsupported: true
   dashboard:
     enabled: true
+    ssl: false  # Add this for easier initial setup
+  network:
+    provider: host  # Add this for better performance
+  crashCollector:
+    disable: true  # Add this to reduce resource usage
+  monitoring:
+    enabled: false  # Add this explicitly
   storage:
     useAllNodes: false
     useAllDevices: false
     config:
       osdsPerDevice: "1"
       encryptedDevice: "false"
-      allowPartitons: "true"  # This is important when using partitions
+      allowPartitons: "true"
     nodes:
-      - name: "obiwan"  # Replace with your first worker node name
-        devices:
-          - name: "nvme0n1p3"  # Replace with your actual NVMe device name
-      - name: "anakin"  # Replace with your second worker node name
-        devices:
-          - name: "nvme0n1p3"  # Replace with your actual NVMe device name
-      # Add more worker nodes as needed
+    - name: "obiwan"
+      devices:
+        - name: "nvme0n1p3"
+    - name: "anakin"
+      devices:
+        - name: "nvme0n1p3"
   resources:
     mgr:
       limits:
-        cpu: 500m
-        memory: 512Mi
+        cpu: "500m"
+        memory: "512Mi"
       requests:
-        cpu: 100m
-        memory: 256Mi
+        cpu: "100m"
+        memory: "256Mi"
     mon:
       limits:
-        cpu: 500m
-        memory: 512Mi
+        cpu: "500m"
+        memory: "512Mi"
       requests:
-        cpu: 100m
-        memory: 256Mi
+        cpu: "100m"
+        memory: "256Mi"
+    osd:  # Add OSD resources
+      limits:
+        cpu: "500m"
+        memory: "1Gi"
+      requests:
+        cpu: "100m"
+        memory: "512Mi"
   placement:
     all:
       nodeAffinity:
