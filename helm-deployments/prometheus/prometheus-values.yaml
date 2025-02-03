@@ -23,13 +23,32 @@ grafana:
     enabled: true
     storageClass: "rook-ceph-block"
     size: 10Gi
+  resources:
+    limits:
+      cpu: 200m
+      memory: 256Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
 
 prometheusOperator:
+  nodeSelector:
+    kubernetes.io/arch: "arm64"
+  tls:
+    enabled: false
   service:
     type: LoadBalancer
-    loadBalancerIP: "192.168.1.245"
+    loadBalancerIP: "192.168.1.244"
+    port: 8080
     annotations:
       metallb.universe.tf/allow-shared-ip: prometheus
+  resources:
+    limits:
+      cpu: 200m
+      memory: 256Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
 
 alertmanager:
   alertmanagerSpec:
@@ -48,6 +67,7 @@ alertmanager:
       memory: 128Mi
   service:
     type: LoadBalancer
+    loadBalancerIP: "192.168.1.245"
     annotations:
       metallb.universe.tf/allow-shared-ip: prometheus
 
@@ -69,7 +89,6 @@ kubeStateMetrics:
       cpu: 50m
       memory: 64Mi
 
-# Global storage defaults
 storageSpec:
   volumeClaimTemplate:
     spec:
@@ -93,3 +112,10 @@ prometheus:
           resources:
             requests:
               storage: 50Gi
+    resources:
+      limits:
+        cpu: 1000m
+        memory: 1Gi
+      requests:
+        cpu: 500m
+        memory: 512Mi
