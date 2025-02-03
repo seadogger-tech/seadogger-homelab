@@ -46,8 +46,8 @@
       spec:
         project: default
         source:
-          repoURL: https://openwebui.github.io/helm-charts
-          chart: openwebui
+          repoURL: https://open-webui.github.io/helm-charts
+          chart: open-webui
           targetRevision: "*"
           helm:
             valueFiles:
