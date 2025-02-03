@@ -6,8 +6,8 @@ ollama:
 
 persistentVolumeClaim:
   enabled: true
-  size: 25Gi
-  storageClass: "longhorn"
+  size: 100Gi
+  storageClass: "rook-cephfs"
 
 # Service configuration
 service:

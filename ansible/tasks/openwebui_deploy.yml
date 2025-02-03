@@ -1,0 +1,69 @@
+---
+# Step 1: Set KUBECONFIG globally
+- name: Set KUBECONFIG global
+  ansible.builtin.set_fact:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+
+# Step 2: Delete existing OpenWebUI namespace if it exists
+- name: Delete existing OpenWebUI namespace
+  ansible.builtin.k8s:
+    kubeconfig: "{{ KUBECONFIG }}"
+    state: absent
+    definition:
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: openwebui
+  ignore_errors: true
+
+# Step 3: Wait for namespace deletion
+- name: Wait for namespace deletion
+  ansible.builtin.pause:
+    seconds: 30
+
+# Step 4: Create new OpenWebUI namespace
+- name: Create OpenWebUI namespace
+  ansible.builtin.k8s:
+    kubeconfig: "{{ KUBECONFIG }}"
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: openwebui
+
+# Step 5: Create ArgoCD OpenWebUI Application
+- name: Create OpenWebUI ArgoCD Application
+  ansible.builtin.k8s:
+    kubeconfig: "{{ KUBECONFIG }}"
+    state: present
+    definition:
+      apiVersion: argoproj.io/v1alpha1
+      kind: Application
+      metadata:
+        name: openwebui
+        namespace: argocd
+      spec:
+        project: default
+        source:
+          repoURL: https://openwebui.github.io/helm-charts
+          chart: openwebui
+          targetRevision: "*"
+          helm:
+            valueFiles:
+              - https://raw.githubusercontent.com/seadogger/seadogger-homelab/master/helm-deployments/openwebui/openwebui-values.yaml
+        destination:
+          server: https://kubernetes.default.svc
+          namespace: openwebui
+        syncPolicy:
+          automated:
+            prune: true
+            selfHeal: true
+          syncOptions:
+            - CreateNamespace=true
+
+# Step 6: Wait for OpenWebUI deployment through ArgoCD
+- name: Wait for OpenWebUI deployment through ArgoCD
+  ansible.builtin.pause:
+    minutes: 1
+  become: true

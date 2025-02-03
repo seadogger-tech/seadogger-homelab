@@ -56,3 +56,7 @@
     - name: Deploy Prometheus
       import_tasks: tasks/prometheus_deploy.yml
       when: enable_prometheus | default(true)
+
+    - name: Deploy OpenWebUI
+      import_tasks: tasks/openwebui_deploy.yml
+      when: enable_openwebui | default(true)
