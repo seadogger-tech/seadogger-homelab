@@ -18,5 +18,3 @@ enable_bedrock: true
 aws_bedrock_api_key_id: "ABCDEF"
 aws_bedrock_api_access_key: "123456789"
 
-argocd_default_admin_pass: "password1234"
-pihole_default_admin_pass: "password1234"

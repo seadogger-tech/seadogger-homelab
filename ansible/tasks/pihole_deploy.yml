@@ -1,0 +1,71 @@
+---
+# This playbook deploys Pihole using ArgoCD
+
+# Step 1: Set KUBECONFIG globally
+- name: Set KUBECONFIG global
+  ansible.builtin.set_fact:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+
+# Step 2: Delete existing Pihole namespace if it exists
+- name: Delete existing Pihole namespace
+  ansible.builtin.k8s:
+    kubeconfig: "{{ KUBECONFIG }}"
+    state: absent
+    definition:
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: pihole
+  ignore_errors: true
+
+# Step 3: Wait for namespace deletion
+- name: Wait for namespace deletion
+  ansible.builtin.pause:
+    seconds: 30
+
+# Step 4: Create new MetalLB namespace
+- name: Create Pihole namespace
+  ansible.builtin.k8s:
+    kubeconfig: "{{ KUBECONFIG }}"
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: pihole
+
+# Step 5: Create ArgoCD Pihole Application
+- name: Create Pihole ArgoCD Application
+  ansible.builtin.k8s:
+    kubeconfig: "{{ KUBECONFIG }}"
+    state: present
+    definition:
+      apiVersion: argoproj.io/v1alpha1
+      kind: Application
+      metadata:
+        name: pihole
+        namespace: argocd
+      spec:
+        project: default
+        source:
+          repoURL: https://mojo2600.github.io/pihole-kubernetes/
+          chart: pihole
+          targetRevision: "*"
+          helm:
+            valueFiles:
+              - https://raw.githubusercontent.com/seadogger/seadogger-homelab/master/helm-deployments/pihole/pihole-values.yaml
+        destination:
+          server: https://kubernetes.default.svc
+          namespace: pihole
+        syncPolicy:
+          automated:
+            prune: true
+            selfHeal: true
+          syncOptions:
+            - CreateNamespace=true
+
+# Step 7: Pause for 2 minutes to allow Pihole to sync and deploy Pihole
+- name: Wait for Pihole deployment through ArgoCD
+  ansible.builtin.pause:
+    minutes: 1
+  become: true

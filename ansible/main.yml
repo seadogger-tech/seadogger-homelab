@@ -48,3 +48,7 @@
     - name: Deploy Bedrock Gateway
       import_tasks: tasks/bedrock_gateway_deploy.yml
       when: enable_bedrock | default(true)
+
+    - name: Deploy PiHole
+      import_tasks: tasks/pihole_deploy.yml
+      when: enable_pihole | default(true)

@@ -64,7 +64,34 @@
           syncOptions:
             - CreateNamespace=true
 
-# Step 6: Pause for 2 minutes to allow ArgoCD to sync and deploy MetalLB
+# Step 6: Create ArgoCD Application for MetalLB IP Configuration
+- name: Create MetalLB IP Pool ArgoCD Application
+  ansible.builtin.k8s:
+    kubeconfig: "{{ KUBECONFIG }}"
+    state: present
+    definition:
+      apiVersion: argoproj.io/v1alpha1
+      kind: Application
+      metadata:
+        name: metallb-config
+        namespace: argocd
+      spec:
+        project: default
+        source:
+          repoURL: https://github.com/seadogger/seadogger-homelab
+          path: helm-deployments/metallb  # Ensure this path contains the metallb-values.yaml file as a manifest
+          targetRevision: HEAD
+        destination:
+          server: https://kubernetes.default.svc
+          namespace: metallb-system
+        syncPolicy:
+          automated:
+            prune: true
+            selfHeal: true
+          syncOptions:
+            - CreateNamespace=true
+
+# Step 7: Pause for 2 minutes to allow ArgoCD to sync and deploy MetalLB
 - name: Wait for MetalLB deployment through ArgoCD
   ansible.builtin.pause:
     minutes: 2

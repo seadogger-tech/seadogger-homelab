@@ -4,21 +4,71 @@
       ansible.builtin.set_fact:
         KUBECONFIG: /etc/rancher/k3s/k3s.yaml
 
-    # Step 2: Expose ArgoCD as a LoadBalancer service with MetalLB
-    - name: Use ArgoCD to deploy the Bedrock API Gateway Application
-      kubernetes.core.k8s:
+    # Step 2: Delete existing MetalLB namespace if it exists
+    - name: Delete existing Bedrock namespace
+      ansible.builtin.k8s:
+        kubeconfig: "{{ KUBECONFIG }}"
+        state: absent
+        definition:
+          apiVersion: v1
+          kind: Namespace
+          metadata:
+            name: bedrock-gateway
+      ignore_errors: true
+
+    # Step 3: Wait for namespace deletion
+    - name: Wait for namespace deletion
+      ansible.builtin.pause:
+        seconds: 15
+
+    # Step 4: Create new MetalLB namespace
+    - name: Create bedrock-gateway namespace
+      ansible.builtin.k8s:
+        kubeconfig: "{{ KUBECONFIG }}"
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Namespace
+          metadata:
+            name: bedrock-gateway
+
+    # Step 5: Wait for namespace deletion
+    - name: Wait for namespace creation
+      ansible.builtin.pause:
+        seconds: 15
+
+    # Step 6: Create AWS Bedrock secrets
+    - name: Create AWS Bedrock secrets
+      ansible.builtin.k8s:
+        kubeconfig: "{{ KUBECONFIG }}"
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: aws-credentials
+            namespace: bedrock-gateway
+          type: Opaque
+          stringData:
+            aws-access-key-id: "{{ aws_bedrock_api_key_id }}"
+            aws-secret-access-key: "{{ aws_bedrock_api_access_key }}"
+
+    # Step 7: Create ArgoCD Application 
+    - name: Create Bedrock Access Gateway ArgoCD Application
+      ansible.builtin.k8s:
+        kubeconfig: "{{ KUBECONFIG }}"
         state: present
         definition:
           apiVersion: argoproj.io/v1alpha1
           kind: Application
           metadata:
             name: bedrock-access-gateway
-            namespace: bedrock-gateway
+            namespace: argocd
           spec:
             project: default
             source:
               repoURL: https://github.com/seadogger/seadogger-homelab
-              path: kubectl-deployments/bedrock-access-gateway
+              path: kubectl-deployments/bedrock-access-gateway  # Ensure this path contains the metallb-values.yaml file as a manifest
               targetRevision: HEAD
             destination:
               server: https://kubernetes.default.svc
