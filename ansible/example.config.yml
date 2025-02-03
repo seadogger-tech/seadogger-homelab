@@ -14,6 +14,7 @@ enable_metallb: true
 enable_argocd: true
 enable_argocd_svc: true
 enable_bedrock: true
+enable_prometheus: true
 
 aws_bedrock_api_key_id: "ABCDEF"
 aws_bedrock_api_access_key: "123456789"

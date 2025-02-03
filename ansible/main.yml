@@ -52,3 +52,7 @@
     - name: Deploy PiHole
       import_tasks: tasks/pihole_deploy.yml
       when: enable_pihole | default(true)
+
+    - name: Deploy Prometheus
+      import_tasks: tasks/prometheus_deploy.yml
+      when: enable_prometheus | default(true)

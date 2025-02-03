@@ -4,8 +4,8 @@
   ansible.builtin.set_fact:
     KUBECONFIG: /etc/rancher/k3s/k3s.yaml
 
-# Step 2: Delete existing Pihole namespace if it exists
-- name: Delete existing Pihole namespace
+# Step 2: Delete existing Prometheus namespace if it exists
+- name: Delete existing Prometheus namespace
   ansible.builtin.k8s:
     kubeconfig: "{{ KUBECONFIG }}"
     state: absent
@@ -13,7 +13,7 @@
       apiVersion: v1
       kind: Namespace
       metadata:
-        name: pihole
+        name: monitoring
   ignore_errors: true
 
 # Step 3: Wait for namespace deletion
@@ -21,8 +21,8 @@
   ansible.builtin.pause:
     seconds: 30
 
-# Step 4: Create new MetalLB namespace
-- name: Create Pihole namespace
+# Step 4: Create new Prometheus namespace
+- name: Create Prometheus namespace
   ansible.builtin.k8s:
     kubeconfig: "{{ KUBECONFIG }}"
     state: present
@@ -30,10 +30,10 @@
       apiVersion: v1
       kind: Namespace
       metadata:
-        name: pihole
+        name: monitoring
 
-# Step 5: Create ArgoCD Pihole Application
-- name: Create Pihole ArgoCD Application
+# Step 5: Create ArgoCD Prometheus Application
+- name: Create Prometheus ArgoCD Application
   ansible.builtin.k8s:
     kubeconfig: "{{ KUBECONFIG }}"
     state: present
@@ -41,20 +41,20 @@
       apiVersion: argoproj.io/v1alpha1
       kind: Application
       metadata:
-        name: pihole
+        name: prometheus
         namespace: argocd
       spec:
         project: default
         source:
-          repoURL: https://mojo2600.github.io/pihole-kubernetes/
-          chart: pihole
-          targetRevision: "*"
+          repoURL: https://prometheus-community.github.io/helm-charts
+          chart: kube-prometheus-stack
+          targetRevision: "68.4.4"
           helm:
             valueFiles:
-              - https://raw.githubusercontent.com/seadogger/seadogger-homelab/master/helm-deployments/pihole/pihole-values.yaml
+              - https://raw.githubusercontent.com/seadogger/seadogger-homelab/master/helm-deployments/prometheus/prometheus-values.yaml
         destination:
           server: https://kubernetes.default.svc
-          namespace: pihole
+          namespace: monitoring
         syncPolicy:
           automated:
             prune: true
@@ -62,8 +62,8 @@
           syncOptions:
             - CreateNamespace=true
 
-# Step 7: Pause for 2 minutes to allow Pihole to sync and deploy Pihole
-- name: Wait for Pihole deployment through ArgoCD
+# Step 6: Wait for Prometheus deployment
+- name: Wait for Prometheus deployment through ArgoCD
   ansible.builtin.pause:
     minutes: 1
   become: true
