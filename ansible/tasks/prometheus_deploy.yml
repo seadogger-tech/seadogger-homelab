@@ -52,6 +52,7 @@
           helm:
             valueFiles:
               - https://raw.githubusercontent.com/seadogger/seadogger-homelab/master/helm-deployments/prometheus/prometheus-values.yaml
+            skipCrds: false  # Ensure CRDs are installed
         destination:
           server: https://kubernetes.default.svc
           namespace: monitoring
@@ -61,6 +62,9 @@
             selfHeal: true
           syncOptions:
             - CreateNamespace=true
+            - ServerSideApply=true  # Helps with CRD installation
+            - Replace=true          # Ensures proper CRD updates
+            - ApplyOutOfSyncOnly=false  # Force sync even if resources appear in sync
 
 # Step 6: Wait for Prometheus deployment
 - name: Wait for Prometheus deployment through ArgoCD
