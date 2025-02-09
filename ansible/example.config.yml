@@ -8,15 +8,25 @@ active_internet_interface: "eth0"
 enable_raspberry_pi_config: false
 update_rpi_firmware: false  # Set to false to disable firmware updates
 
+# Install k3s
 enable_k3s_control_plane: false
 enable_k3s_workers: false
-enable_metallb: true
-enable_argocd: true
-enable_argocd_svc: true
-enable_bedrock: true
-enable_prometheus: true
-enable_openwebui: true
 
-aws_bedrock_api_key_id: "ABCDEF"
-aws_bedrock_api_access_key: "123456789"
+# ArgoCD deployment to k3s 
+argocd_force_clean_install: false  # When false (default), safely updates existing installation. When true, performs complete removal and fresh install.
+enable_argocd: false
+enable_argocd_svc: false
+
+# ArgoCD managed apps.  Setting these to true with perform a clean install of the app. 
+#  If you are trybing to change the configuration of one of these apps you should make the change in the 
+#  ../helm-deployments or ../kubectl-deployments values files and ArgoCD will automatigically update the application
+#  in the next app sync 
+enable_metallb: false
+enable_bedrock: false
+enable_pihole: false
+enable_prometheus: false
+enable_openwebui: false
+
+aws_bedrock_api_key_id: "<YOUR-AWS-KEY-ID"
+aws_bedrock_api_access_key: "YOUR-AWS-ACCESS-KEY"
 

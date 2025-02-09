@@ -3,8 +3,9 @@
     - name: Set KUBECONFIG global
       ansible.builtin.set_fact:
         KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+        argocd_force_clean_install: "{{ argocd_force_clean_install | default(false) }}"
 
-    # Step 2: Clean up existing ArgoCD namespace (this will remove everything, including Helm releases)
+    # Clean install path
     - name: Delete ArgoCD namespace if it exists
       ansible.builtin.k8s:
         kubeconfig: "{{ KUBECONFIG }}"
@@ -15,13 +16,14 @@
           metadata:
             name: argocd
       become: true
+      when: argocd_force_clean_install | default(false)
 
-    # Step 3: Wait for namespace deletion
     - name: Wait for namespace deletion
       ansible.builtin.pause:
         seconds: 30
+      when: argocd_force_clean_install | default(false)
 
-    # Step 4: Add the ArgoCD Helm repository
+    # Common steps for both paths
     - name: Add ArgoCD Helm repository
       ansible.builtin.shell:
         cmd: helm repo add argo https://argoproj.github.io/argo-helm
@@ -29,7 +31,6 @@
         KUBECONFIG: "{{ KUBECONFIG }}"
       become: true
 
-    # Step 5: Update Helm repositories
     - name: Update Helm repositories
       ansible.builtin.shell:
         cmd: helm repo update
@@ -37,7 +38,7 @@
         KUBECONFIG: "{{ KUBECONFIG }}"
       become: true
 
-    # Step 6: Download and modify the values.yaml to enable insecure mode
+    # Download and modify values.yaml
     - name: Download ArgoCD values.yaml from Helm repository
       ansible.builtin.shell:
         cmd: helm show values argo/argo-cd > /tmp/argocd-values.yaml
@@ -52,15 +53,20 @@
         line: 'insecure: true'
       become: true
 
-    # Step 7: Install ArgoCD using Helm with the updated values.yaml
-    - name: Install ArgoCD using Helm with custom values
+    # Installation/Update step
+    - name: Install or upgrade ArgoCD
       ansible.builtin.shell:
-        cmd: helm install argocd argo/argo-cd --namespace argocd --create-namespace -f /tmp/argocd-values.yaml
+        cmd: >
+          {% if argocd_force_clean_install | default(false) %}
+          helm install argocd argo/argo-cd --namespace argocd --create-namespace -f /tmp/argocd-values.yaml
+          {% else %}
+          helm upgrade --install argocd argo/argo-cd --namespace argocd --create-namespace -f /tmp/argocd-values.yaml
+          {% endif %}
       environment:
         KUBECONFIG: "{{ KUBECONFIG }}"
       become: true
 
-    # Step 8: Wait for ArgoCD pods to be running
+    # Wait for pods
     - name: Wait for ArgoCD pods to be running
       ansible.builtin.shell:
         cmd: |
