@@ -1,21 +1,24 @@
-# Common settings
-commonNodeSelector: &commonNodeSelector
-  kubernetes.io/arch: "arm64"
+server:
+  persistentVolume:
+    enabled: true
+    storageClass: "rook-ceph-block"
+    size: 50Gi
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 200m
+      memory: 256Mi
 
-commonStorageClass: &commonStorageClass
-  storageClassName: rook-ceph-block
-  accessModes: ["ReadWriteOnce"]
-
-commonLoadBalancerAnnotation: &commonLoadBalancerAnnotation
-  metallb.universe.tf/allow-shared-ip: prometheus
-
-# Grafana configuration
 grafana:
-  nodeSelector: *commonNodeSelector
+  nodeSelector:
+    kubernetes.io/arch: "arm64"
   service:
     type: LoadBalancer
     loadBalancerIP: "192.168.1.246"
-    annotations: *commonLoadBalancerAnnotation
+    annotations:
+      metallb.universe.tf/allow-shared-ip: prometheus
   persistence:
     enabled: true
     storageClass: "rook-ceph-block"
@@ -28,16 +31,17 @@ grafana:
       cpu: 100m
       memory: 128Mi
 
-# Prometheus Operator configuration
 prometheusOperator:
-  nodeSelector: *commonNodeSelector
+  nodeSelector:
+    kubernetes.io/arch: "arm64"
   tls:
     enabled: false
   service:
     type: LoadBalancer
     loadBalancerIP: "192.168.1.244"
     port: 8080
-    annotations: *commonLoadBalancerAnnotation
+    annotations:
+      metallb.universe.tf/allow-shared-ip: prometheus
   resources:
     limits:
       cpu: 200m
@@ -54,14 +58,11 @@ prometheusOperator:
     enabled: true
     create: false
 
-# Alertmanager configuration
+
 alertmanager:
   alertmanagerSpec:
-    nodeSelector: *commonNodeSelector
-  service:
-    type: LoadBalancer
-    loadBalancerIP: "192.168.1.245"
-    annotations: *commonLoadBalancerAnnotation
+    nodeSelector:
+      kubernetes.io/arch: "arm64"
   persistentVolume:
     enabled: true
     storageClass: "rook-ceph-block"
@@ -73,8 +74,12 @@ alertmanager:
     requests:
       cpu: 100m
       memory: 128Mi
+  service:
+    type: LoadBalancer
+    loadBalancerIP: "192.168.1.245"
+    annotations:
+      metallb.universe.tf/allow-shared-ip: prometheus
 
-# Node Exporter configuration
 nodeExporter:
   resources:
     limits:
@@ -84,7 +89,6 @@ nodeExporter:
       cpu: 100m
       memory: 64Mi
 
-# Kube State Metrics configuration
 kubeStateMetrics:
   resources:
     limits:
@@ -94,16 +98,26 @@ kubeStateMetrics:
       cpu: 50m
       memory: 64Mi
 
-# Prometheus configuration
+storageSpec:
+  volumeClaimTemplate:
+    spec:
+      storageClassName: rook-ceph-block
+      accessModes: ["ReadWriteOnce"]
+      resources:
+        requests:
+          storage: 50Gi
+
 prometheus:
   prometheusSpec:
-    nodeSelector: *commonNodeSelector
+    nodeSelector:
+      kubernetes.io/arch: "arm64"
     retention: 15d
     retentionSize: "10GB"
     storageSpec:
       volumeClaimTemplate:
         spec:
-          <<: *commonStorageClass
+          storageClassName: rook-ceph-block
+          accessModes: ["ReadWriteOnce"]
           resources:
             requests:
               storage: 50Gi
@@ -114,7 +128,3 @@ prometheus:
       requests:
         cpu: 500m
         memory: 512Mi
-    service:
-      type: LoadBalancer
-      loadBalancerIP: "192.168.1.251"
-      annotations: *commonLoadBalancerAnnotation
