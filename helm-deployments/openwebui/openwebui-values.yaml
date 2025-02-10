@@ -4,10 +4,13 @@ ollama:
 pipelines:
   enabled: false
 
-persistence:
+persistentVolumeClaim:
   enabled: true
   size: 100Gi
   storageClass: "rook-cephfs"
+
+persistence:
+  enabled: true
 
 # Service configuration
 service:
