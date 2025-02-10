@@ -58,7 +58,6 @@ prometheusOperator:
     enabled: true
     create: false
 
-
 alertmanager:
   alertmanagerSpec:
     nodeSelector:
