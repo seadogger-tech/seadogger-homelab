@@ -6,8 +6,13 @@ pipelines:
 
 persistentVolumeClaim:
   enabled: true
-  size: 100Gi
-  storageClass: "rook-cephfs"
+  spec:
+    accessModes:
+      - ReadWriteOnce
+    resources:
+      requests:
+        storage: 100Gi
+    storageClassName: "rook-cephfs"
 
 persistence:
   enabled: true
