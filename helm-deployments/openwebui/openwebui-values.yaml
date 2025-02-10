@@ -1,10 +1,10 @@
 ollama:
-  ollama:
-    models:
-      pull: []
-      run: []
+  enabled: false
 
-persistentVolumeClaim:
+pipelines:
+  enabled: false
+
+persistence:
   enabled: true
   size: 100Gi
   storageClass: "rook-cephfs"
