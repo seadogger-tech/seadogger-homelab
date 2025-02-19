@@ -4,18 +4,11 @@ ollama:
 pipelines:
   enabled: false
 
-persistentVolumeClaim:
-  enabled: true
-  spec:
-    accessModes:
-      - ReadWriteOnce
-    resources:
-      requests:
-        storage: 100Gi
-    storageClassName: "rook-cephfs"
-
 persistence:
   enabled: true
+  size: 100Gi
+  storageClass: "rook-cephfs"
+  accessMode: ReadWriteOnce
 
 # Service configuration
 service:
