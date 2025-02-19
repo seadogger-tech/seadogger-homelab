@@ -179,7 +179,7 @@ main() {
     update_system_configs
     clone_partitions
     verify_filesystems
-#    test_mount #I think this is causing problems
+#    test_mount #I think this is causing problem
     configure_boot
     
     print_message "Setup complete! Please shutdown the system, remove the SD card, and reboot."
