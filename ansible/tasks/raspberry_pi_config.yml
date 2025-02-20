@@ -50,7 +50,7 @@
           boot_delay=1
           rootwait
         marker: "# {mark} NVMe Boot Settings"
-      notify: Reboot Raspberry Pi    
+      notify: reboot-pi    
 
     - name: Ensure dm_crypt and rbd kernel modules are loaded
       community.general.modprobe:

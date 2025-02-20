@@ -75,7 +75,7 @@
 
 This guide outlines the steps to set up a Kubernetes cluster on Raspberry Pi 5 nodes, from initial hardware setup through application deployment using GitOps practices.
 
-## 1. Hardware Preparation
+## 1. Hardware Bootstrapping 
 - Install POE HAT with NVMe PCIe adapter on all Raspberry Pi 5s
 - Configure SSD boot and remove SD cards to supercharge our cluster performance 
   - Some apps will need persistent storage and we do not want those to be slowed down by sdCard IO
@@ -118,145 +118,34 @@ I could not get `rpi-clone` to work with a 4TB drive as it seems to reset the MB
 
 I am using a 64GB sdCard and transitioning the `/boot` and `/` mounts to a `4TB NVMe` using the `52Pi POE w/PCIe HAT`.  This will partition the NVMe just slifhtly larger than the partitions on the sdCard so the dd transfers complete without error but we do not waster a ton of space.  All the sector definitions are based on this size sdCard for gdisk.  If you are using a smaller or larger sdCard you will need to modify the partition tables.  Be carefull as there is a small and unnoticeable error messages after you dd the files over that is easy to miss and will foobar the whole thing.
 
-### 1. Prepare the 4TB NVMe Drive
-
-#### 1.1. Open `gdisk` to Partition the NVMe Drive
-1. Open `gdisk` on the NVMe drive:
-   ```bash
-   sudo gdisk /dev/nvme0n1
-   ```
-
-#### 1.2. Create Partitions for the Drive
-1. **Delete existing partitions** (if necessary):
-   - Type `d` to delete any existing partitions.
-
-2. **Create the EFI Partition (`/dev/nvme0n1p1`)**:
-   - **Partition number**: `1` (default).
-   - **First sector**: `2048` (default).
-   - **Last sector**: `2099199`.
-   - **Hex code**: `EF00` for EFI system partition.
-
-3. **Create the Root Partition (`/dev/nvme0n1p2`)**:
-   - **Partition number**: `2` (default).
-   - **First sector**: `2099200`.
-   - **Last sector**: `127099199`.
-   - **Hex code**: `8300` for Linux filesystem.
-
-4. **Optional: Create the third partition** (for data) if needed:
-   - **Partition number**: `3` (default).
-   - **First sector**: Next available sector.
-   - **Last sector**: Use remaining space.
-
-5. **Write the Partition Table**:
-   - Type `p` to print the partition table and verify.
-   - Type `w` to write the changes and exit `gdisk`.
-
-### 2. Format the Partitions
-1. **Format the EFI partition (`/dev/nvme0n1p1`)**:
-   ```bash
-   sudo mkfs.vfat -F32 /dev/nvme0n1p1
-   ```
-2. **Format the root partition (`/dev/nvme0n1p2`)**:
-   ```bash
-   sudo mkfs.ext4 /dev/nvme0n1p2
-   ```
-3. **Optional: Format Partition 3 (`/dev/nvme0n1p3`)**:
-   ```bash
-   sudo mkfs.ext4 /dev/nvme0n1p3
-   ```
-
-### 3. Update `/etc/fstab`, `/boot/firmware/config.txt`, and `/boot/firmware/cmdline.txt` 
-1. Retrieve `PARTUUID` values:
-   ```bash
-   sudo blkid
-   ```
-2. Edit `/etc/fstab`:
-   ```bash
-   sudo nano /etc/fstab
-   ```
-3. Update the entries to match new `PARTUUID` from the `blkid` return values. `/etc/fstab`
-```
-PARTUUID=<PUT THE NVMe EFI PARTITION (1) UUID HERE>  /boot/firmware  vfat  defaults  0  2
-PARTUUID=<PUT THE NVMe / PARTITION (2) UUID HERE>  /               ext4  defaults,noatime  0  1
-```
-4. Save and exit.
-
-5. Update `/boot/firmware/config.txt` append to the end
-```
- dtparam=pciex1
- dtparam=pciex1_gen=3
- boot_delay=1
- rootwait
-```
-6. Save and exit
-
-7. Update the `/boot/firmware/cmdline.txt` to put the `/` Partition UUID in the command line:
-```
-console=serial0,115200 console=tty1 root=PARTUUID=<PUT THE NVMe / PARTITION (2) UUID HERE> rootfstype=ext4 fsck.repair=yes rootwait 
+### 1. Prepare the 4TB NVMe Drive (Worker / Storage Node)
+```bash
+   git clone https://github.com/seadogger/seadogger-homelab.git
+   cd seadogger-homelab/useful-scripts
+   sudo ./partition_and_boot_NVMe_worker_node.sh
 ```
 
-8. Save and exit
+### 1. Prepare the 4TB NVMe Drive (Master Node)
+```bash
+   git clone https://github.com/seadogger/seadogger-homelab.git
+   cd seadogger-homelab/useful-scripts
+   sudo ./partition_and_boot_NVMe_master_node.sh
+```
 
-### 4. Clone the sdCard Partitions to the NVMe Partitions Using `dd`
-1. **Clone the EFI partition**:
-   ```bash
-   sudo dd if=/dev/mmcblk0p1 of=/dev/nvme0n1p1 bs=4M status=progress
-   ```
-2. **Clone the root partition**:
-   ```bash
-   sudo dd if=/dev/mmcblk0p2 of=/dev/nvme0n1p2 bs=4M status=progress
-   ```
+## Script Summary
 
-### 5. Verify the NVMe partitions are ready to support booting
-1. Run `e2fsck`:
-   ```bash
-   sudo e2fsck -f /dev/nvme0n1p2
-   ```
-2. Try a different superblock if needed:
-   ```bash
-   sudo e2fsck -b 32768 /dev/nvme0n1p2
-   ```
-3. Check the VFAT partition
-   ```bash
-   sudo fsck.vfat -a /dev/nvme0n1p1
-   ```
-4. Have fsck and efsck repair anything it finds
+1. Partition the NVMe drive using GPT.
+2. Format partitions (`vfat` for EFI, `ext4` for root).
+3. Clone partitions from the SD card using `dd`.
+4. Update `/etc/fstab`, `/boot/firmware/config.txt`, and `/boot/firmware/cmdline.txt`
+5. Cloning the sdCard to the NVMe partition structure
+6. Running disk checks on the NVMe `e2fsck` and `fsck.vfat`
+7. Reload systemd daemon.
+8. Rebooting and system verify everything worked.
+9. Shutting down and removing the sdCard
+9. Troubleshooting ideas if necessary.
 
-5. Check `/boot/firmware/config.txt` and `/boot/firmware/cmdline.txt` files if this had any failures
-
-### 6. Manually Mount the NVMe Partitions to Verify Readiness
-1. Reload systemd:
-   ```bash
-   sudo systemctl daemon-reload
-   ```
-2. Create mount points:
-   ```bash
-   sudo mkdir -p /mnt/boot/firmware
-   sudo mkdir -p /mnt/root
-   ```
-3. Mount the EFI partition:
-   ```bash
-   sudo mount /dev/nvme0n1p1 /mnt/boot/firmware
-   ```
-4. Mount the root partition:
-   ```bash
-   sudo mount /dev/nvme0n1p2 /mnt/root
-   ```
-
-### 7. Make sure the '/etc/fstab' is correct (so they mount on reboot)
-1. Un-Mount the partitions:
-   ```bash
-   sudo umount /mnt/boot/firmware
-   sudo umount /mnt/root
-   ```
-
-2. Remount all filesystems:
-   ```bash
-   sudo mount -a
-   ```
-Make sure this mounts everything without errors otherwise there is a problem in the /etc/fstab and you need to to look into that problem before proceeding
-
-### 8. Setup the NVMe to boot first and Reboot
+## Setup the NVMe to boot first and Reboot
 1. Set the NVMe first in the boot order 
     ```bash
      sudo raspi-config
@@ -286,30 +175,6 @@ Under advanced options set the boot order to boot the NVMe first.  When prompted
    lsblk -o NAME,SIZE,FSTYPE,MOUNTPOINT
    ```
 
-### 9. Troubleshoot 4TB Drive Issues
-1. Update the Raspberry Pi OS:
-   ```bash
-   sudo apt update && sudo apt full-upgrade
-   ```
-2. Ensure the partition table is GPT using `gdisk`.
-4. Update Raspberry Pi firmware:
-   ```bash
-   sudo rpi-eeprom-update -a
-   sudo reboot
-   ```
-
-## Summary
-1. Partition the NVMe drive using GPT.
-2. Format partitions (`vfat` for EFI, `ext4` for root).
-3. Clone partitions from the SD card using `dd`.
-4. Mount the partitions.
-5. Update `/etc/fstab`, `/boot/firmware/config.txt`, and `/boot/firmware/cmdline.txt`
-7. Cloning the sdCard to the NVMe partition structure
-6. Running disk checks on the NVMe `e2fsck` and `fsck.vfat`
-7. Reload systemd daemon.
-8. Rebooting and system verify everything worked.
-9. Shutting down and removing the sdCard
-9. Troubleshooting ideas if necessary.
 
 # Raspberry Pi Cluster Mangement with Ansible
 
@@ -344,6 +209,7 @@ To test the SSH connection from the host or PC you intend to run Ansible from, c
 
 ```
 ssh-copy-id pi@node[X].local
+ssh pi@192.168.1.[x]
 ssh pi@node[X].local
 ```
 
@@ -375,6 +241,9 @@ ansible-playbook main.yml
    10. Setup/deploy k3s to the control_plane (e.g. server node)
    11. Setup/deploy k3s to the worker node(s)
 
+
+   `NOTE - if you get an error about cgroups you should perform a reboot and run the ansible script again` 
+
 ### Upgrading the cluster
 
 Run the upgrade playbook:
@@ -403,7 +272,9 @@ ansible all -m reboot -b
 
 ### CEPH-ROOK Storage Configuration
 
-TODO You could also run Ceph on a Pi cluster—see the storage configuration playbook inside the `ceph` directory.
+`TODO You could also run Ceph on a Pi cluster—see the storage configuration playbook inside the `ceph` directory.`
+
+` Also note that this needs to be done before deploying applications with persitent storage (e.g. Openweb UI and Prometheus)
 
 This configuration is not yet integrated into the general K3s setup.
 
@@ -413,7 +284,6 @@ TODO:  We will use gitOps design pattern to deploy apps, update, manage the clus
 
 # Cluster App Deployment using GitOps with ArgoCD
 `TODO`
-
 
 
 ## Author

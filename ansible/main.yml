@@ -2,6 +2,9 @@
 - hosts: cluster
   gather_facts: true
   become: true
+  handlers:
+    - name: reboot-pi
+      ansible.builtin.reboot:
   tasks:
     - name: Configure Raspberry Pi Cluster
       import_tasks: tasks/raspberry_pi_config.yml
@@ -10,6 +13,9 @@
 - hosts: control_plane
   gather_facts: false
   become: true
+  handlers:
+    - name: reboot-pi
+      ansible.builtin.reboot:
   vars_files:
     - config.yml
   tasks:
@@ -20,6 +26,9 @@
 - hosts: nodes
   gather_facts: false
   become: true
+  handlers:
+    - name: reboot-pi
+      ansible.builtin.reboot:
   vars_files:
     - config.yml
   tasks:
