@@ -47,8 +47,7 @@ create_partitions() {
     # Create GPT partition table and partitions
     sgdisk --zap-all /dev/nvme0n1
     sgdisk --new=1:2048:2099200 --typecode=1:EF00 --change-name=1:"EFI System" /dev/nvme0n1
-    sgdisk --new=2:2101248:127100928 --typecode=2:8300 --change-name=2:"Linux Root" /dev/nvme0n1
-    sgdisk --new=3:127102976:0 --typecode=3:8300 --change-name=3:"Data" /dev/nvme0n1
+    sgdisk --new=2:2101248:0 --typecode=2:8300 --change-name=2:"Linux Root" /dev/nvme0n1
     sync
 }
 
@@ -134,22 +133,7 @@ verify_filesystems() {
     fsck.vfat -a /dev/nvme0n1p1 || true
 }
 
-# 6. Test mount
-test_mount() {
-    print_message "Testing mounts"
-    mkdir -p /mnt/boot/firmware
-    mkdir -p /mnt/root
-    
-    mount /dev/nvme0n1p1 /mnt/boot/firmware
-    mount /dev/nvme0n1p2 /mnt/root
-    
-    umount /mnt/boot/firmware
-    umount /mnt/root
-    
-    mount -a
-}
-
-# 7. Configure boot order
+# 6. Configure boot order
 configure_boot() {
     print_message "Configuring boot order"
     
@@ -193,7 +177,6 @@ main() {
     update_system_configs
     clone_partitions
     verify_filesystems
-#    test_mount #I think this is causing problem
     configure_boot
     
     print_message "Setup complete! Please shutdown the system, remove the SD card, and reboot."
