@@ -52,7 +52,7 @@
 | GPIO Header with shorter standoff | 1 | $10 | $10 |
 | Raspberry Pi 5 POE HAT with PCIe | 4 | $37 | $148 |
 | [Crucial P3 4TB NVMe SSD](https://www.newegg.com/crucial-4tb-p3/p/N82E16820156298?Item=9SIA12KJ9P1073) | 3 | $225 | $675 |
-| Crucial P3 500GB NVMe SSD | 1 | $38 | $38 |
+| [Crucial P3 500GB NVMe SSD](https://www.newegg.com/crucial-500gb-p3-nvme/p/N82E16820156295) | 1 | $38 | $38 |
 | Nylon Standoff Kit | 1 | $13 | $13 |
 | **Total Cost (Excludes POE Switch)** | **-** | **-** | **$1257** |
 
