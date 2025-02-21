@@ -54,7 +54,8 @@
 | [Crucial P3 4TB NVMe SSD](https://www.newegg.com/crucial-4tb-p3/p/N82E16820156298?Item=9SIA12KJ9P1073) | 3 | $225 | $675 |
 | [Crucial P3 500GB NVMe SSD](https://www.newegg.com/crucial-500gb-p3-nvme/p/N82E16820156295) | 1 | $38 | $38 |
 | [Nylon Standoff Kit](https://www.amazon.com/gp/product/B06XKWDSPT/ref=ox_sc_act_title_1?smid=A2XXMW1BKOEL72&psc=1) | 1 | $13 | $13 |
-| **Total Cost (Excludes POE Switch)** | **-** | **-** | **$1257** |
+| [64GB sdCard](https://www.amazon.com/dp/B08879MG33?ref_=ppx_hzsearch_conn_dt_b_fed_asin_title_13&th=1) | 1 | $25 | $25 |
+| **Total Cost (Excludes POE Switch)** | **-** | **-** | **$1282** |
 
 # Get Remote PC ready for Ansible Deployment 
 Clone the Ansible tasks to your remote PC to that will manage the k3s cluster
@@ -68,7 +69,19 @@ Clone the Ansible tasks to your remote PC to that will manage the k3s cluster
 
 Install POE HAT with NVMe PCIe adapter on all Raspberry Pi 5s
 
-`TODO - Put pictures of install`
+![Hardware Build](images/Single-Node-Mounted-2.jpeg) 
+
+> **Note**: The BoM includes nylon standoffs.  The solution I found uses an 11mm male standoff with a 2mm nut on the male standoff and a 2mm nylon nut on top with a nylon screw thru to the top nut and into the standoff.  This gives you about 15.5mm of total height between the Pi and the POE HAT.  Less than that and it will not fit over the USB ports.  More than that and the POE transformer hits the top of the rack
+
+![Hardware Build](images/Rack-Mounted-Pi5-Nodes.jpeg)
+
+## NVMe Drive list recommendations
+
+> **Note**: I have not tested all the drives from this list.   The NVMe drives in the latest BoM do work with the HAT and Pi5 
+
+> **Note**:  **[This](https://www.amazon.com/gp/product/B08DTP8LG8/ref=ewc_pr_img_1?smid=A2CP9SZGVW0PFE&th=1) NVMe drive has been tested and does not work.** So do not by this one!
+
+![NVME Drive List](images/SSD-Compatibility.png)
 
 ## [Raspberry Pi Setup](https://youtu.be/x9ceI0_r_Kg)
 
@@ -84,19 +97,6 @@ To make network discovery and integration easier, I edit the advanced configurat
 
 After setting all those options, and the hostname is unique to each node (and matches what is in `hosts.ini`), I inserted the microSD cards into the respective Pis, or installed the NVMe SSDs into the correct slots, and booted the cluster.
 
-![Hardware Build](images/Single-Node-Mounted-2.jpeg) 
-
-> **Note**: The BoM includes nylon standoffs.  The solution I found uses an 11mm male standoff with a 2mm nut on the male standoff and a 2mm nylon nut on top with a nylon screw thru to the top nut and into the standoff.  This gives you about 15.5mm of total height between the Pi and the POE HAT.  Less than that and it will not fit over the USB ports.  More than that and the POE transformer hits the top of the rack
-
-![Hardware Build](images/Rack-Mounted-Pi5-Nodes.jpeg)
-
-## NVMe Drive list recommendations
-
-> **Note**: I have not tested all the drives from this list.   The NVMe drives in the latest BoM do work with the HAT and Pi5 
-
-> **Note**:  **[This](https://www.amazon.com/gp/product/B08DTP8LG8/ref=ewc_pr_img_1?smid=A2CP9SZGVW0PFE&th=1) NVMe drive has been tested and does not work.** So do not by this one!
-
-![NVME Drive List](images/SSD-Compatibility.png)
 
 ## SSH connection test
 
@@ -152,7 +152,7 @@ I am using a 64GB sdCard and transitioning the `/boot` and `/` mounts to a `4TB 
 5. Cloning the sdCard to the NVMe partition structure
 6. Running disk checks on the NVMe `e2fsck` and `fsck.vfat`
 7. Reload systemd daemon.
-8. Change boot order, shutdown and reboot
+8. A few manual steps after the script runs to get everything ready (Change boot order, shutdown and reboot)
 
 > **Note**: Before you reboot after the above you need to setup for NVMe to boot first in the boot order
 - Set the NVMe first in the boot order 
@@ -202,6 +202,8 @@ Under advanced options set the boot order to boot the NVMe first.
 
 ## Cluster configuration, K3s, App deployment
 
+**This is where the magic of Ansible and ArgoCD take over**
+
 Run the playbook:
 
 ```
@@ -232,9 +234,10 @@ ansible-playbook main.yml
       - PiHole
       - Prometheus and Grafana
       - OpenWeb UI
-      - Plex Media Server
+      - `TODO - Plex Media Server`
+      - `TODO - Minecraft Server`
 
-> **Note**: Applications are deployed declaratively through ArgoCD, ensuring infrastructure-as-code best practices
+> **Note**: Applications are deployed declaratively through ArgoCD, ensuring GitOps best practices
 
 ## Upgrading the cluster
 
@@ -270,7 +273,7 @@ ansible all -m reboot -b
 
 # Learning Outcomes
 
-## Core Technologies
+## Technologies
 - [Kubernetes (k3s)](https://docs.k3s.io/architecture) architecture and deployment
 - [kubectl](https://kubernetes.io/docs/reference/kubectl/) for cluster management
 - [Helm](https://helm.sh) package management
