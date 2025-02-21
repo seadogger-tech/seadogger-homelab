@@ -30,7 +30,7 @@
 
 ### Software Requirements
 - SSH enabled on all Raspberry Pis
-- AWS account with Bedrock API tokens
+- AWS account with [Bedrock](https://jrpospos.blog/posts/2024/08/using-amazon-bedrock-with-openwebui-when-working-with-sensitive-data/) API tokens
 - Working knowledge of:
   - Docker containers and orchestration
   - Basic AWS services
@@ -48,12 +48,12 @@
 | Item | Quantity | Cost per Unit | Total Cost |
 |------|----------|--------------|------------|
 | [Raspberry Pi 5 8GB](https://www.digikey.com/en/products/detail/raspberry-pi/SC1112/21658257?s=N4IgjCBcpgrAnADiqAxlAZgQwDYGcBTAGhAHsoBtEAJngBYwwB2EAXRIAcAXKEAZS4AnAJYA7AOYgAviQC0dFCHSRs%2BYmUrgAzAAYdW5CUbwmYeGykyamwVjwcARgUGCAngAIOw2BaA) | 4 | $80 | $320 |
-| Raspberry Pi Rack | 1 | $53 | $53 |
-| GPIO Header with shorter standoff | 1 | $10 | $10 |
-| Raspberry Pi 5 POE HAT with PCIe | 4 | $37 | $148 |
+| [Raspberry Pi Rack](https://www.amazon.com/gp/product/B09D7RR6NY/ref=ewc_pr_img_2?smid=A2IAB2RW3LLT8D&psc=1) | 1 | $53 | $53 |
+| [GPIO Header with shorter standoff](https://www.amazon.com/dp/B084Q4W1PW?ref=ppx_yo2ov_dt_b_fed_asin_title) | 1 | $10 | $10 |
+| [Raspberry Pi 5 POE HAT with PCIe](https://www.amazon.com/gp/product/B0CR1JGP1Z/ref=ewc_pr_img_1?smid=A50C560NZEBBE&psc=1) | 4 | $37 | $148 |
 | [Crucial P3 4TB NVMe SSD](https://www.newegg.com/crucial-4tb-p3/p/N82E16820156298?Item=9SIA12KJ9P1073) | 3 | $225 | $675 |
 | [Crucial P3 500GB NVMe SSD](https://www.newegg.com/crucial-500gb-p3-nvme/p/N82E16820156295) | 1 | $38 | $38 |
-| Nylon Standoff Kit | 1 | $13 | $13 |
+| [Nylon Standoff Kit](https://www.amazon.com/gp/product/B06XKWDSPT/ref=ox_sc_act_title_1?smid=A2XXMW1BKOEL72&psc=1) | 1 | $13 | $13 |
 | **Total Cost (Excludes POE Switch)** | **-** | **-** | **$1257** |
 
 # Get Remote PC ready for Ansible Deployment 
@@ -70,7 +70,7 @@ Install POE HAT with NVMe PCIe adapter on all Raspberry Pi 5s
 
 `TODO - Put pictures of install`
 
-## Raspberry Pi Setup
+## [Raspberry Pi Setup](https://youtu.be/x9ceI0_r_Kg)
 
 This setup assumes a Raspberry Pi5 64 bit OS Lite (no desktop) will be setup in a k3s cluster with a single server node and 3 worker nodes with 4TB in each worker node. 
 
@@ -84,9 +84,19 @@ To make network discovery and integration easier, I edit the advanced configurat
 
 After setting all those options, and the hostname is unique to each node (and matches what is in `hosts.ini`), I inserted the microSD cards into the respective Pis, or installed the NVMe SSDs into the correct slots, and booted the cluster.
 
-![Hardware Build](images/Single-Node-Mounted-1.jpeg)
-![Hardware Build](images/Single-Node-Mounted-2.jpeg)
+![Hardware Build](images/Single-Node-Mounted-2.jpeg) 
+
+> **Note**: The BoM includes nylon standoffs.  The solution I found uses an 11mm male standoff with a 2mm nut on the male standoff and a 2mm nylon nut on top with a nylon screw thru to the top nut and into the standoff.  This gives you about 15.5mm of total height between the Pi and the POE HAT.  Less than that and it will not fit over the USB ports.  More than that and the POE transformer hits the top of the rack
+
 ![Hardware Build](images/Rack-Mounted-Pi5-Nodes.jpeg)
+
+## NVMe Drive list recommendations
+
+> **Note**: I have not tested all the drives from this list.   The NVMe drives in the latest BoM do work with the HAT and Pi5 
+
+> **Note**:  **[This](https://www.amazon.com/gp/product/B08DTP8LG8/ref=ewc_pr_img_1?smid=A2CP9SZGVW0PFE&th=1) NVMe drive has been tested and does not work.** So do not by this one!
+
+![NVME Drive List](images/SSD-Compatibility.png)
 
 ## SSH connection test
 
@@ -129,6 +139,9 @@ I am using a 64GB sdCard and transitioning the `/boot` and `/` mounts to a `4TB 
    cd seadogger-homelab/useful-scripts
    sudo ./partition_and_boot_NVMe_worker_node.sh
 ```
+> **Note**:  Rook does not want formatted partitions which is different than Longhorn so the Partitioning and Cloning script leaves the 3rd partition completely alone and unformatted.
+
+> **Note**: Rook and Ceph are more enterprise ready and enables future growth into LakeFS
 
 ## Script Summary
 
@@ -170,8 +183,11 @@ Under advanced options set the boot order to boot the NVMe first.
    ```bash
    lsblk -o NAME,SIZE,FSTYPE,MOUNTPOINT
    ```
+### Master Node
 ![Partition Info](images/Partition-Map-NVMe.png)
-![Partition Info](images/NVMe-Performance-Compare.png1)
+
+### Worker / Storage Nodes
+![Partition Info](images/Partition-Map-NVMe-worker.png)
 
 # Raspberry Pi Cluster Mangement with Ansible
 
@@ -234,7 +250,7 @@ See the README file within the `benchmarks` folder.  **Credit and Thanks to [Jef
 
 ![Benchmark Results](images/IO-Benchmark-2.png)
 
-#### SDCard Vs. NVMe
+#### [SDCard Vs. NVMe IO Performance](https://forums.raspberrypi.com/viewtopic.php?t=362903)
 ![Benchmark Results](images/NVMe-Performance-Compare.png)
 
 
