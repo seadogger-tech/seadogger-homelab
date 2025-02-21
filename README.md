@@ -79,7 +79,7 @@ Install POE HAT with NVMe PCIe adapter on all Raspberry Pi 5s
 
 > **Note**: I have not tested all the drives from this list.   The NVMe drives in the latest BoM do work with the HAT and Pi5 
 
-> **Note**:  **[This](https://www.amazon.com/gp/product/B08DTP8LG8/ref=ewc_pr_img_1?smid=A2CP9SZGVW0PFE&th=1) NVMe drive has been tested and does not work.** So do not by this one!
+> **Note**:  [This](https://www.amazon.com/gp/product/B08DTP8LG8/ref=ewc_pr_img_1?smid=A2CP9SZGVW0PFE&th=1) NVMe drive has been tested and does not work. **DO NOT BUY this one!**
 
 ![NVME Drive List](images/SSD-Compatibility.png)
 
