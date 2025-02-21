@@ -2,7 +2,7 @@
 
 ## Architecture Overview
 
-![Pi Cluster Architecture](images/architecture.png)
+![Pi Cluster Architecture](images/Architecture.png)
 
 ## Prerequisites
 
