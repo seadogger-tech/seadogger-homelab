@@ -13,7 +13,7 @@ spec:
   statusCheck:
     mirror: {}
 ---
-# EC pool configuration
+# EC pool configuration with mirroring
 apiVersion: ceph.rook.io/v1
 kind: CephBlockPool
 metadata:
@@ -24,10 +24,34 @@ spec:
   erasureCoded:
     dataChunks: 2
     codingChunks: 1
+  mirroring:
+    enabled: true
+    mode: image
   parameters:
     compression_mode: aggressive
   statusCheck:
     mirror: {}
+---
+# RBD mirroring configuration
+apiVersion: ceph.rook.io/v1
+kind: CephRBDMirror
+metadata:
+  name: rbd-mirror
+  namespace: rook-ceph
+spec:
+  count: 1
+  placement:
+    tolerations:
+    - key: "node-role.kubernetes.io/control-plane"
+      operator: "Exists"
+    topologySpreadConstraints: []
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "512Mi"
+    limits:
+      cpu: "1"
+      memory: "1Gi"
 ---
 # StorageClass configuration
 apiVersion: storage.k8s.io/v1
