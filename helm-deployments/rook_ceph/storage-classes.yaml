@@ -1,4 +1,4 @@
-# First, add the replicated metadata pool
+# Replicated metadata pool
 apiVersion: ceph.rook.io/v1
 kind: CephBlockPool
 metadata:
@@ -14,7 +14,7 @@ spec:
   statusCheck:
     mirror: {}
 ---
-# Modified EC pool configuration
+# EC pool configuration
 apiVersion: ceph.rook.io/v1
 kind: CephBlockPool
 metadata:
@@ -30,11 +30,12 @@ spec:
     rgw_optimization: "true"
     data_pool: ecpool
     metadata_pool: ecpool-metadata
+  deviceClass: nvme  # Changed from hdd to nvme
   mirroring: {}
   statusCheck:
     mirror: {}
 ---
-# Modified StorageClass
+# StorageClass configuration
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
 metadata:
@@ -47,8 +48,7 @@ parameters:
   pool: ecpool
   dataPool: ecpool
   imageFormat: "2"
-  imageFeatures: layering,exclusive-lock,object-map,fast-diff
-  thick-provision: "true"
+  imageFeatures: layering
   csi.storage.k8s.io/provisioner-secret-name: rook-csi-rbd-provisioner
   csi.storage.k8s.io/provisioner-secret-namespace: rook-ceph
   csi.storage.k8s.io/controller-expand-secret-name: rook-csi-rbd-provisioner
