@@ -9,19 +9,14 @@ spec:
     command: ["/bin/sh", "-c"]
     args:
       - while true; do
-          echo "Block storage test" > /block/test.txt;
-          echo "Filesystem storage test" > /shared/test.txt;
-          sleep 3600;
+          echo "EC storage test - $(date)" > /data/test.txt;
+          cat /data/test.txt;
+          sleep 60;
         done
     volumeMounts:
-    - name: block-volume
-      mountPath: /block
-    - name: shared-volume
-      mountPath: /shared
+    - name: ec-volume
+      mountPath: /data
   volumes:
-  - name: block-volume
+  - name: ec-volume
     persistentVolumeClaim:
-      claimName: test-block-claim
-  - name: shared-volume
-    persistentVolumeClaim:
-      claimName: test-fs-claim
+      claimName: test-ec-claim
