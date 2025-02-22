@@ -23,8 +23,21 @@ spec:
         args: ["-c", "while true; do sleep 3600; done"]
         imagePullPolicy: IfNotPresent
         env:
-          - name: CEPH_ARGS
-            value: "--cluster=rook-ceph"
+          - name: ROOK_CEPH_USERNAME
+            valueFrom:
+              secretKeyRef:
+                name: rook-ceph-mon
+                key: ceph-username
+          - name: ROOK_CEPH_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: rook-ceph-mon
+                key: ceph-secret
+          - name: ROOK_CEPH_MON_HOST
+            valueFrom:
+              configMapKeyRef:
+                name: rook-ceph-mon-endpoints
+                key: data
         securityContext:
           runAsNonRoot: false
           privileged: true
@@ -46,7 +59,10 @@ spec:
               path: mon-endpoints
         - name: ceph-config
           configMap:
-            name: rook-ceph-config
+            name: rook-ceph-mon-endpoints
+            items:
+            - key: maxMonId
+              path: ceph.conf
         - name: keyring-volume
           secret:
             secretName: rook-ceph-mon
