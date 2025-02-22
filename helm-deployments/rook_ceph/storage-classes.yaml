@@ -10,7 +10,6 @@ spec:
     size: 3
   parameters:
     compression_mode: aggressive
-  mirroring: {}
   statusCheck:
     mirror: {}
 ---
@@ -27,11 +26,6 @@ spec:
     codingChunks: 1
   parameters:
     compression_mode: aggressive
-    rgw_optimization: "true"
-    data_pool: ecpool
-    metadata_pool: ecpool-metadata
-  deviceClass: nvme
-  mirroring: {}
   statusCheck:
     mirror: {}
 ---
@@ -46,7 +40,6 @@ provisioner: rook-ceph.rbd.csi.ceph.com
 parameters:
   clusterID: rook-ceph
   pool: ecpool
-  dataPool: ecpool
   imageFormat: "2"
   imageFeatures: layering
   csi.storage.k8s.io/provisioner-secret-name: rook-csi-rbd-provisioner
