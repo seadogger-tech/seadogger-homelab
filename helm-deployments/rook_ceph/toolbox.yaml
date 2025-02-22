@@ -46,9 +46,9 @@ spec:
             name: ceph-config
           - name: mon-endpoint-volume
             mountPath: /etc/rook
-          - name: keyring-volume
-            mountPath: /etc/ceph/keyring
-            subPath: keyring
+          - name: ceph-admin-secret
+            mountPath: /etc/ceph-secret
+            readOnly: true
       serviceAccountName: rook-ceph-tools
       volumes:
         - name: mon-endpoint-volume
@@ -58,14 +58,10 @@ spec:
             - key: data
               path: mon-endpoints
         - name: ceph-config
-          configMap:
-            name: rook-ceph-mon-endpoints
-            items:
-            - key: maxMonId
-              path: ceph.conf
-        - name: keyring-volume
+          emptyDir: {}
+        - name: ceph-admin-secret
           secret:
             secretName: rook-ceph-mon
             items:
-              - key: admin-keyring
-                path: keyring
+              - key: ceph-secret
+                path: secret
