@@ -1,0 +1,40 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: rook-ceph-osd-prepare-rey
+  namespace: rook-ceph
+  labels:
+    app: rook-ceph-osd-prepare
+spec:
+  template:
+    spec:
+      containers:
+      - name: osd-prepare
+        image: rook/ceph:v1.12.3
+        command: ["/tini"]
+        args: ["-g", "--", "/usr/local/bin/osd-prepare.sh"]
+        env:
+        - name: ROOK_NODE_NAME
+          value: rey
+        volumeMounts:
+        - name: devices
+          mountPath: /dev
+        - name: discover
+          mountPath: /dev/disk
+        - name: rook-data
+          mountPath: /var/lib/rook
+      volumes:
+      - name: devices
+        hostPath:
+          path: /dev
+      - name: discover
+        hostPath:
+          path: /dev/disk
+      - name: rook-data
+        hostPath:
+          path: /var/lib/rook
+      restartPolicy: Never
+      nodeSelector:
+        kubernetes.io/hostname: rey
+      tolerations:
+      - operator: Exists

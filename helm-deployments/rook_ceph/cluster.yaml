@@ -24,17 +24,17 @@ spec:
     useAllNodes: false
     useAllDevices: false
     nodes:
-    - name: "obiwan"
-      devices:
-        - name: "nvme0n1p3"
-    - name: "anakin"
-      devices:
-        - name: "nvme0n1p3"
-    - name: "rey"
-      devices:
-        - name: "nvme0n1p3"
+      - name: "obiwan"
+        devices:
+          - name: "nvme0n1p3"
+      - name: "anakin"
+        devices:
+          - name: "nvme0n1p3"
+      - name: "rey"
+        devices:
+          - name: "nvme0n1p3"
   placement:
     all:
       tolerations:
-      - operator: "Exists"
+        - operator: "Exists"
       
