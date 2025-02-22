@@ -24,12 +24,12 @@ spec:
           - -c
           - |
             CEPH_CONF=/etc/ceph/ceph.conf
-            MON_ENDPOINTS=$(cat /etc/rook/mon-endpoints)
+            MON_IP=$(cat /etc/rook/mon-endpoints | cut -d'=' -f2)
             KEYRING=/etc/ceph/keyring
 
             cat << EOF > $CEPH_CONF
             [global]
-            mon_host = ${MON_ENDPOINTS}
+            mon_host = ${MON_IP}
             auth_cluster_required = cephx
             auth_service_required = cephx
             auth_client_required = cephx
@@ -52,22 +52,6 @@ spec:
               sleep 3600
             done
         imagePullPolicy: IfNotPresent
-        env:
-          - name: ROOK_CEPH_USERNAME
-            valueFrom:
-              secretKeyRef:
-                name: rook-ceph-mon
-                key: ceph-username
-          - name: ROOK_CEPH_SECRET
-            valueFrom:
-              secretKeyRef:
-                name: rook-ceph-mon
-                key: ceph-secret
-          - name: ROOK_CEPH_MON_HOST
-            valueFrom:
-              configMapKeyRef:
-                name: rook-ceph-mon-endpoints
-                key: data
         securityContext:
           runAsNonRoot: false
           privileged: true
