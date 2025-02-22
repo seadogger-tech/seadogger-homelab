@@ -10,12 +10,14 @@ spec:
     spec:
       containers:
       - name: osd-prepare
-        image: rook/ceph:v1.12.3
-        command: ["/tini"]
-        args: ["-g", "--", "/usr/local/bin/osd-prepare.sh"]
+        image: quay.io/ceph/ceph:v19.2.0
+        command: ["/usr/bin/ceph-volume"]
+        args: ["--log-path", "/tmp/ceph-log", "lvm", "batch", "--prepare", "/dev/nvme0n1p3", "--yes"]
         env:
         - name: ROOK_NODE_NAME
           value: rey
+        securityContext:
+          privileged: true
         volumeMounts:
         - name: devices
           mountPath: /dev
