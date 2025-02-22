@@ -5,11 +5,9 @@ metadata:
   namespace: rook-ceph
 spec:
   failureDomain: host
-  replicated:
-    size: 1  # For metadata pool, if used
-  erasureCode:
-    name: ec-profile
-    profile:
+  erasureCoded:
+    plugin: jerasure
+    parameters:
       k: 2   # Number of data chunks
       m: 1   # Number of coding chunks
-      plugin: jerasure
+    chunkSize: 4096  # Optional: Defines the chunk size (in bytes)
