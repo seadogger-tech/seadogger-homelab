@@ -1,13 +1,13 @@
 apiVersion: ceph.rook.io/v1
 kind: CephBlockPool
 metadata:
-  name: ec-pool
+  name: ec-profile
   namespace: rook-ceph
 spec:
   failureDomain: host
-  erasureCoded:
-    plugin: jerasure
-    parameters:
+  erasureCode:
+    name: ec-profile
+    profile:
       k: 2   # Number of data chunks
       m: 1   # Number of coding chunks
-    chunkSize: 4096  # Optional: Defines the chunk size (in bytes)
+      plugin: jerasure

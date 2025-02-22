@@ -34,17 +34,10 @@ spec:
       - name: "red"
         devices:
           - name: "nvme0n1p3"
-    # Define erasure coding pools here
     erasureCodePools:
       - pool: ec-data
-        crushRoot: default
         erasureCodeProfile: ec-profile
-    # Optional: If metadata storage is required with replication
-    metadataPool:
-      pool: ec-metadata
-      erasureCodeProfile: ec-profile
-      replication:
-        size: 3
+        crushRoot: default
   placement:
     all:
       nodeAffinity:
