@@ -18,52 +18,30 @@ spec:
       dnsPolicy: ClusterFirstWithHostNet
       containers:
       - name: rook-ceph-tools
-        image: quay.io/ceph/ceph:v19.2.0
+        image: rook/ceph:v1.12.3
         command: ["/tini"]
         args: ["-g", "--", "/usr/local/bin/toolbox.sh"]
-        imagePullPolicy: Always
+        imagePullPolicy: IfNotPresent
         env:
-          - name: ROOK_CEPH_USERNAME
+          - name: ROOK_ADMIN_SECRET
             valueFrom:
               secretKeyRef:
                 name: rook-ceph-mon
-                key: ceph-username
-          - name: ROOK_CEPH_SECRET
-            valueFrom:
-              secretKeyRef:
-                name: rook-ceph-mon
-                key: ceph-secret
+                key: admin-secret
         securityContext:
+          runAsNonRoot: false
           privileged: true
-          runAsUser: 0
         volumeMounts:
-          - mountPath: /dev
-            name: dev
-          - mountPath: /sys/bus
-            name: sysbus
-          - mountPath: /lib/modules
-            name: libmodules
+          - mountPath: /etc/ceph
+            name: ceph-config
           - name: mon-endpoint-volume
             mountPath: /etc/rook
-      # if hostNetwork: false, the "rbd map" command hangs, see https://github.com/rook/rook/issues/2021
-      hostNetwork: true
-      nodeSelector:
-        kubernetes.io/arch: arm64
-      tolerations:
-        - operator: "Exists"
       volumes:
-        - name: dev
-          hostPath:
-            path: /dev
-        - name: sysbus
-          hostPath:
-            path: /sys/bus
-        - name: libmodules
-          hostPath:
-            path: /lib/modules
         - name: mon-endpoint-volume
           configMap:
             name: rook-ceph-mon-endpoints
             items:
             - key: data
               path: mon-endpoints
+        - name: ceph-config
+          emptyDir: {}
