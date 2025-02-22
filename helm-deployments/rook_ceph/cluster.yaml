@@ -11,6 +11,11 @@ spec:
   cephVersion:
     image: quay.io/ceph/ceph:v19.2.0
     allowUnsupported: true
+    imagePullPolicy: Always
+    imagePullSpec:
+      platform:
+        architecture: arm64
+        os: linux
   dashboard:
     enabled: true
     ssl: false
@@ -37,4 +42,3 @@ spec:
     all:
       tolerations:
         - operator: "Exists"
-      
