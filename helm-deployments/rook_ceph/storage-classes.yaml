@@ -30,7 +30,7 @@ spec:
     rgw_optimization: "true"
     data_pool: ecpool
     metadata_pool: ecpool-metadata
-  deviceClass: nvme  # Changed from hdd to nvme
+  deviceClass: nvme
   mirroring: {}
   statusCheck:
     mirror: {}
