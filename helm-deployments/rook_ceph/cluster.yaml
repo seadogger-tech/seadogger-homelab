@@ -5,9 +5,6 @@ metadata:
   namespace: rook-ceph
 spec:
   dataDirHostPath: /var/lib/rook
-  mon:
-    count: 1
-    allowMultiplePerNode: true
   cephVersion:
     image: quay.io/ceph/ceph:v19.2.0
     allowUnsupported: true
@@ -27,22 +24,45 @@ spec:
     nodes:
       - name: "obiwan"
         devices:
-          - name: "nvme0n1p3"
+          - name: "nvme0n1p3" # Specify partition for the device
       - name: "anakin"
         devices:
-          - name: "nvme0n1p3"
+          - name: "nvme0n1p3" # Specify partition for the device
       - name: "rey"
         devices:
-          - name: "nvme0n1p3"
+          - name: "nvme0n1p3" # Specify partition for the device
+  storageClassDeviceSets:
+    - name: "erasure-coded-pool"
+      count: 3
+      resources:
+        requests:
+          storage: "100%" # Use all available space on the device
+      volumeMode: Block
+      storageClassName: rook-ceph-block
+      deviceFilter: ^nvme.* # Filter for NVMe devices if needed
+      placement:
+        all:
+          nodeAffinity:
+            requiredDuringSchedulingIgnoredDuringExecution:
+              nodeSelectorTerms:
+                - matchExpressions:
+                    - key: kubernetes.io/arch
+                      operator: In
+                      values:
+                        - arm64
+      erasureCoded:
+        dataChunks: 4 # Number of data chunks
+        codingChunks: 2 # Number of coding chunks
+        chunkSize: 1024 # Set chunk size (adjust if needed)
   placement:
     all:
       nodeAffinity:
         requiredDuringSchedulingIgnoredDuringExecution:
           nodeSelectorTerms:
-          - matchExpressions:
-            - key: kubernetes.io/arch
-              operator: In
-              values:
-              - arm64
+            - matchExpressions:
+                - key: kubernetes.io/arch
+                  operator: In
+                  values:
+                    - arm64
       tolerations:
         - operator: "Exists"
