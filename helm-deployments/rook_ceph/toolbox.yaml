@@ -22,12 +22,6 @@ spec:
         command: ["/tini"]
         args: ["-g", "--", "/usr/local/bin/toolbox.sh"]
         imagePullPolicy: IfNotPresent
-        env:
-          - name: ROOK_ADMIN_SECRET
-            valueFrom:
-              secretKeyRef:
-                name: rook-ceph-mon
-                key: admin-secret
         securityContext:
           runAsNonRoot: false
           privileged: true
