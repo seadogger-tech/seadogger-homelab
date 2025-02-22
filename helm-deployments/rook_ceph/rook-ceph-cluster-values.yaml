@@ -57,7 +57,7 @@ cephClusterSpec:
     - name: "anakin"
       devices:
       - name: "nvme0n1p3"
-    - name: "red"
+    - name: "rey"
       devices:
       - name: "nvme0n1p3"
     erasureCodePools:
