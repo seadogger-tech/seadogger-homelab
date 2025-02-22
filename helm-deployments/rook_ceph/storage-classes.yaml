@@ -1,3 +1,20 @@
+# First, add the replicated metadata pool
+apiVersion: ceph.rook.io/v1
+kind: CephBlockPool
+metadata:
+  name: ecpool-metadata
+  namespace: rook-ceph
+spec:
+  failureDomain: host
+  replicated:
+    size: 3
+  parameters:
+    compression_mode: aggressive
+  mirroring: {}
+  statusCheck:
+    mirror: {}
+---
+# Modified EC pool configuration
 apiVersion: ceph.rook.io/v1
 kind: CephBlockPool
 metadata:
@@ -9,12 +26,15 @@ spec:
     dataChunks: 2
     codingChunks: 1
   parameters:
-    # Inline compression mode for the data pool
     compression_mode: aggressive
+    rgw_optimization: "true"
+    data_pool: ecpool
+    metadata_pool: ecpool-metadata
   mirroring: {}
   statusCheck:
     mirror: {}
 ---
+# Modified StorageClass
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
 metadata:
@@ -25,6 +45,7 @@ provisioner: rook-ceph.rbd.csi.ceph.com
 parameters:
   clusterID: rook-ceph
   pool: ecpool
+  dataPool: ecpool
   imageFormat: "2"
   imageFeatures: layering,exclusive-lock,object-map,fast-diff
   thick-provision: "true"
