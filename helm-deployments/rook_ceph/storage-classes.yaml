@@ -8,6 +8,7 @@ spec:
   erasureCoded:
     dataChunks: 2
     codingChunks: 1
+  enableRBD: true
   parameters:
     # Inline compression mode for the data pool
     compression_mode: aggressive
