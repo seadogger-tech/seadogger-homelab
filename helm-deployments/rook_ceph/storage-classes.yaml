@@ -8,10 +8,12 @@ spec:
   erasureCoded:
     dataChunks: 2
     codingChunks: 1
-  enableRBD: true
   parameters:
     # Inline compression mode for the data pool
     compression_mode: aggressive
+  mirroring: {}
+  statusCheck:
+    mirror: {}
 ---
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
