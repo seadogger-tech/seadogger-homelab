@@ -6,60 +6,27 @@ metadata:
 spec:
   cephVersion:
     image: quay.io/ceph/ceph:v19.2.0
-  cleanupPolicy:
-    sanitizeDisks: {}
-  crashCollector: {}
-  csi:
-    cephfs: {}
-    readAffinity:
-      enabled: false
-  dashboard:
-    enabled: true
-    urlPrefix: /rook-ceph-dashboard
-  dataDirHostPath: /var/lib/rook
-  disruptionManagement: {}
-  external: {}
-  healthCheck:
-    daemonHealth:
-      mon: {}
-      osd: {}
-      status: {}
-  logCollector: {}
-  mgr:
-    count: 1
   mon:
-    allowMultiplePerNode: false
     count: 3
-  monitoring:
-    enabled: true
-  network:
-    multiClusterService: {}
-  resources: {}
-  security:
-    keyRotation:
-      enabled: false
-    kms: {}
   storage:
-    useAllNodes: false
     nodes:
       - name: obiwan
-        config:
-          storeType: bluestore
         devices:
           - name: nvme0n1p3
+        config:
+          storeType: bluestore
       - name: anakin
-        config:
-          storeType: bluestore
         devices:
           - name: nvme0n1p3
+        config:
+          storeType: bluestore
       - name: rey
-        config:
-          storeType: bluestore
         devices:
           - name: nvme0n1p3
-    erasureCodedPools:
-      - name: replicapool
-        compressionMode: false
-        profile:
-          codingChunks: 1
-          dataChunks: 2
+        config:
+          storeType: bluestore
+  dashboard:
+    enabled: true
+    urlPrefix: "/rook-ceph-dashboard"
+  monitoring:
+    enabled: true
