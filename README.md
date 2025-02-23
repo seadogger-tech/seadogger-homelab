@@ -162,17 +162,6 @@ I am using a 64GB sdCard and transitioning the `/boot` and `/` mounts to a `4TB 
 Under advanced options set the boot order to boot the NVMe first.  
 > **Note**: When prompted to reboot **`decline`.  We will reboot in the next step.**
 
-- Set the NVMe first in the boot order and tell the bootloader to detect PCIE
-    ```bash
-    sudo rpi-eeprom-config --edit
-    ```
-
-- Add and modify the following to set the boot order:
-    ```
-    PCIE_PROBE=1
-    BOOT_ORDER=0xf416
-    ```
-
 - Shutdown:
    ```bash
    sudo shutdown now
