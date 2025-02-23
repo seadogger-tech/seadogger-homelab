@@ -1,0 +1,18 @@
+apiVersion: ceph.rook.io/v1
+kind: CephFilesystem
+metadata:
+  name: my-cephfs
+  namespace: rook-ceph
+spec:
+  dataPool:
+    erasureCoded:
+      codingChunks: 1
+      dataChunks: 2
+      compressionMode: false
+  metadataPool:
+    replicated:
+      size: 1
+  placement: {}
+  resources: {}
+  expose: true
+  storageClassName: rook-ceph-block
