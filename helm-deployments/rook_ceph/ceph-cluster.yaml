@@ -30,7 +30,5 @@ spec:
     enabled: true
     urlPrefix: "/rook-ceph-dashboard"
     port: 80
-    ssl: false
-    sslPort: 443
   monitoring:
     enabled: true
