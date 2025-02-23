@@ -8,4 +8,4 @@ spec:
   resources:
     requests:
       storage: 1Gi
-  storageClassName: myblockpool-ec-data
+  storageClassName: rook-ceph-block-storage-ec

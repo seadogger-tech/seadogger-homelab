@@ -7,7 +7,7 @@ spec:
     storage: 1Gi
   accessModes:
     - ReadWriteOnce
-  storageClassName: myblockpool-ec-data
+  storageClassName: rook-ceph-block-storage-ec
   csi:
     driver: rook-ceph.rbd.csi.ceph.com
     volumeHandle: test-volume-id
