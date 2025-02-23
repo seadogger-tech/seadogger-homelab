@@ -5,10 +5,6 @@ metadata:
   namespace: rook-ceph
 spec:
   failureDomain: host
-  erasureCode:
-    plugin: jerasure
-    # Plugin parameters for the erasure code
-    parameters:
-      k: 2   # Number of data chunks
-      m: 1   # Number of coding chunks
-    chunkSize: 4096   # Size of each chunk (adjust as needed)
+  erasureCoded:
+    dataChunks: 2   # Number of data chunks
+    codingChunks: 1 # Number of coding chunks
