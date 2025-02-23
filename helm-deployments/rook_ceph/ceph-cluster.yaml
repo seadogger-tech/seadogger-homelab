@@ -10,6 +10,8 @@ spec:
   mon:
     count: 3
     allowMultiplePerNode: false
+  mgr:
+    count: 1
   storage:
     useAllNodes: false
     nodes:
@@ -28,29 +30,15 @@ spec:
           - name: nvme0n1p3
         config:
           storeType: bluestore
-    # Define the erasure coding pools here
     erasureCodedPools:
       - name: replicapool
-        # Erasure coding configuration
+        compressionMode: off
         profile:
-          dataChunks: 2
           codingChunks: 1
-        compressionMode: "off"
-  resources: {}
+          dataChunks: 2
+  monitoring:
+    enabled: true
   dashboard:
     enabled: true
     urlPrefix: /rook-ceph-dashboard
-  monitoring:
-    enabled: true
-  network:
-    hostNetwork: false
-  radosgw:
-    enabled: false
-  mgr:
-    count: 1
-  osd:
-    storeType: bluestore
-    useAllDevices: false
-    devices:
-      - name: nvme0n1p3
-    location: ""
+  resources: {}
