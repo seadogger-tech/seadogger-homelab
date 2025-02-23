@@ -4,15 +4,18 @@ metadata:
   name: my-cephfs
   namespace: rook-ceph
 spec:
+  metadataPool:
+    erasureCoded:
+      codingChunks: 2
+      dataChunks: 3
+      compression: true
   dataPool:
     erasureCoded:
-      codingChunks: 1
-      dataChunks: 2
-      compressionMode: false
-  metadataPool:
-    replicated:
-      size: 1
-  placement: {}
-  resources: {}
-  expose: true
-  storageClassName: rook-ceph-block
+      codingChunks: 2
+      dataChunks: 3
+      compression: true
+  cephFS:
+    metadataServer:
+      activeCount: 1
+      activeStandby: true
+  storageClassName: ceph-block
