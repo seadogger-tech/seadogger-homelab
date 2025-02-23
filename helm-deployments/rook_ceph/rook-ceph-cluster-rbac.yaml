@@ -1,0 +1,88 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: rook-ceph-monitoring
+rules:
+  - apiGroups: ["monitoring.coreos.com"]
+    resources: ["servicemonitors"]
+    verbs: ["get", "create", "update", "delete"]
+  - apiGroups: [""]
+    resources: ["pods", "services", "endpoints", "events"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "watch"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: rook-ceph-monitoring-binding
+subjects:
+  - kind: ServiceAccount
+    name: rook-ceph-system
+    namespace: rook-ceph
+roleRef:
+  kind: ClusterRole
+  name: rook-ceph-monitoring
+  apiGroup: rbac.authorization.k8s.io
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: rook-ceph-csi
+  namespace: rook-ceph
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "create", "update", "delete"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["storageclasses"]
+    verbs: ["get", "list"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: rook-ceph-csi-binding
+  namespace: rook-ceph
+subjects:
+  - kind: ServiceAccount
+    name: rook-csi-rbd-provisioner
+    namespace: rook-ceph
+  - kind: ServiceAccount
+    name: rook-csi-rbd-node
+    namespace: rook-ceph
+roleRef:
+  kind: Role
+  name: rook-ceph-csi
+  apiGroup: rbac.authorization.k8s.io
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: rook-ceph-cluster-admin
+rules:
+  - apiGroups: ["ceph.rook.io"]
+    resources: ["*"]
+    verbs: ["*"]
+  - apiGroups: [""]
+    resources: ["persistentvolumes"]
+    verbs: ["get", "list", "watch", "create", "delete", "update"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: rook-ceph-cluster-admin-binding
+subjects:
+  - kind: ServiceAccount
+    name: rook-ceph-system
+    namespace: rook-ceph
+roleRef:
+  kind: ClusterRole
+  name: rook-ceph-cluster-admin
+  apiGroup: rbac.authorization.k8s.io
+
