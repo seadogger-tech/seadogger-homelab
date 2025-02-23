@@ -9,31 +9,24 @@ spec:
   dataDirHostPath: /var/lib/rook
   mon:
     count: 3
-  storage:
-    nodes:
-      - name: obiwan
-        devices:
-          - name: nvme0n1p3
-        config:
-          storeType: bluestore
-      - name: anakin
-        devices:
-          - name: nvme0n1p3
-        config:
-          storeType: bluestore
-      - name: rey
-        devices:
-          - name: nvme0n1p3
-        config:
-          storeType: bluestore
   dashboard:
     enabled: true
     port: 7000
     ssl: false
-  monitoring:
-    enabled: false
-    createPrometheusRules: false
-    createServiceMonitor: false
-
-  enableServiceMonitor: false
-  enableDiscoveryDaemon: false
+  storage:
+    nodes:
+    - name: obiwan
+      devices:
+      - name: nvme0n1p3
+      config:
+        storeType: bluestore
+    - name: anakin
+      devices:
+      - name: nvme0n1p3
+      config:
+        storeType: bluestore
+    - name: rey
+      devices:
+      - name: nvme0n1p3
+      config:
+        storeType: bluestore
