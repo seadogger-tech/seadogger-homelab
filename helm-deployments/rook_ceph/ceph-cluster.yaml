@@ -6,12 +6,39 @@ metadata:
 spec:
   cephVersion:
     image: quay.io/ceph/ceph:v19.2.0
+  cleanupPolicy:
+    sanitizeDisks: {}
+  crashCollector: {}
+  csi:
+    cephfs: {}
+    readAffinity:
+      enabled: false
+  dashboard:
+    enabled: true
+    urlPrefix: /rook-ceph-dashboard
   dataDirHostPath: /var/lib/rook
-  mon:
-    count: 3
-    allowMultiplePerNode: false
+  disruptionManagement: {}
+  external: {}
+  healthCheck:
+    daemonHealth:
+      mon: {}
+      osd: {}
+      status: {}
+  logCollector: {}
   mgr:
     count: 1
+  mon:
+    allowMultiplePerNode: false
+    count: 3
+  monitoring:
+    enabled: true
+  network:
+    multiClusterService: {}
+  resources: {}
+  security:
+    keyRotation:
+      enabled: false
+    kms: {}
   storage:
     useAllNodes: false
     nodes:
@@ -36,9 +63,4 @@ spec:
         profile:
           codingChunks: 1
           dataChunks: 2
-  monitoring:
-    enabled: true
-  dashboard:
-    enabled: true
-    urlPrefix: /rook-ceph-dashboard
-  resources: {}
+  version: 19.2.0
