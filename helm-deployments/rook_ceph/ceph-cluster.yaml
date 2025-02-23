@@ -43,24 +43,23 @@ spec:
     useAllNodes: false
     nodes:
       - name: obiwan
-        devices:
-          - name: nvme0n1p3
         config:
           storeType: bluestore
+        devices:
+          - name: nvme0n1p3
       - name: anakin
-        devices:
-          - name: nvme0n1p3
         config:
           storeType: bluestore
+        devices:
+          - name: nvme0n1p3
       - name: rey
-        devices:
-          - name: nvme0n1p3
         config:
           storeType: bluestore
+        devices:
+          - name: nvme0n1p3
     erasureCodedPools:
       - name: replicapool
-        compressionMode: off
+        compressionMode: false
         profile:
           codingChunks: 1
           dataChunks: 2
-  version: 19.2.0
