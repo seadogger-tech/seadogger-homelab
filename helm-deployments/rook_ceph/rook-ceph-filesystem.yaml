@@ -1,21 +1,20 @@
 apiVersion: ceph.rook.io/v1
 kind: CephFilesystem
 metadata:
-  name: my-cephfs
+  name: myfs-ec
   namespace: rook-ceph
 spec:
   metadataPool:
-    erasureCoded:
-      codingChunks: 2
-      dataChunks: 3
-      compression: true
-  dataPool:
-    erasureCoded:
-      codingChunks: 2
-      dataChunks: 3
-      compression: true
-  cephFS:
-    metadataServer:
-      activeCount: 1
-      activeStandby: true
-  storageClassName: ceph-block
+    replicated:
+      size: 3
+  dataPools:
+    - name: default
+      replicated:
+        size: 3
+    - name: erasurecoded
+      erasureCoded:
+        dataChunks: 2
+        codingChunks: 1
+  metadataServer:
+    activeCount: 1
+    activeStandby: true
