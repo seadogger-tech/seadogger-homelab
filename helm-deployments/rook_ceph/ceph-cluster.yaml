@@ -32,5 +32,3 @@ spec:
   dashboard:
     enabled: true
     urlPrefix: /rook-ceph-dashboard
-  radosgw:
-    enabled: false
