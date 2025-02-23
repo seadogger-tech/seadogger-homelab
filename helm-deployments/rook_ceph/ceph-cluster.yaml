@@ -28,7 +28,7 @@ spec:
           storeType: bluestore
   dashboard:
     enabled: true
-    urlPrefix: "/rook-ceph-dashboard"
-    port: 80
+    port: 7000
+    ssl: false
   monitoring:
     enabled: true
