@@ -32,5 +32,8 @@ spec:
     ssl: false
   monitoring:
     enabled: false
+    createPrometheusRules: false
+    createServiceMonitor: false
 
+  enableServiceMonitor: false
   enableDiscoveryDaemon: false
