@@ -1,0 +1,15 @@
+# Erasure-coded data pool
+apiVersion: ceph.rook.io/v1
+kind: CephBlockPool
+metadata:
+  name: myblockpool-ec-data
+  namespace: rook-ceph
+spec:
+  failureDomain: host
+  erasureCoded:
+    dataChunks: 2
+    codingChunks: 1
+  parameters:
+    compression_mode: aggressive
+  statusCheck:
+    mirror: {}
