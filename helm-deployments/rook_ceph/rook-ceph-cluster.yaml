@@ -7,6 +7,9 @@ spec:
   cephVersion:
     image: quay.io/ceph/ceph:v19.2.0
   dataDirHostPath: /var/lib/rook
+  csi:
+    enableRbdDriver: true
+    enableCephfsDriver: true
   mon:
     count: 3
   storage:
