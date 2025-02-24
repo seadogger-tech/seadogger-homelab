@@ -7,7 +7,7 @@ pipelines:
 persistence:
   enabled: true
   size: 100Gi
-  storageClass: "rook-cephfs"
+  storageClass: "rook-ceph-block-storage-ec"
   accessMode: ReadWriteOnce
 
 # Service configuration
