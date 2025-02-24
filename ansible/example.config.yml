@@ -33,8 +33,8 @@ enable_prometheus: false
 enable_openwebui: false
 enable_plex: false
 
-aws_bedrock_api_key_id: "AKIA2KBNVQBIKETZOUN7"
-aws_bedrock_api_access_key: "ZeiF8qQuueyVBYIQuEJFBMN3r+ONyvd5ZepqmEZL"
+aws_bedrock_api_key_id: "YOUR_AWS_ACCESS_KEY_ID_HERE"
+aws_bedrock_api_access_key: "YOUR_AWS_ACCESS_KEY_HERE"
 
 #This key is only good for 5 minutes so best to run this last and only enable the plex install above
 # You get this from https://plex.tv/claim
