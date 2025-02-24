@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: Pod
 metadata:
-  name: volume-test
+  name: cephfs-volume-test
 spec:
   containers:
   - name: volume-test
@@ -9,14 +9,16 @@ spec:
     command: ["/bin/sh", "-c"]
     args:
       - while true; do
-          echo "EC storage test - $(date)" > /data/test.txt;
-          cat /data/test.txt;
+          echo "CephFS EC storage test - $(date)" > /data/test.txt;
+          echo "File contents:" && cat /data/test.txt;
+          echo "File system type:" && df -Th /data;
+          echo "Directory listing:" && ls -la /data;
           sleep 60;
         done
     volumeMounts:
-    - name: ec-volume
+    - name: cephfs-volume
       mountPath: /data
   volumes:
-  - name: ec-volume
+  - name: cephfs-volume
     persistentVolumeClaim:
-      claimName: test-ec-claim
+      claimName: test-cephfs-ec-claim
