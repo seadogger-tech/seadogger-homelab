@@ -15,18 +15,27 @@ enable_k3s_workers: false
 # ArgoCD deployment to k3s 
 argocd_force_clean_install: false  # When false (default), safely updates existing installation. When true, performs complete removal and fresh install.
 enable_argocd: false
+enable_metallb: false
 enable_argocd_svc: false
 
 # ArgoCD managed apps.  Setting these to true with perform a clean install of the app. 
 #  If you are trybing to change the configuration of one of these apps you should make the change in the 
 #  ../helm-deployments or ../kubectl-deployments values files and ArgoCD will automatigically update the application
 #  in the next app sync 
-enable_metallb: false
 enable_bedrock: false
 enable_pihole: false
+
+# ArgoCD managed apps with PVC.  Setting these to true with perform a clean install of the app. 
+#  If you are trybing to change the configuration of one of these apps you should make the change in the 
+#  ../helm-deployments or ../kubectl-deployments values files and ArgoCD will automatigically update the application
+#  in the next app sync 
 enable_prometheus: false
 enable_openwebui: false
+enable_plex: false
 
-aws_bedrock_api_key_id: "<YOUR-AWS-KEY-ID"
-aws_bedrock_api_access_key: "YOUR-AWS-ACCESS-KEY"
+aws_bedrock_api_key_id: "AKIA2KBNVQBIKETZOUN7"
+aws_bedrock_api_access_key: "ZeiF8qQuueyVBYIQuEJFBMN3r+ONyvd5ZepqmEZL"
 
+#This key is only good for 5 minutes so best to run this last and only enable the plex install above
+# You get this from https://plex.tv/claim
+plex_access_key: "YOUR_PLEX_VALIDATION_KEY"

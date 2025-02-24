@@ -1,0 +1,84 @@
+---
+# Step 1: Set KUBECONFIG globally  
+- name: Set KUBECONFIG global
+  ansible.builtin.set_fact:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+
+# Step 2: Delete existing Plex namespace if it exists
+- name: Delete existing Plex namespace
+  ansible.builtin.k8s:
+    kubeconfig: "{{ KUBECONFIG }}"
+    state: absent
+    definition:
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: plex
+  ignore_errors: true
+
+# Step 3: Wait for namespace deletion
+- name: Wait for namespace deletion
+  ansible.builtin.pause:
+    seconds: 30
+
+# Step 4: Create new Plex namespace
+- name: Create Plex namespace
+  ansible.builtin.k8s:
+    kubeconfig: "{{ KUBECONFIG }}"
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: plex
+
+# Step 5: Create Plex claim secret
+- name: Create Plex claim secret
+  ansible.builtin.k8s:
+    kubeconfig: "{{ KUBECONFIG }}"
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: plex-claim-secret
+        namespace: plex
+      type: Opaque
+      stringData:
+        claim: "{{ plex_access_key }}"
+
+# Step 6: Create ArgoCD Plex Application
+- name: Create Plex ArgoCD Application
+  ansible.builtin.k8s:
+    kubeconfig: "{{ KUBECONFIG }}"
+    state: present
+    definition:
+      apiVersion: argoproj.io/v1alpha1
+      kind: Application
+      metadata:
+        name: plex
+        namespace: argocd
+      spec:
+        project: default
+        source:
+          repoURL: https://raw.githubusercontent.com/plexinc/pms-docker/gh-pages
+          chart: plex-media-server
+          targetRevision: "latest"
+          helm:
+            valueFiles:
+              - https://raw.githubusercontent.com/seadogger/seadogger-homelab/master/helm-deployments/plex/plex-values.yaml
+        destination:
+          server: https://kubernetes.default.svc
+          namespace: plex
+        syncPolicy:
+          automated:
+            prune: true
+            selfHeal: true
+          syncOptions:
+            - CreateNamespace=true
+
+# Step 7: Wait for Plex deployment through ArgoCD
+- name: Wait for Plex deployment through ArgoCD
+  ansible.builtin.pause:
+    minutes: 1
+  become: true

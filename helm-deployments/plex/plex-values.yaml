@@ -33,10 +33,10 @@ ingress:
 pms:
   # -- The storage class to use when provisioning the pms config volume
   # this needs to be created manually, null will use the default
-  storageClassName: longhorn
+  storageClassName: rook-ceph-block-storage-ec
 
   # -- The volume size to provision for the PMS database
-  configStorage: 5Gi
+  configStorage: 50Gi
 
   # -- Name of an existing `PersistentVolumeClaim` for the PMS database
   # NOTE: When set, 'configStorage' and 'storageClassName' are ignored.
@@ -272,4 +272,3 @@ extraContainers: []
 #        memory: 128Mi
 #    volumeMounts:
 #      - ...
-
