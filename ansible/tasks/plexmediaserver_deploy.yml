@@ -63,7 +63,7 @@
         source:
           repoURL: https://raw.githubusercontent.com/plexinc/pms-docker/gh-pages
           chart: plex-media-server
-          targetRevision: "latest"
+          targetRevision: "*"
           helm:
             valueFiles:
               - https://raw.githubusercontent.com/seadogger/seadogger-homelab/master/helm-deployments/plex/plex-values.yaml
