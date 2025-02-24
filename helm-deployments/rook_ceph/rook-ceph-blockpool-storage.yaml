@@ -1,15 +1,16 @@
 apiVersion: ceph.rook.io/v1
-kind: CephBlockPoolRadosNamespace
+kind: CephBlockPool
 metadata:
   name: myblockpool-ec
   namespace: rook-ceph
 spec:
-  blockPool:
-    name: myblockpool
-    failureDomain: host
-    replicated:
-      size: 3
+  failureDomain: host
+  parameters:
+    compression_mode: none
+  replicated:
+    size: 3
+  dataPool:
     erasureCoded:
       dataChunks: 2
       codingChunks: 1
-    enableRBDStats: true
+  enableRBDStats: true
