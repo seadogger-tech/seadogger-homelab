@@ -4,7 +4,7 @@ metadata:
   name: rook-ceph-block-storage-ec
   annotations:
     storageclass.kubernetes.io/is-default-class: "true"
-provisioner: rook-ceph.cephfs.csi.ceph.com
+provisioner: rook-ceph.cephfs.csi.ceph.com  
 parameters:
   clusterID: rook-ceph
   fsName: myfs-ec
