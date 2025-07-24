@@ -9,20 +9,28 @@ service:
   port: 5678
 
 ingress:
-  enabled: false
+  main:
+    enabled: false
 
-env:
-  GENERIC_TIMEZONE: America/New_York
-  N8N_BASIC_AUTH_ACTIVE: "true"
-  N8N_BASIC_AUTH_USER: admin
-  N8N_BASIC_AUTH_PASSWORD: changeme
-  WEBHOOK_URL: "http://n8n.local"
+envVars:
+  - name: GENERIC_TIMEZONE
+    value: America/New_York
+  - name: N8N_BASIC_AUTH_ACTIVE
+    value: "true"
+  - name: N8N_BASIC_AUTH_USER
+    value: admin
+  - name: N8N_BASIC_AUTH_PASSWORD
+    value: changeme
+  - name: WEBHOOK_URL
+    value: "http://n8n.local"
 
 persistence:
-  enabled: true
-  accessMode: ReadWriteOnce
-  size: 5Gi
-  storageClass: ""
+  data:
+    enabled: true
+    mountPath: /home/node/.n8n
+    accessMode: ReadWriteOnce
+    size: 5Gi
+    storageClass: ""
 
 postgresql:
   enabled: true
