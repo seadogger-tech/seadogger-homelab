@@ -1,28 +1,28 @@
+image:
+  repository: docker.n8n.io/n8nio/n8n
+  tag: 1.103.2
+  pullPolicy: IfNotPresent
+
+service:
+  enabled: true
+  type: LoadBalancer
+  port: 5678
+
 ingress:
   enabled: false
 
-service:
-  type: LoadBalancer
-  loadBalancerIP: 192.168.1.251
-  port: 5678
+env:
+  GENERIC_TIMEZONE: America/New_York
+  N8N_BASIC_AUTH_ACTIVE: "true"
+  N8N_BASIC_AUTH_USER: admin
+  N8N_BASIC_AUTH_PASSWORD: changeme
+  WEBHOOK_URL: "http://n8n.local"
 
-n8n:
-  basicAuth:
-    enabled: true
-    user: admin
-    password: changeme
-  timezone: America/New_York
-  env:
-    - name: N8N_HOST
-      value: n8n.local
-    - name: N8N_PORT
-      value: "5678"
-    - name: N8N_PROTOCOL
-      value: http
-  extraEnv:
-    - name: GENERIC_TIMEZONE
-      value: America/New_York
-  webhookUrl: "http://n8n.local:5678"
+persistence:
+  enabled: true
+  accessMode: ReadWriteOnce
+  size: 5Gi
+  storageClass: ""
 
 postgresql:
   enabled: true
