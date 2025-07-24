@@ -1,8 +1,12 @@
+image:
+  repository: docker.n8n.io/n8nio/n8n
+  tag: 1.103.2
+
 service:
   type: LoadBalancer
   port: 5678
 
-envVars:
+env:
   - name: GENERIC_TIMEZONE
     value: America/New_York
   - name: N8N_BASIC_AUTH_ACTIVE
