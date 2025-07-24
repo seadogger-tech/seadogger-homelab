@@ -6,13 +6,13 @@ deployment:
   env:
     - name: N8N_SECURE_COOKIE
       value: "false"
-
+      
 postgresql:
   enabled: true
+  primary:
+    persistence:
+      enabled: false
   auth:
     username: n8n
     password: n8npass
     database: n8n
-
-persistence:
-  enabled: false
