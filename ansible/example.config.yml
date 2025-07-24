@@ -39,3 +39,5 @@ aws_bedrock_api_access_key: "YOUR_AWS_ACCESS_KEY_HERE"
 #This key is only good for 5 minutes so best to run this last and only enable the plex install above
 # You get this from https://plex.tv/claim
 plex_access_key: "YOUR_PLEX_VALIDATION_KEY"
+
+enable_n8n: false
