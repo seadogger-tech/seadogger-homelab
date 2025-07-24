@@ -1,14 +1,39 @@
+- name: Set KUBECONFIG global
+  ansible.builtin.set_fact:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+  tags: n8n
+
+- name: Delete existing n8n namespace
+  kubernetes.core.k8s:
+    kubeconfig: "{{ KUBECONFIG }}"
+    state: absent
+    definition:
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: n8n
+  ignore_errors: true
+  tags: n8n
+
+- name: Wait for namespace deletion
+  ansible.builtin.pause:
+    seconds: 30
+  tags: n8n
+
 - name: Create n8n namespace
   kubernetes.core.k8s:
+    kubeconfig: "{{ KUBECONFIG }}"
     state: present
     definition:
       apiVersion: v1
       kind: Namespace
       metadata:
         name: n8n
+  tags: n8n
 
-- name: Deploy ArgoCD Application for n8n
+- name: Create n8n ArgoCD Application
   kubernetes.core.k8s:
+    kubeconfig: "{{ KUBECONFIG }}"
     state: present
     definition:
       apiVersion: argoproj.io/v1alpha1
@@ -19,9 +44,9 @@
       spec:
         project: default
         source:
-          repoURL: https://n8n-io.github.io/n8n-helm
-          targetRevision: '*'  # Use latest version of the chart
+          repoURL: https://community-charts.github.io/helm-charts
           chart: n8n
+          targetRevision: "1.13.5"
           helm:
             valueFiles:
               - https://raw.githubusercontent.com/seadogger/seadogger-homelab/master/helm-deployments/n8n/n8n-values.yaml
@@ -32,3 +57,12 @@
           automated:
             prune: true
             selfHeal: true
+          syncOptions:
+            - CreateNamespace=true
+  tags: n8n
+
+- name: Wait for n8n deployment via ArgoCD
+  ansible.builtin.pause:
+    minutes: 1
+  become: true
+  tags: n8n

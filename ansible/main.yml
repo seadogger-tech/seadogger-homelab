@@ -75,5 +75,5 @@
       when: enable_plex | default(true)
 
     - name: Deploy n8n
-      import_tasks: n8n-deploy.yml
+      import_tasks: tasks/n8n-deploy.yml
       when: enable_n8n | default(true)
