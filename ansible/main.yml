@@ -77,3 +77,7 @@
     - name: Deploy n8n
       import_tasks: tasks/n8n-deploy.yml
       when: enable_n8n | default(true)
+
+    - name: Deploy n8n SVC
+      import_tasks: tasks/n8n_svc_metallb_deploy.yml
+      when: enable_n8n_svc | default(true)

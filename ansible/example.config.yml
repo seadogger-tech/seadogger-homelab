@@ -41,3 +41,4 @@ aws_bedrock_api_access_key: "YOUR_AWS_ACCESS_KEY_HERE"
 plex_access_key: "YOUR_PLEX_VALIDATION_KEY"
 
 enable_n8n: false
+enable_n8n_svc: false
