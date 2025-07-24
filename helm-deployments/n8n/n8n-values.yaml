@@ -2,18 +2,17 @@ service:
   type: LoadBalancer
   port: 5678
 
-deployment:
-  extraEnv:
-    - name: GENERIC_TIMEZONE
-      value: America/New_York
-    - name: N8N_BASIC_AUTH_ACTIVE
-      value: "true"
-    - name: N8N_BASIC_AUTH_USER
-      value: admin
-    - name: N8N_BASIC_AUTH_PASSWORD
-      value: changeme
-    - name: WEBHOOK_URL
-      value: "http://n8n.local:5678"
+envVars:
+  - name: GENERIC_TIMEZONE
+    value: America/New_York
+  - name: N8N_BASIC_AUTH_ACTIVE
+    value: "true"
+  - name: N8N_BASIC_AUTH_USER
+    value: admin
+  - name: N8N_BASIC_AUTH_PASSWORD
+    value: changeme
+  - name: WEBHOOK_URL
+    value: "http://n8n.local:5678"
 
 postgresql:
   enabled: true
