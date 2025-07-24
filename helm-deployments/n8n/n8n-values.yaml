@@ -1,7 +1,6 @@
 image:
   repository: docker.n8n.io/n8nio/n8n
   tag: 1.103.2
-  pullPolicy: IfNotPresent
 
 service:
   enabled: true
@@ -9,28 +8,20 @@ service:
   port: 5678
 
 ingress:
-  main:
-    enabled: false
+  enabled: false
 
-envVars:
-  - name: GENERIC_TIMEZONE
-    value: America/New_York
-  - name: N8N_BASIC_AUTH_ACTIVE
-    value: "true"
-  - name: N8N_BASIC_AUTH_USER
-    value: admin
-  - name: N8N_BASIC_AUTH_PASSWORD
-    value: changeme
-  - name: WEBHOOK_URL
-    value: "http://n8n.local"
+env:
+  N8N_BASIC_AUTH_ACTIVE: "true"
+  N8N_BASIC_AUTH_USER: admin
+  N8N_BASIC_AUTH_PASSWORD: changeme
+  GENERIC_TIMEZONE: America/New_York
+  WEBHOOK_URL: "http://n8n.local"
 
 persistence:
-  data:
-    enabled: true
-    mountPath: /home/node/.n8n
-    accessMode: ReadWriteOnce
-    size: 5Gi
-    storageClass: ""
+  enabled: true
+  storageClass: ""
+  accessMode: ReadWriteOnce
+  size: 5Gi
 
 postgresql:
   enabled: true
