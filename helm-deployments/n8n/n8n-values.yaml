@@ -2,11 +2,11 @@ service:
   type: LoadBalancer
   port: 5678
 
-deployment:
-  env:
+main:
+  extraEnvVars:
     - name: N8N_SECURE_COOKIE
       value: "false"
-      
+
 postgresql:
   enabled: true
   primary:
