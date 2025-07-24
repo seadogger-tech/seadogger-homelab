@@ -4,7 +4,8 @@ service:
 
 main:
   extraEnvVars:
-    N8N_SECURE_COOKIE: false
+    name: N8N_SECURE_COOKIE
+    value: "false"
       
 postgresql:
   enabled: true
