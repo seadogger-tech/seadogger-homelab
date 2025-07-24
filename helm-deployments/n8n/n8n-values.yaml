@@ -6,7 +6,7 @@ service:
   type: LoadBalancer
   port: 5678
 
-env:
+extraEnv:
   - name: GENERIC_TIMEZONE
     value: America/New_York
   - name: N8N_BASIC_AUTH_ACTIVE
