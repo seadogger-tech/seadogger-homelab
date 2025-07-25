@@ -4,8 +4,14 @@ service:
 
 main:
   extraEnvVars:
-    name: N8N_SECURE_COOKIE
-    value: "false"
+    - name: N8N_SECURE_COOKIE
+      value: "false"
+    - name: N8N_HOST
+      value: "192.168.1.252"    # This matches your metallb IP from n8n_svc_metallb_deploy.yml
+    - name: N8N_PROTOCOL
+      value: "http"
+    - name: N8N_PORT
+      value: "80"               # This matches the port in n8n_svc_metallb_deploy.yml
       
 postgresql:
   enabled: true
