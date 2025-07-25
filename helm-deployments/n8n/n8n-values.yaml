@@ -2,6 +2,11 @@ service:
   type: LoadBalancer
   port: 80
   loadBalancerIP: "192.168.1.252"
+  annotations:
+    metallb.universe.tf/loadBalancerIPs: "192.168.1.252"
+  labels:
+    app.kubernetes.io/name: n8n
+    app.kubernetes.io/instance: n8n
 
 main:
   extraEnvVars:
