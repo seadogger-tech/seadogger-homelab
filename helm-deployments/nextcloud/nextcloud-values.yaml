@@ -12,6 +12,7 @@ nextcloud:
   username: admin
   password: changeme  # Change this!
   update: 0
+  initContainers: []
   configs:
     php.ini: |
       memory_limit=2048M
@@ -66,12 +67,7 @@ postgresql:
     repository: arm64v8/postgres
     tag: "15"
   fullnameOverride: nextcloud-postgresql
-  global:
-    postgresql:
-      auth:
-        username: nextcloud
-        password: changeme
-        database: nextcloud
+  architecture: standalone
   primary:
     persistence:
       enabled: true
@@ -83,7 +79,6 @@ postgresql:
       limits:
         cpu: 1000m
         memory: 1Gi
-  architecture: standalone
   auth:
     enablePostgresUser: true
     postgresPassword: "changeme"
