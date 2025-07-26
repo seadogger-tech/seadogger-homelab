@@ -1,3 +1,6 @@
+global:
+  storageClass: "rook-ceph-block-storage-ec"
+
 image:
   repository: nextcloud
   tag: 27.1.3-apache-arm64v8
@@ -43,7 +46,6 @@ redis:
   master:
     persistence:
       enabled: true
-      storageClass: "rook-ceph-block-storage-ec"
       size: 8Gi
 
 ingress:
@@ -68,11 +70,9 @@ postgresql:
         username: nextcloud
         password: changeme  # Change this!
         database: nextcloud
-      storageClass: "rook-ceph-block-storage-ec"  # Added this
   primary:
     persistence:
       enabled: true
-      storageClass: "rook-ceph-block-storage-ec"
       size: 10Gi
     resources:
       requests:
@@ -81,14 +81,8 @@ postgresql:
       limits:
         cpu: 1000m
         memory: 1Gi
-  persistence:  # Added this section
-    enabled: true
-    storageClass: "rook-ceph-block-storage-ec"
-    size: 10Gi
-  volumePermissions:  # Added this section
-    enabled: true
-  architecture: standalone  # Added this
-  auth:  # Added this section
+  architecture: standalone
+  auth:
     enablePostgresUser: true
     postgresPassword: "changeme"  # Change this!
     username: nextcloud
