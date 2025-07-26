@@ -28,9 +28,8 @@ redis:
   enabled: true
   architecture: standalone
   image:
-    # Using bitnami's ARM-compatible Redis
-    repository: bitnami/redis
-    tag: 7.2-debian-11
+    repository: arm64v8/redis
+    tag: "7.2"
   auth:
     enabled: true
     password: "changeme"  # Change this!
@@ -61,7 +60,6 @@ resources:
 postgresql:
   enabled: true
   image:
-    # Using bitnami's ARM-compatible PostgreSQL
     repository: bitnami/postgresql
     tag: 15-debian-11
   global:
@@ -70,6 +68,7 @@ postgresql:
         username: nextcloud
         password: changeme  # Change this!
         database: nextcloud
+      storageClass: "rook-ceph-block-storage-ec"  # Added this
   primary:
     persistence:
       enabled: true
@@ -82,6 +81,19 @@ postgresql:
       limits:
         cpu: 1000m
         memory: 1Gi
+  persistence:  # Added this section
+    enabled: true
+    storageClass: "rook-ceph-block-storage-ec"
+    size: 10Gi
+  volumePermissions:  # Added this section
+    enabled: true
+  architecture: standalone  # Added this
+  auth:  # Added this section
+    enablePostgresUser: true
+    postgresPassword: "changeme"  # Change this!
+    username: nextcloud
+    password: "changeme"  # Change this!
+    database: nextcloud
 
 podSecurityContext:
   enabled: true
