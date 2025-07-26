@@ -17,7 +17,7 @@
 
 - name: Wait for namespace deletion
   ansible.builtin.pause:
-    seconds: 30
+    seconds: 15
   tags: n8n
 
 - name: Create n8n namespace
@@ -63,13 +63,17 @@
 
 - name: Wait for n8n deployment via ArgoCD
   ansible.builtin.pause:
-    minutes: 1
+    seconds: 30
   become: true
   tags: n8n
 
-- name: Wait for n8n deployment via ArgoCD
-  ansible.builtin.pause:
-    minutes: 1
+# Add this new task to set the environment variable correctly
+#.TODO:  this is a hack as the ENV setup in the values file is broken.   
+- name: Set N8N_SECURE_COOKIE environment variable
+  ansible.builtin.shell:
+    cmd: >-
+      kubectl patch deployment n8n -n n8n --type=json 
+      -p '[{"op":"add","path":"/spec/template/spec/containers/0/env/-","value":{"name":"N8N_SECURE_COOKIE","value":"false"}}]'
   become: true
   tags: n8n
 
