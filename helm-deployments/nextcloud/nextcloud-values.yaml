@@ -1,5 +1,7 @@
 global:
   storageClass: "rook-ceph-block-storage-ec"
+  security:
+    allowInsecureImages: true
 
 image:
   repository: nextcloud
