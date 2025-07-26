@@ -1,10 +1,9 @@
 service:
-  enabled: false  # Disable the helm chart's service creation
+  enabled: false  # Disable helm chart's service creation
 
 main:
-  extraEnvVars:
-    - name: "N8N_SECURE_COOKIE"
-      value: "false"
+  env:
+    N8N_SECURE_COOKIE: "false"
       
 postgresql:
   enabled: true
