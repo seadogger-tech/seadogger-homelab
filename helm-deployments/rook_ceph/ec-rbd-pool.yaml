@@ -8,6 +8,9 @@ spec:
   erasureCoded:
     dataChunks: 2
     codingChunks: 1
+  replicated:
+    size: 1
+    requireSafeReplicaSize: false
   parameters:
     allow_ec_overwrites: "true"
   compressionMode: none
