@@ -32,6 +32,7 @@ enable_pihole: false
 enable_prometheus: false
 enable_openwebui: false
 enable_plex: false
+enable_nextcloud: false
 
 aws_bedrock_api_key_id: "YOUR_AWS_ACCESS_KEY_ID_HERE"
 aws_bedrock_api_access_key: "YOUR_AWS_ACCESS_KEY_HERE"

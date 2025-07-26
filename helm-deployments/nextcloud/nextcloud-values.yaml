@@ -1,0 +1,52 @@
+## Official nextcloud image version
+## ref: https://hub.docker.com/r/library/nextcloud/tags/
+image:
+  repository: nextcloud
+  tag: 27.1.3-apache
+  pullPolicy: IfNotPresent
+
+nextcloud:
+  host: nextcloud.local
+  username: admin
+  password: changeme  # Change this!
+  update: 0
+
+persistence:
+  enabled: true
+  existingClaim: ""
+  annotations: {}
+  storageClass: "rook-ceph-block-storage-ec"
+  accessMode: ReadWriteMany
+  size: 6Ti
+
+redis:
+  enabled: true
+  architecture: standalone
+  auth:
+    enabled: true
+    password: "changeme"  # Change this!
+
+ingress:
+  enabled: false
+
+resources:
+  requests:
+    cpu: 300m
+    memory: 512Mi
+  limits:
+    cpu: 2
+    memory: 4Gi
+
+postgresql:
+  enabled: true
+  global:
+    postgresql:
+      auth:
+        username: nextcloud
+        password: changeme  # Change this!
+        database: nextcloud
+  primary:
+    persistence:
+      enabled: true
+      storageClass: "ceph-block"
+      size: 10Gi

@@ -1,0 +1,100 @@
+---
+# Step 1: Set KUBECONFIG globally  
+- name: Set KUBECONFIG global
+  ansible.builtin.set_fact:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+  tags: nextcloud
+
+# Step 2: Delete existing Nextcloud namespace if it exists
+- name: Delete existing Nextcloud namespace
+  kubernetes.core.k8s:
+    kubeconfig: "{{ KUBECONFIG }}"
+    state: absent
+    definition:
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: nextcloud
+  ignore_errors: true
+  tags: nextcloud
+
+# Step 3: Wait for namespace deletion
+- name: Wait for namespace deletion
+  ansible.builtin.pause:
+    seconds: 30
+  tags: nextcloud
+
+# Step 4: Create new Nextcloud namespace
+- name: Create Nextcloud namespace
+  kubernetes.core.k8s:
+    kubeconfig: "{{ KUBECONFIG }}"
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: nextcloud
+  tags: nextcloud
+
+# Step 5: Create ArgoCD Nextcloud Application
+- name: Create Nextcloud ArgoCD Application
+  kubernetes.core.k8s:
+    kubeconfig: "{{ KUBECONFIG }}"
+    state: present
+    definition:
+      apiVersion: argoproj.io/v1alpha1
+      kind: Application
+      metadata:
+        name: nextcloud
+        namespace: argocd
+      spec:
+        project: default
+        source:
+          repoURL: https://nextcloud.github.io/helm/
+          chart: nextcloud
+          targetRevision: "3.5.14"
+          helm:
+            valueFiles:
+              - https://raw.githubusercontent.com/seadogger/seadogger-homelab/master/helm-deployments/nextcloud/nextcloud-values.yaml
+        destination:
+          server: https://kubernetes.default.svc
+          namespace: nextcloud
+        syncPolicy:
+          automated:
+            prune: true
+            selfHeal: true
+          syncOptions:
+            - CreateNamespace=true
+  tags: nextcloud
+
+# Step 6: Wait for Nextcloud deployment via ArgoCD
+- name: Wait for Nextcloud deployment through ArgoCD
+  ansible.builtin.pause:
+    minutes: 1
+  tags: nextcloud
+
+# Step 7: Create Nextcloud LoadBalancer Service
+- name: Create Nextcloud LoadBalancer Service
+  kubernetes.core.k8s:
+    kubeconfig: "{{ KUBECONFIG }}"
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: nextcloud-lb
+        namespace: nextcloud
+        annotations:
+          metallb.universe.tf/address-pool: default
+          metallb.universe.tf/allow-shared-ip: nextcloud
+          metallb.universe.tf/ip-allocated-from-pool: default
+      spec:
+        type: LoadBalancer
+        ports:
+          - name: http
+            port: 80
+            targetPort: 80
+            protocol: TCP
+        selector:
+          app.kubernetes.io/name: nextcloud
+  tags: nextcloud
