@@ -1,0 +1,11 @@
+apiVersion: ceph.rook.io/v1
+kind: CephNFS
+metadata:
+  name: ganesha
+  namespace: rook-ceph
+spec:
+  rados:
+    # This must match your existing filesystem (CephFS) name
+    pool: myfs-ec-data0
+  server:
+    active: 1

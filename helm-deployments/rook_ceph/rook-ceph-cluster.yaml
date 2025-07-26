@@ -30,3 +30,15 @@ spec:
           - name: nvme0n1p3
         config:
           storeType: bluestore
+
+---
+apiVersion: ceph.rook.io/v1
+kind: CephNFS
+metadata:
+  name: ganesha
+  namespace: rook-ceph
+spec:
+  server:
+    active: 1
+  rados:
+    pool: myfs-ec-data0
