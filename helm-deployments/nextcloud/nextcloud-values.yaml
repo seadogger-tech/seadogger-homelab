@@ -12,7 +12,6 @@ nextcloud:
   username: admin
   password: changeme  # Change this!
   update: 0
-  initContainers: []
   configs:
     php.ini: |
       memory_limit=2048M
@@ -34,7 +33,6 @@ redis:
   image:
     repository: arm64v8/redis
     tag: "7.2"
-  command: ["redis-server"]
   auth:
     enabled: true
     password: "changeme"
