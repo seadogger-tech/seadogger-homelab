@@ -1,3 +1,8 @@
+apiVersion: ceph.rook.io/v1
+kind: CephCluster
+metadata:
+  name: rook-ceph
+  namespace: rook-ceph
 spec:
   cephVersion:
     image: quay.io/ceph/ceph:v19.2.0
@@ -10,21 +15,21 @@ spec:
     ssl: false
   storage:
     nodes:
-    - name: obiwan
-      devices:
-      - name: nvme0n1p3
-      config:
-        storeType: bluestore
-    - name: anakin
-      devices:
-      - name: nvme0n1p3
-      config:
-        storeType: bluestore
-    - name: rey
-      devices:
-      - name: nvme0n1p3
-      config:
-        storeType: bluestore
+      - name: obiwan
+        devices:
+          - name: nvme0n1p3
+        config:
+          storeType: bluestore
+      - name: anakin
+        devices:
+          - name: nvme0n1p3
+        config:
+          storeType: bluestore
+      - name: rey
+        devices:
+          - name: nvme0n1p3
+        config:
+          storeType: bluestore
   nfs:
     enable: true
     graceTime: 90
