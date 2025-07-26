@@ -10,7 +10,7 @@ image:
 nextcloud:
   host: nextcloud.local
   username: admin
-  password: changeme  # Change this!
+  password: changeme
   update: 0
   configs:
     php.ini: |
