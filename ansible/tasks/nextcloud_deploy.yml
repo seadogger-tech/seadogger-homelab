@@ -96,5 +96,10 @@
             targetPort: 80
             protocol: TCP
         selector:
+          app.kubernetes.io/instance: nextcloud
           app.kubernetes.io/name: nextcloud
+        allocateLoadBalancerNodePorts: true
+        externalTrafficPolicy: Cluster
+        loadBalancerIP: "192.168.1.253"
+  become: true        
   tags: nextcloud
