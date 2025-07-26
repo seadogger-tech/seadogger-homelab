@@ -5,7 +5,48 @@
     KUBECONFIG: /etc/rancher/k3s/k3s.yaml
   tags: nextcloud
 
-# Step 2: Delete existing Nextcloud namespace if it exists
+# Step 2: Remove ArgoCD Application first
+- name: Delete existing Nextcloud ArgoCD application
+  kubernetes.core.k8s:
+    kubeconfig: "{{ KUBECONFIG }}"
+    state: absent
+    definition:
+      apiVersion: argoproj.io/v1alpha1
+      kind: Application
+      metadata:
+        name: nextcloud
+        namespace: argocd
+  ignore_errors: true
+  tags: nextcloud
+
+# Step 3: Wait for ArgoCD cleanup
+- name: Wait for ArgoCD application deletion
+  ansible.builtin.pause:
+    seconds: 30
+  tags: nextcloud
+
+# Step 4: Delete all PVCs in nextcloud namespace
+- name: Get list of PVCs in nextcloud namespace
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ KUBECONFIG }}"
+    kind: PersistentVolumeClaim
+    namespace: nextcloud
+  register: pvc_list
+  ignore_errors: true
+  tags: nextcloud
+
+- name: Delete found PVCs
+  kubernetes.core.k8s:
+    kubeconfig: "{{ KUBECONFIG }}"
+    state: absent
+    kind: PersistentVolumeClaim
+    namespace: nextcloud
+    name: "{{ item.metadata.name }}"
+  loop: "{{ pvc_list.resources | default([]) }}"
+  ignore_errors: true
+  tags: nextcloud
+
+# Step 5: Delete namespace
 - name: Delete existing Nextcloud namespace
   kubernetes.core.k8s:
     kubeconfig: "{{ KUBECONFIG }}"
@@ -18,13 +59,13 @@
   ignore_errors: true
   tags: nextcloud
 
-# Step 3: Wait for namespace deletion
-- name: Wait for namespace deletion
+# Step 6: Wait for complete cleanup
+- name: Wait for complete cleanup
   ansible.builtin.pause:
-    seconds: 30
+    seconds: 60
   tags: nextcloud
 
-# Step 4: Create new Nextcloud namespace
+# Step 7: Create new Nextcloud namespace
 - name: Create Nextcloud namespace
   kubernetes.core.k8s:
     kubeconfig: "{{ KUBECONFIG }}"
@@ -36,7 +77,7 @@
         name: nextcloud
   tags: nextcloud
 
-# Step 5: Create ArgoCD Nextcloud Application
+# Step 8: Create ArgoCD Nextcloud Application
 - name: Create Nextcloud ArgoCD Application
   kubernetes.core.k8s:
     kubeconfig: "{{ KUBECONFIG }}"
@@ -67,13 +108,13 @@
             - CreateNamespace=true
   tags: nextcloud
 
-# Step 6: Wait for Nextcloud deployment via ArgoCD
+# Step 9: Wait for initial deployment
 - name: Wait for Nextcloud deployment through ArgoCD
   ansible.builtin.pause:
-    minutes: 1
+    minutes: 2
   tags: nextcloud
 
-# Step 7: Create Nextcloud LoadBalancer Service
+# Step 10: Create Nextcloud LoadBalancer Service
 - name: Create Nextcloud LoadBalancer Service
   kubernetes.core.k8s:
     kubeconfig: "{{ KUBECONFIG }}"
@@ -102,4 +143,10 @@
         externalTrafficPolicy: Cluster
         loadBalancerIP: "192.168.1.253"
   become: true        
+  tags: nextcloud
+
+# Step 11: Final wait for service availability
+- name: Wait for LoadBalancer service to be ready
+  ansible.builtin.pause:
+    seconds: 30
   tags: nextcloud
