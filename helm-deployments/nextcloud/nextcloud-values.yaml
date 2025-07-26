@@ -96,6 +96,12 @@ postgresql:
       limits:
         cpu: 1000m
         memory: 1Gi
+    extraVolumeMounts:
+      - name: postgresql-run
+        mountPath: /var/run/postgresql
+    extraVolumes:
+      - name: postgresql-run
+        emptyDir: {}
   auth:
     enablePostgresUser: true
     postgresPassword: "changeme"
