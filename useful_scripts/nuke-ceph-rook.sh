@@ -1,38 +1,43 @@
 #!/bin/bash
 set -e
 
-echo "🔪 Nuking rook-ceph with extreme prejudice..."
+echo "🔪 Full force rook-ceph annihilation initiated."
 
-# Step 0: Make sure jq is installed
-if ! command -v jq &> /dev/null; then
-  echo "❌ 'jq' is required but not installed. Run: sudo apt install jq"
-  exit 1
-fi
+# Step 0: Warning
+echo "⚠️  WARNING: This will aggressively wipe all rook-ceph references from your cluster, skipping all cleanup logic."
+read -p "Press ENTER to proceed or Ctrl+C to cancel..."
 
-# Step 1: Kill finalizers in any remaining Ceph resources across all namespaces
-echo "🧨 Step 1: Removing finalizers from Ceph-related resources..."
-CRDS=$(kubectl get crds -o name | grep -E 'ceph|rook') || true
-for crd in $CRDS; do
-  resources=$(kubectl get "$crd" --all-namespaces -o json | jq -r '.items[] | "\(.metadata.namespace) \(.kind) \(.metadata.name)"' 2>/dev/null) || true
-  for res in $resources; do
-    ns=$(echo "$res" | awk '{print $1}')
-    kind=$(echo "$res" | awk '{print $2}')
-    name=$(echo "$res" | awk '{print $3}')
-    echo "  🧹 Patching finalizer on $kind/$name in $ns..."
-    kubectl -n "$ns" patch "$kind" "$name" --type=merge -p '{"metadata":{"finalizers":[]}}' || true
-  done
+# Step 1: Brutally kill namespace (no hanging)
+echo "🧹 Force deleting namespace rook-ceph (in background)..."
+(kubectl delete ns rook-ceph --grace-period=0 --force || true) &
+
+# Step 2: Nuke CRDs in background
+echo "🧹 Force deleting all Rook/Ceph CRDs..."
+kubectl get crd | grep -Ei 'ceph|rook' | awk '{print $1}' | while read crd; do
+  echo "  🔸 Deleting $crd..."
+  (kubectl delete crd "$crd" --wait=false --timeout=1s || true) &
 done
 
-# Step 2: Force delete namespace
-echo "🧹 Step 2: Force delete namespace rook-ceph if still exists..."
-kubectl get ns rook-ceph &>/dev/null && kubectl delete ns rook-ceph --grace-period=0 --force || echo "✅ Namespace already gone"
+# Step 3: Kill leftover secrets, configmaps, finalizer crap
+echo "🧹 Killing leftover Ceph secrets/configmaps..."
+kubectl get secret -A | grep rook | awk '{print $1 " " $2}' | while read ns name; do
+  kubectl delete secret "$name" -n "$ns" --ignore-not-found &
+done
 
-# Step 3: Nuke all related CRDs again
-echo "🧹 Step 3: Deleting all Ceph/Rook CRDs..."
-kubectl get crds | grep -E 'ceph|rook' | awk '{print $1}' | xargs -r kubectl delete crd --ignore-not-found || true
+kubectl get configmap -A | grep rook | awk '{print $1 " " $2}' | while read ns name; do
+  kubectl delete configmap "$name" -n "$ns" --ignore-not-found &
+done
 
-# Step 4: Final local cleanup
-echo "🧹 Step 4: Removing /var/lib/rook directory..."
-sudo rm -rf /var/lib/rook
+# Step 4: Kill operator if somehow still present
+echo "🧹 Killing rook-ceph-operator if still alive..."
+kubectl delete deploy rook-ceph-operator -n rook-ceph --ignore-not-found || true
 
-echo "✅ Rook-Ceph nuked successfully."
+# Step 5: Full disk nuke
+echo "🧨 Removing all Rook data from disk..."
+sudo rm -rf /var/lib/rook /var/lib/kubelet/plugins/rook*
+
+# Step 6: Flush final stuck NS objects manually if needed
+echo "🧨 Forcing cleanup of stuck namespaces..."
+(kubectl get ns rook-ceph -o json | sed 's/"kubernetes"//' | sed '/finalizers/,+2d' | kubectl replace --raw "/api/v1/namespaces/rook-ceph/finalize" -f -) 2>/dev/null || true
+
+echo "✅ Rook-Ceph purge complete. You may now reinstall cleanly."
