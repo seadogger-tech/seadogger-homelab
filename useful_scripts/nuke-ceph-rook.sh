@@ -1,43 +1,38 @@
 #!/bin/bash
+set -e
 
-set -euo pipefail
+echo "🔪 Nuking rook-ceph with extreme prejudice..."
 
-echo "🔪 Nuking rook-ceph from your cluster..."
+# Step 0: Make sure jq is installed
+if ! command -v jq &> /dev/null; then
+  echo "❌ 'jq' is required but not installed. Run: sudo apt install jq"
+  exit 1
+fi
 
-echo "🧹 Step 1: Forcibly delete rook-ceph namespace..."
-kubectl delete ns rook-ceph --grace-period=0 --force 2>/dev/null || echo "✅ Namespace already gone or not found"
-
-echo "🧹 Step 2: Delete all rook/ceph CRDs (skip if gone)..."
-for crd in $(kubectl get crd -o name | grep -Ei 'rook|ceph' || true); do
-  echo "  🔸 Deleting $crd"
-  kubectl delete "$crd" --ignore-not-found || true
-done
-
-echo "🧹 Step 3: Delete any leftover ceph/rook resources in all namespaces..."
-for ns in $(kubectl get ns -o jsonpath='{.items[*].metadata.name}'); do
-  for kind in pods deployments daemonsets statefulsets services configmaps secrets pvc; do
-    kubectl get "$kind" -n "$ns" --no-headers 2>/dev/null | grep -Ei 'rook|ceph' | awk '{print $1}' | \
-      xargs -r -I {} kubectl delete "$kind" -n "$ns" {} --ignore-not-found || true
+# Step 1: Kill finalizers in any remaining Ceph resources across all namespaces
+echo "🧨 Step 1: Removing finalizers from Ceph-related resources..."
+CRDS=$(kubectl get crds -o name | grep -E 'ceph|rook') || true
+for crd in $CRDS; do
+  resources=$(kubectl get "$crd" --all-namespaces -o json | jq -r '.items[] | "\(.metadata.namespace) \(.kind) \(.metadata.name)"' 2>/dev/null) || true
+  for res in $resources; do
+    ns=$(echo "$res" | awk '{print $1}')
+    kind=$(echo "$res" | awk '{print $2}')
+    name=$(echo "$res" | awk '{print $3}')
+    echo "  🧹 Patching finalizer on $kind/$name in $ns..."
+    kubectl -n "$ns" patch "$kind" "$name" --type=merge -p '{"metadata":{"finalizers":[]}}' || true
   done
 done
 
-echo "🧹 Step 4: Delete rook/ceph ClusterRoles and Bindings..."
-kubectl get clusterrole -o name | grep -Ei 'rook|ceph' | xargs -r kubectl delete --ignore-not-found || true
-kubectl get clusterrolebinding -o name | grep -Ei 'rook|ceph' | xargs -r kubectl delete --ignore-not-found || true
+# Step 2: Force delete namespace
+echo "🧹 Step 2: Force delete namespace rook-ceph if still exists..."
+kubectl get ns rook-ceph &>/dev/null && kubectl delete ns rook-ceph --grace-period=0 --force || echo "✅ Namespace already gone"
 
-echo "🧹 Step 5: Delete any related webhook configs..."
-kubectl get validatingwebhookconfigurations -o name | grep -Ei 'rook|ceph' | xargs -r kubectl delete --ignore-not-found || true
-kubectl get mutatingwebhookconfigurations -o name | grep -Ei 'rook|ceph' | xargs -r kubectl delete --ignore-not-found || true
+# Step 3: Nuke all related CRDs again
+echo "🧹 Step 3: Deleting all Ceph/Rook CRDs..."
+kubectl get crds | grep -E 'ceph|rook' | awk '{print $1}' | xargs -r kubectl delete crd --ignore-not-found || true
 
-echo "🧹 Step 6: Delete persistent volumes related to rook/ceph..."
-kubectl get pv -o name | grep -Ei 'rook|ceph' | xargs -r kubectl delete --ignore-not-found || true
-
-echo "🧹 Step 7: Delete storageclasses related to rook/ceph..."
-kubectl get storageclass -o name | grep -Ei 'rook|ceph' | xargs -r kubectl delete --ignore-not-found || true
-
-echo "🧹 Step 8: Wipe local disk paths (needs sudo)..."
+# Step 4: Final local cleanup
+echo "🧹 Step 4: Removing /var/lib/rook directory..."
 sudo rm -rf /var/lib/rook
-sudo rm -rf /var/lib/kubelet/plugins/rook*
-sudo rm -rf /var/lib/kubelet/pods/*/volumes/kubernetes.io~csi/pvc-*/mount 2>/dev/null || true
 
-echo "✅ Done. rook-ceph has been annihilated without mercy."
+echo "✅ Rook-Ceph nuked successfully."
