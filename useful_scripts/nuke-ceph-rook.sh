@@ -77,5 +77,5 @@ info "📦 Step 5: Validating disks on worker nodes..."
 
 for node in obiwan anakin rey; do
   echo -e "${YELLOW}🔍 Checking disk usage on $node...${NC}"
-  ssh "$node" 'df -hT / | grep -vE "^Filesystem|tmpfs|udev"' || fail "❌ SSH to $node failed or disk check error"
+  ssh "pi@${node}.local" 'df -hT / | grep -vE "^Filesystem|tmpfs|udev"' || fail "❌ SSH to $node.local failed or disk check error"
 done
