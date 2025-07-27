@@ -3,22 +3,25 @@
 - name: Wipe Ceph device partitions
   ansible.builtin.shell: |
     set -e
-    sgdisk --zap-all {{ device_path }}
-    dd if=/dev/zero of={{ device_path }} bs=1M count=100 conv=fsync
-    wipefs -a {{ device_path }}
-  when: device_path is defined
+    sgdisk --zap-all {{ hostvars[inventory_hostname]['device'] }}
+    dd if=/dev/zero of={{ hostvars[inventory_hostname]['device'] }} bs=1M count=100 conv=fsync
+    wipefs -a {{ hostvars[inventory_hostname]['device'] }}
+  when: hostvars[inventory_hostname]['device'] is defined
   ignore_errors: false
 
 - name: Validate partition is clean
   ansible.builtin.shell: |
-    lsblk -f {{ device_path }} | grep -Ev '^(NAME|$)' | awk '{print $2}'
+    lsblk -f {{ hostvars[inventory_hostname]['device'] }} | grep -Ev '^(NAME|$)' | awk '{print $2}'
   register: partition_check
   changed_when: false
+  when: hostvars[inventory_hostname]['device'] is defined
 
 - name: Fail if partition still has filesystem or label
   ansible.builtin.fail:
-    msg: "Device {{ device_path }} is not clean. Filesystem or label found: {{ partition_check.stdout_lines }}"
-  when: partition_check.stdout != ""
+    msg: "Device {{ hostvars[inventory_hostname]['device'] }} is not clean. Filesystem or label found: {{ partition_check.stdout_lines }}"
+  when:
+    - hostvars[inventory_hostname]['device'] is defined
+    - partition_check.stdout != ""
 
 # Step 1: Set KUBECONFIG globally
 - name: Set KUBECONFIG global
@@ -101,3 +104,17 @@
   retries: 60
   delay: 30
   until: ceph_health_check.rc == 0
+
+- name: Set rook-ceph-ec-block as the only default StorageClass
+  ansible.builtin.shell: |
+    kubectl patch storageclass local-path -p '{"metadata": {"annotations": {"storageclass.kubernetes.io/is-default-class": "false"}}}'
+  environment: "{{ env_vars }}"
+  register: unset_default_local_path
+  changed_when: "'patched' in unset_default_local_path.stdout"
+
+- name: Ensure rook-ceph-ec-block is the default StorageClass
+  ansible.builtin.shell: |
+    kubectl patch storageclass rook-ceph-ec-block -p '{"metadata": {"annotations": {"storageclass.kubernetes.io/is-default-class": "true"}}}'
+  environment: "{{ env_vars }}"
+  register: set_default_rook_ceph
+  changed_when: "'patched' in set_default_rook_ceph.stdout"
