@@ -136,8 +136,7 @@ cephBlockPools:
         crushRoot: "default"
     storageClass:
       enabled: true
-      name: "rook-ceph-ec-block"
-      isDefault: true
+      name: "rook-ceph-block-storage-ec"
       reclaimPolicy: Delete
       allowVolumeExpansion: true
       parameters:
