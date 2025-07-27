@@ -1,9 +1,53 @@
 ---
-    - name: Install K3s on nodes (takes a while).
+
+    - name: Get CA checksum from control plane
+      ansible.builtin.shell: sha256sum /var/lib/rancher/k3s/server/tls/server-ca.crt | awk '{ print $1 }'
+      register: ca_checksum_cmd
+      delegate_to: "{{ groups['control_plane'][0] }}"
+      run_once: true
+
+    - name: Set CA checksum fact
+      ansible.builtin.set_fact:
+        ca_checksum: "{{ ca_checksum_cmd.stdout }}"
+
+    - name: Install K3s agent on worker nodes (cleaned and corrected)
       ansible.builtin.shell: >-
-        curl -sfL https://get.k3s.io |
+        curl -sfL https://get.k3s.io | 
         K3S_URL="https://{{ hostvars[groups['control_plane'][0]]['ansible_host'] }}:6443"
-        K3S_TOKEN="{{ hostvars[groups['control_plane'][0]]['node_token'] }}" sh -s - agent
+        K3S_TOKEN="{{ hostvars[groups['control_plane'][0]]['node_token'] }}"
+        K3S_NODE_NAME="{{ inventory_hostname }}"
+        INSTALL_K3S_EXEC="agent"
+        INSTALL_K3S_AGENT_EXEC="--with-node-id --ca-checksum {{ ca_checksum }}"
+        sh -s -
       args:
         chdir: "~"
         creates: /var/lib/rancher/k3s/agent/kubelet.kubeconfig
+
+    - name: Wait until K3s agent service is active
+      ansible.builtin.shell: systemctl is-active --quiet k3s-agent
+      register: k3s_agent_status
+      retries: 30
+      delay: 10
+      until: k3s_agent_status.rc == 0
+      changed_when: false
+      tags: validate
+
+    - name: Wait until kubelet config exists
+      ansible.builtin.stat:
+        path: /var/lib/rancher/k3s/agent/kubelet.kubeconfig
+      register: kubelet_config
+      retries: 30
+      delay: 10
+      until: kubelet_config.stat.exists
+
+    - name: Wait until node is registered with control plane
+      ansible.builtin.shell: >
+        kubectl get node {{ inventory_hostname }} --no-headers
+      register: node_registered
+      retries: 30
+      delay: 10
+      until: node_registered.rc == 0
+      changed_when: false
+      delegate_to: "{{ groups['control_plane'][0] }}"
+      run_once: false
+      tags: validate

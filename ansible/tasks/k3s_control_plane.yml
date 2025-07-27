@@ -1,50 +1,115 @@
----
-    - name: Install K3s on control plane (takes a while) with etcd.
-      ansible.builtin.shell: >-
-        curl -sfL https://get.k3s.io | sh -s - server --cluster-init --write-kubeconfig-mode 644
-      args:
-        chdir: "~"
-        creates: /var/lib/rancher/k3s/server/node-token
+- name: Install K3s on control plane (takes a while) with etcd.
+  ansible.builtin.shell: >-
+    curl -sfL https://get.k3s.io | sh -s - server --cluster-init --write-kubeconfig-mode 644
+  args:
+    chdir: "{{ ansible_env.HOME }}"
+    creates: /var/lib/rancher/k3s/server/node-token
 
-    - name: Ensure K3s service is restarted
-      ansible.builtin.systemd:
-        name: k3s
-        state: restarted
-        enabled: yes
+- name: Ensure K3s service is restarted
+  ansible.builtin.systemd:
+    name: k3s
+    state: restarted
+    enabled: yes
+  become: true
 
-    - name: Get node token.
-      ansible.builtin.command: cat /var/lib/rancher/k3s/server/node-token
-      changed_when: false
-      register: node_token_output
+- name: Get node token.
+  ansible.builtin.command: cat /var/lib/rancher/k3s/server/node-token
+  changed_when: false
+  register: node_token_output
 
-    - name: Set node_token fact.
-      ansible.builtin.set_fact:
-        node_token: "{{ node_token_output.stdout | trim }}"
+- name: Get CA cert hash for control plane
+  ansible.builtin.command: sha256sum /var/lib/rancher/k3s/server/tls/server-ca.crt
+  changed_when: false
+  register: ca_cert_hash_output
 
-    - name: Allow incoming traffic on port 6443 (K3s API)
-      ansible.builtin.iptables:
-        chain: INPUT
-        protocol: tcp
-        destination_port: 6443
-        jump: ACCEPT
+- name: Set ca_checksum fact
+  ansible.builtin.set_fact:
+    ca_checksum: "{{ ca_cert_hash_output.stdout.split()[0] }}"
 
-    - name: Install pip3 (if not installed)
-      ansible.builtin.apt:
-        name: python3-pip
-        state: present
+- name: Set node_token fact.
+  ansible.builtin.set_fact:
+    node_token: "{{ node_token_output.stdout | trim }}"
 
-    - name: Install Kubernetes Python client
-      ansible.builtin.pip:
-        name: kubernetes
-        state: present
-        executable: /usr/bin/pip3  # Make sure pip3 is being used
+- name: Allow incoming traffic on port 6443 (K3s API)
+  ansible.builtin.iptables:
+    chain: INPUT
+    protocol: tcp
+    destination_port: 6443
+    jump: ACCEPT
+  become: true
 
-    # Step 3: Download and install Helm for ARM64
-    - name: Download and install Helm for ARM64
-      ansible.builtin.shell:
-        cmd: |
-          curl -fsSL https://get.helm.sh/helm-v3.9.0-linux-arm64.tar.gz -o helm-arm64.tar.gz
-          tar -xzf helm-arm64.tar.gz
-          mv linux-arm64/helm /usr/local/bin/helm
-          rm -rf linux-arm64 helm-arm64.tar.gz
-      become: true
+- name: Install pip3 (if not installed)
+  ansible.builtin.apt:
+    name: python3-pip
+    state: present
+
+- name: Install Kubernetes Python client
+  ansible.builtin.pip:
+    name: kubernetes
+    state: present
+    executable: /usr/bin/pip3  # Make sure pip3 is being used
+
+# Step 3: Download and install Helm for ARM64
+- name: Download Helm binary
+  ansible.builtin.get_url:
+    url: https://get.helm.sh/helm-v3.9.0-linux-arm64.tar.gz
+    dest: /tmp/helm-arm64.tar.gz
+  become: true
+
+- name: Extract Helm and move to /usr/local/bin
+  ansible.builtin.unarchive:
+    src: /tmp/helm-arm64.tar.gz
+    dest: /tmp/
+    remote_src: yes
+  become: true
+
+- name: Move Helm binary
+  ansible.builtin.copy:
+    src: /tmp/linux-arm64/helm
+    dest: /usr/local/bin/helm
+    mode: '0755'
+    remote_src: true
+  become: true
+
+- name: Wait for control plane node to be ready
+  ansible.builtin.command: kubectl get nodes --no-headers
+  register: node_status
+  until: node_status.stdout is search("Ready\\s+")
+  retries: 10
+  delay: 15
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+  become: true
+
+
+# Propagate node_token and ca_checksum to all worker nodes after fetching latest values
+- name: Wait for /var/lib/rancher/k3s/server/node-token to exist
+  ansible.builtin.wait_for:
+    path: /var/lib/rancher/k3s/server/node-token
+    state: present
+    timeout: 120
+
+- name: Get node token.
+  ansible.builtin.command: cat /var/lib/rancher/k3s/server/node-token
+  changed_when: false
+  register: node_token_output
+
+- name: Get CA cert hash for control plane
+  ansible.builtin.command: sha256sum /var/lib/rancher/k3s/server/tls/server-ca.crt
+  changed_when: false
+  register: ca_cert_hash_output
+
+- name: Set node_token and ca_checksum on all worker nodes
+  ansible.builtin.set_fact:
+    node_token: "{{ node_token_output.stdout | trim }}"
+    ca_checksum: "{{ ca_cert_hash_output.stdout.split()[0] }}"
+  delegate_to: "{{ item }}"
+  delegate_facts: true
+  loop: "{{ groups['nodes'] }}"
+
+- name: Set KUBECONFIG environment variable globally
+  ansible.builtin.copy:
+    dest: /etc/profile.d/kubectl.sh
+    content: 'export KUBECONFIG=/etc/rancher/k3s/k3s.yaml'
+    mode: '0755'
+  become: true
