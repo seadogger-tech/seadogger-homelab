@@ -15,8 +15,7 @@ enable_wipe_k3s_cluster: false
 enable_k3s_control_plane: false
 enable_k3s_workers: false
 
-# This one is a pain in the butt to deploy.  Should be the only thing you are deploying and make sure this is working before you 
-#. bring in any PVC PODS
+# This one is a pain in the butt to deploy.   Note this is not an Argo deployed configuration so it will not show up there.
 enable_rook_ceph: false
 
 # ArgoCD deployment to k3s 

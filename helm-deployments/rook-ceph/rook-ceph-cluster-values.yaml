@@ -156,7 +156,7 @@ cephFileSystems:
                   - rey
     storageClass:  # Move this outside of metadataServer
       enabled: true
-      name: rook-ceph-block-storage-ec
+      name: rook-ceph-filesystem-ec
       isDefault: true
       reclaimPolicy: Delete
       allowVolumeExpansion: true
