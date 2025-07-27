@@ -95,10 +95,13 @@
       Waiting for the Ceph cluster to become ready. This may take 15–20 minutes depending on your system performance.
       Do not proceed with any other deployments until this step completes successfully.
 
-# Step 7: Verify cluster status
-- name: Wait for Ceph cluster health to be OK
+- name: Wait for Ceph cluster health to be OK and ec-fs to exist
   ansible.builtin.shell: |
+    set -e
     kubectl -n rook-ceph exec deploy/rook-ceph-tools -- ceph health | grep HEALTH_OK
+    kubectl -n rook-ceph exec deploy/rook-ceph-tools -- ceph fs ls | grep -w ec-fs
+    kubectl -n rook-ceph exec deploy/rook-ceph-tools -- ceph osd pool ls | grep -w ec-fs-metadata
+    kubectl -n rook-ceph exec deploy/rook-ceph-tools -- ceph osd pool ls | grep -w ec-fs-data0
   environment: "{{ env_vars }}"
   register: ceph_health_check
   retries: 60

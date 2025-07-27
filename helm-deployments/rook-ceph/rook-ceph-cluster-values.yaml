@@ -119,41 +119,60 @@ resources:
         config:
           deviceClass: "nvme"
 
-# Explicitly disable CephFS
-cephFileSystems: []
-
 # Explicitly disable Object Store
 cephObjectStores: []
 
-cephBlockPools:
-  - name: ec-pool
-    spec:
-      failureDomain: host
-      erasureCoded:
-        dataChunks: 2
-        codingChunks: 1
-      parameters:
-        crushRoot: "default"
-    storageClass:
-      enabled: true
-      name: "rook-ceph-block-storage-ec"
-      reclaimPolicy: Delete
-      allowVolumeExpansion: true
-      parameters:
-        pool: ec-pool
-        thick-provisioning: "false"
-        compression_mode: "none"
-        csi.storage.k8s.io/provisioner-secret-name: rook-csi-rbd-provisioner
-        csi.storage.k8s.io/provisioner-secret-namespace: rook-ceph
-        csi.storage.k8s.io/controller-expand-secret-name: rook-csi-rbd-provisioner
-        csi.storage.k8s.io/controller-expand-secret-namespace: rook-ceph
-        csi.storage.k8s.io/node-stage-secret-name: rook-csi-rbd-node
-        csi.storage.k8s.io/node-stage-secret-namespace: rook-ceph
-        imageFeatures: layering
+cephFileSystems:
+  - name: ec-fs
+    activeCount: 1
+    metadataPool:
+      replicated:
+        size: 3
+    dataPools:
+      - erasureCoded:
+          dataChunks: 2
+          codingChunks: 1
+        name: ec-pool
+    metadataServer:
+      activeCount: 1
+      activeStandby: true
+      placement:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: kubernetes.io/hostname
+                operator: In
+                values:
+                - anakin
+                - obiwan
+                - rey
+      resources:
+        limits:
+          cpu: "500m"
+          memory: "512Mi"
+        requests:
+          cpu: "100m"
+          memory: "256Mi"
+
+cephFileSystemVolumeMounts:
+  - name: rook-ceph-block-storage-ec
+    isDefault: true
+    reclaimPolicy: Delete
+    allowVolumeExpansion: true
+    parameters:
+      fsName: ec-fs
+      clusterID: rook-ceph
+      csi.storage.k8s.io/provisioner-secret-name: rook-csi-cephfs-provisioner
+      csi.storage.k8s.io/provisioner-secret-namespace: rook-ceph
+      csi.storage.k8s.io/controller-expand-secret-name: rook-csi-cephfs-provisioner
+      csi.storage.k8s.io/controller-expand-secret-namespace: rook-ceph
+      csi.storage.k8s.io/node-stage-secret-name: rook-csi-cephfs-node
+      csi.storage.k8s.io/node-stage-secret-namespace: rook-ceph
 
 csi:
-  enableCephfsDriver: false
-  enableRbdDriver: true
+  enableCephfsDriver: true
+  enableRbdDriver: false
   enableCephfsSnapshotter: false
   enableRBDSnapshotter: true
   enableNFSDriver: false
