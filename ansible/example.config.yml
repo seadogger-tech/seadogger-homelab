@@ -25,6 +25,10 @@ enable_argocd_svc: false
 enable_bedrock: false
 enable_pihole: false
 
+# This one is a pain in the butt to deploy.  Should be the only thing you are deploying and make sure this is working before you 
+#. bring in any PVC PODS
+enable_rook_ceph: false
+
 # ArgoCD managed apps with PVC.  Setting these to true with perform a clean install of the app. 
 #  If you are trybing to change the configuration of one of these apps you should make the change in the 
 #  ../helm-deployments or ../kubectl-deployments values files and ArgoCD will automatigically update the application

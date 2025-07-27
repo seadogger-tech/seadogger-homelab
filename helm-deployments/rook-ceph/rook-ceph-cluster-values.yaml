@@ -29,13 +29,20 @@ cephClusterSpec:
   network:
     provider: host
 
+  # Disable crash collector to save resources
   crashCollector:
-    disable: false
+    disable: true
 
-  logCollector:
-    enabled: false
+  # Enable monitoring with optimized resources
+  monitoring:
+    enabled: true
+    rulesNamespace: rook-ceph
+    metricsDisabled: false
+    externalMgrEndpoints: []
+    externalMgrPrometheusPort: 9283
 
   mgr:
+    count: 1
     modules:
     - name: balancer
       enabled: true
@@ -56,18 +63,46 @@ cephClusterSpec:
   resources:
     mgr:
       limits:
-        cpu: "500m"
-        memory: "512Mi"
+        cpu: "300m"
+        memory: "384Mi"
       requests:
-        cpu: "250m"
+        cpu: "100m"
         memory: "256Mi"
     mon:
       limits:
-        cpu: "500m"
-        memory: "512Mi"
+        cpu: "300m"
+        memory: "384Mi"
       requests:
-        cpu: "250m"
+        cpu: "100m"
         memory: "256Mi"
+    osd:
+      limits:
+        cpu: "400m"
+        memory: "768Mi"
+      requests:
+        cpu: "100m"
+        memory: "512Mi"
+    prepareosd:
+      limits:
+        cpu: "200m"
+        memory: "256Mi"
+      requests:
+        cpu: "50m"
+        memory: "128Mi"
+    mgr-sidecar:
+      limits:
+        cpu: "200m"
+        memory: "256Mi"
+      requests:
+        cpu: "50m"
+        memory: "128Mi"
+    prometheus:
+      limits:
+        cpu: "200m"
+        memory: "256Mi"
+      requests:
+        cpu: "50m"
+        memory: "128Mi"
 
   storage:
     useAllNodes: false
@@ -84,3 +119,103 @@ cephClusterSpec:
     - name: rey
       devices:
       - name: nvme0n1p3
+
+cephFileSystems:
+  - name: ceph-filesystem
+    spec:
+      metadataPool:
+        replicated:
+          size: 3
+      dataPools:
+        - name: replicated
+          replicated:
+            size: 3
+      metadataServer:
+        activeCount: 1
+        activeStandby: false
+        resources:
+          limits:
+            cpu: "300m"
+            memory: "384Mi"
+          requests:
+            cpu: "100m"
+            memory: "256Mi"
+
+csi:
+  enableCephfsDriver: true
+  enableRbdDriver: true
+  
+  provisionerResources:
+    limits:
+      cpu: "200m"
+      memory: "256Mi"
+    requests:
+      cpu: "50m"
+      memory: "128Mi"
+  
+  pluginResources:
+    limits:
+      cpu: "200m"
+      memory: "256Mi"
+    requests:
+      cpu: "50m"
+      memory: "128Mi"
+
+monitoring:
+  enabled: true
+  createPrometheusRules: true
+  createServiceMonitors: true
+  serviceMonitors:
+    labels:
+      release: prometheus
+  prometheusRules:
+    labels:
+      release: prometheus
+
+# Enable Ceph Dashboard
+dashboard:
+  enabled: true
+  ssl: false
+  # Create Ingress for dashboard (optional)
+  ingress:
+    enabled: false
+
+# Storage Class configurations
+storageClass:
+  # For block storage (RBD)
+  enabled: true
+  isDefault: true
+  name: "rook-ceph-block"
+  reclaimPolicy: Delete
+  allowVolumeExpansion: true
+  parameters:
+    # Replication factor
+    replication: "3"
+    # Enable data pool compression
+    compression: "none"
+    # Enable encryption
+    encrypted: "false"
+
+  # For filesystem storage (CephFS)
+  cephfs:
+    enabled: true
+    name: "rook-cephfs"
+    pool: "ceph-filesystem"
+    reclaimPolicy: Delete
+    allowVolumeExpansion: true
+    parameters:
+      # Replication factor for metadata
+      fsName: "ceph-filesystem"
+      # Enable data pool compression
+      compression: "none"
+
+# Configure toolbox (debugging tool)
+toolbox:
+  enabled: true
+  resources:
+    limits:
+      cpu: "200m"
+      memory: "256Mi"
+    requests:
+      cpu: "50m"
+      memory: "128Mi"

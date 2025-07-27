@@ -1,0 +1,37 @@
+---
+- name: Add Rook Helm repo
+  kubernetes.core.helm_repository:
+    name: rook-release
+    repo_url: https://charts.rook.io/release
+
+- name: Install Rook-Ceph Operator
+  kubernetes.core.helm:
+    name: rook-ceph
+    chart_ref: rook-release/rook-ceph
+    release_namespace: rook-ceph
+    create_namespace: true
+    values_files:
+      - "{{ playbook_dir }}/../helm-deployments/rook-ceph/rook-ceph-operator-values.yaml"
+    wait: true
+
+- name: Wait for operator to be ready
+  kubernetes.core.k8s_info:
+    kind: Pod
+    namespace: rook-ceph
+    label_selectors:
+      - app=rook-ceph-operator
+    field_selectors:
+      - status.phase=Running
+  register: operator_pod
+  until: operator_pod.resources | length > 0
+  retries: 30
+  delay: 10
+
+- name: Install Rook-Ceph Cluster
+  kubernetes.core.helm:
+    name: rook-ceph-cluster
+    chart_ref: rook-release/rook-ceph-cluster
+    release_namespace: rook-ceph
+    values_files:
+      - "{{ playbook_dir }}/../helm-deployments/rook-ceph/rook-ceph-cluster-values.yaml"
+    wait: true

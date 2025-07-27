@@ -62,6 +62,10 @@
       import_tasks: tasks/pihole_deploy.yml
       when: enable_pihole | default(true)
 
+    - name: Deploy Rook-Ceph
+      import_tasks: tasks/rook_ceph_deploy.yml
+      when: enable_rook_ceph | default(false)
+
     - name: Deploy Prometheus
       import_tasks: tasks/prometheus_deploy.yml
       when: enable_prometheus | default(true)
@@ -73,10 +77,6 @@
     - name: Deploy PlexMediaServer
       import_tasks: tasks/plexmediaserver_deploy.yml
       when: enable_plex | default(true)
-
-    - name: Deploy Nextcloud
-      import_tasks: tasks/nextcloud_deploy.yml
-      when: enable_nextcloud | default(true)
 
     - name: Deploy n8n
       import_tasks: tasks/n8n-deploy.yml
