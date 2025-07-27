@@ -112,9 +112,9 @@
   register: unset_default_local_path
   changed_when: "'patched' in unset_default_local_path.stdout"
 
-- name: Ensure rook-ceph-ec-block is the default StorageClass
+- name: Ensure rook-ceph-block-storage-ec is the default StorageClass
   ansible.builtin.shell: |
-    kubectl patch storageclass rook-ceph-ec-block -p '{"metadata": {"annotations": {"storageclass.kubernetes.io/is-default-class": "true"}}}'
+    kubectl patch storageclass rook-ceph-block-storage-ec -p '{"metadata": {"annotations": {"storageclass.kubernetes.io/is-default-class": "true"}}}'
   environment: "{{ env_vars }}"
   register: set_default_rook_ceph
   changed_when: "'patched' in set_default_rook_ceph.stdout"
