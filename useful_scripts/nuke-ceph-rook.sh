@@ -70,3 +70,12 @@ else
 fi
 
 success "\n🏁 Rook-Ceph nuke complete!"
+
+
+# Step 5: Validate disk usage on worker nodes
+info "📦 Step 5: Validating disks on worker nodes..."
+
+for node in obiwan anakin rey; do
+  echo -e "${YELLOW}🔍 Checking disk usage on $node...${NC}"
+  ssh "$node" 'df -hT / | grep -vE "^Filesystem|tmpfs|udev"' || fail "❌ SSH to $node failed or disk check error"
+done
