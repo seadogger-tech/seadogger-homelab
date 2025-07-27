@@ -95,29 +95,26 @@
       Waiting for the Ceph cluster to become ready. This may take 15–20 minutes depending on your system performance.
       Do not proceed with any other deployments until this step completes successfully.
 
-- name: Wait for Ceph cluster health to be OK and ec-fs to exist
+- name: Wait for Ceph cluster health to be OK and required pools to exist
   ansible.builtin.shell: |
     set -e
-    kubectl -n rook-ceph exec deploy/rook-ceph-tools -- ceph health | grep HEALTH_OK
-    kubectl -n rook-ceph exec deploy/rook-ceph-tools -- ceph fs ls | grep -w ec-fs
-    kubectl -n rook-ceph exec deploy/rook-ceph-tools -- ceph osd pool ls | grep -w ec-fs-metadata
-    kubectl -n rook-ceph exec deploy/rook-ceph-tools -- ceph osd pool ls | grep -w ec-fs-data0
+    kubectl -n rook-ceph exec deploy/rook-ceph-tools -- ceph health | grep -q HEALTH_OK
+    kubectl -n rook-ceph exec deploy/rook-ceph-tools -- ceph osd pool ls | grep -qw ec-fs-metadata
+    kubectl -n rook-ceph exec deploy/rook-ceph-tools -- ceph osd pool ls | grep -qw ec-fs-ec-pool
   environment: "{{ env_vars }}"
   register: ceph_health_check
   retries: 60
   delay: 30
   until: ceph_health_check.rc == 0
 
-- name: Set rook-ceph-ec-block as the only default StorageClass
+- name: Unset all default StorageClasses
   ansible.builtin.shell: |
-    kubectl patch storageclass local-path -p '{"metadata": {"annotations": {"storageclass.kubernetes.io/is-default-class": "false"}}}'
+    for sc in $(kubectl get storageclass -o jsonpath='{.items[*].metadata.name}'); do
+      kubectl patch storageclass "$sc" -p '{"metadata": {"annotations": {"storageclass.kubernetes.io/is-default-class": "false"}}}' || true
+    done
   environment: "{{ env_vars }}"
-  register: unset_default_local_path
-  changed_when: "'patched' in unset_default_local_path.stdout"
 
-- name: Ensure rook-ceph-block-storage-ec is the default StorageClass
+- name: Set rook-ceph-block-storage-ec as default StorageClass
   ansible.builtin.shell: |
     kubectl patch storageclass rook-ceph-block-storage-ec -p '{"metadata": {"annotations": {"storageclass.kubernetes.io/is-default-class": "true"}}}'
   environment: "{{ env_vars }}"
-  register: set_default_rook_ceph
-  changed_when: "'patched' in set_default_rook_ceph.stdout"
