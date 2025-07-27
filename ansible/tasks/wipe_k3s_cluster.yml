@@ -1,0 +1,179 @@
+---
+- hosts: all
+  become: true
+  gather_facts: false
+  vars_files:
+    - config.yml
+  tasks:
+    - name: Check if we should wipe K3s cluster
+      ansible.builtin.fail:
+        msg: "Wipe K3s cluster is disabled in config.yml. Set 'enable_wipe_k3s_cluster: true' to run."
+      when: not enable_wipe_k3s_cluster | default(false)
+
+    - name: Stop k3s-agent on worker nodes
+      ansible.builtin.systemd:
+        name: k3s-agent
+        state: stopped
+      when: inventory_hostname in groups['nodes']
+      ignore_errors: true
+
+    - name: Stop k3s on control plane
+      ansible.builtin.systemd:
+        name: k3s
+        state: stopped
+      when: inventory_hostname in groups['control_plane']
+      ignore_errors: true
+
+    - name: Kill Rook and Ceph processes
+      ansible.builtin.shell: |
+        pkill -9 -f rook || true
+        pkill -9 -f ceph || true
+      args:
+        warn: false
+
+    - name: Uninstall k3s agent if present
+      ansible.builtin.command:
+        cmd: /usr/local/bin/k3s-agent-uninstall.sh
+      ignore_errors: true
+
+    - name: Uninstall k3s if present
+      ansible.builtin.command:
+        cmd: /usr/local/bin/k3s-uninstall.sh
+      ignore_errors: true
+
+    - name: Clean Kubernetes and storage directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/rancher
+        - /var/lib/rancher
+        - /var/lib/kubelet
+        - /var/lib/rook
+        - /var/lib/longhorn
+        - /var/lib/ceph
+        - /var/log/containers
+        - /var/log/pods
+        - /var/log/ceph
+        - /opt/rook
+        - /opt/ceph
+        - ~/.kube
+        - /var/lib/cni
+        - /etc/cni
+        - /run/containerd
+        - /var/lib/containerd
+
+    - name: Remove sysctl config for Kubernetes CRI
+      ansible.builtin.file:
+        path: /etc/sysctl.d/99-kubernetes-cri.conf
+        state: absent
+
+    - name: Delete CNI network interfaces if they exist
+      ansible.builtin.shell: |
+        ip link delete cni0 2>/dev/null || true
+        ip link delete flannel.1 2>/dev/null || true
+        ip link delete ceph0 2>/dev/null || true
+      args:
+        warn: false
+
+    - name: Flush all iptables rules and set default policies to ACCEPT
+      ansible.builtin.shell: |
+        iptables -F
+        iptables -X
+        iptables -t nat -F
+        iptables -t nat -X
+        iptables -t mangle -F
+        iptables -t mangle -X
+        iptables -P INPUT ACCEPT
+        iptables -P FORWARD ACCEPT
+        iptables -P OUTPUT ACCEPT
+      args:
+        warn: false
+
+    - name: Wipe storage device partitions and zero beginning of partition
+      block:
+        - name: Wipe filesystem signatures
+          ansible.builtin.shell: wipefs -af /dev/nvme0n1p3
+          args:
+            warn: false
+          ignore_errors: true
+
+        - name: Zero first 100MB of partition
+          ansible.builtin.shell: dd if=/dev/zero of=/dev/nvme0n1p3 bs=1M count=100
+          args:
+            warn: false
+          ignore_errors: true
+
+        - name: Zap all partition data
+          ansible.builtin.shell: sgdisk --zap-all /dev/nvme0n1p3
+          args:
+            warn: false
+          ignore_errors: true
+
+    - name: Remove all device mapper devices
+      ansible.builtin.shell: dmsetup remove_all
+      args:
+        warn: false
+      ignore_errors: true
+
+    - name: Remove Ceph device mapper entries
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /dev/mapper/ceph-*
+        - /dev/ceph-*
+      ignore_errors: true
+
+    - name: Unmount kubelet pods and rook directories
+      ansible.builtin.shell: |
+        umount -f /var/lib/kubelet/pods/* || true
+        umount -f /var/lib/rook/* || true
+      args:
+        warn: false
+
+    - name: Remove systemd service override files for k3s and containerd
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/systemd/system/k3s*
+        - /etc/systemd/system/containerd*
+
+    - name: Reload systemd daemon
+      ansible.builtin.systemd:
+        daemon_reload: yes
+
+    - name: Remove module load configuration files
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/modules-load.d/k3s.conf
+        - /etc/modules-load.d/rook-ceph.conf
+
+    - name: Restart systemd-networkd service
+      ansible.builtin.systemd:
+        name: systemd-networkd
+        state: restarted
+      ignore_errors: true
+
+    - name: Remove all container runtime pods
+      ansible.builtin.shell: crictl rm $(crictl ps -aq)
+      args:
+        warn: false
+      ignore_errors: true
+
+    - name: Remove all container runtime images
+      ansible.builtin.shell: crictl rmi $(crictl images -q)
+      args:
+        warn: false
+      ignore_errors: true
+
+    - name: Verify cleanup - storage device
+      ansible.builtin.shell: lsblk -f /dev/nvme0n1p3
+      register: storage_output
+
+    - name: Display storage device state
+      ansible.builtin.debug:
+        msg: "{{ storage_output.stdout_lines }}"

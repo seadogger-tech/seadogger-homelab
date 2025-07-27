@@ -8,6 +8,9 @@ active_internet_interface: "eth0"
 enable_raspberry_pi_config: false
 update_rpi_firmware: false  # Set to false to disable firmware updates
 
+#. Use this carefully as it destructive and will remove everything.  This was added to be able to verify the IaaC patterns are intact as part and make a clean install of k3s
+enable_wipe_k3s_cluster: false
+
 # Install k3s
 enable_k3s_control_plane: false
 enable_k3s_workers: false
