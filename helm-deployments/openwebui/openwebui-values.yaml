@@ -6,8 +6,8 @@ pipelines:
 
 persistence:
   enabled: true
-  size: 500Gi
-  storageClass: "rook-ceph-filesystem-ec"
+  size: 250Gi
+  storageClass: "ceph-block"
   accessMode: ReadWriteMany
 
 # Service configuration
