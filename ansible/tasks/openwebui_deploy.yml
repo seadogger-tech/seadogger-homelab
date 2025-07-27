@@ -67,12 +67,14 @@
           syncOptions:
             - CreateNamespace=true
 
-# Step 6: Wait for OpenWebUI pod to be ready
-- name: Wait for OpenWebUI pod to be running
-  ansible.builtin.shell: |
-    kubectl get pods -n openwebui --no-headers --kubeconfig {{ KUBECONFIG }} | grep -q '1/1 *Running'
-  register: pod_check
+# Step 6: Wait for OpenWebUI pods to be ready using signal-based validation
+- name: Wait for OpenWebUI pods to be ready
+  community.kubernetes.k8s_info:
+    kubeconfig: "{{ KUBECONFIG }}"
+    kind: Pod
+    namespace: openwebui
+  register: openwebui_pods
   retries: 30
   delay: 10
-  until: pod_check.rc == 0
+  until: openwebui_pods.resources | selectattr('status.phase', 'equalto', 'Running') | list | length > 0
   changed_when: false

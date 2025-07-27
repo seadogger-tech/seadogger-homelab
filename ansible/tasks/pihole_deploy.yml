@@ -16,17 +16,16 @@
         name: pihole
   ignore_errors: true
 
-# Step 3: Wait until Pihole namespace is deleted
-- name: Wait until Pihole namespace is deleted
-  ansible.builtin.wait_for:
-    timeout: 120
-    state: absent
-    path: /tmp  # dummy path, required for module
-  register: namespace_check
-  until: >
-    "pihole" not in lookup('community.kubernetes.k8s', kind='Namespace', kubeconfig=KUBECONFIG, namespace='pihole', api_version='v1')
-  retries: 12
+# Step 3: Poll until Pihole namespace is fully deleted
+- name: Poll until Pihole namespace is fully deleted
+  community.kubernetes.k8s_info:
+    kubeconfig: "{{ KUBECONFIG }}"
+    kind: Namespace
+  register: ns_poll
+  until: ns_poll is defined and 'resources' in ns_poll and (ns_poll.resources | selectattr('metadata.name', 'equalto', 'pihole') | list | length == 0)
+  retries: 30
   delay: 5
+  ignore_errors: true
 
 # Step 4: Create new MetalLB namespace
 - name: Create Pihole namespace
@@ -69,8 +68,13 @@
           syncOptions:
             - CreateNamespace=true
 
-# Step 7: Pause for 2 minutes to allow Pihole to sync and deploy Pihole
-- name: Wait for Pihole deployment through ArgoCD
-  ansible.builtin.pause:
-    minutes: 1
-  become: true
+# Step 7: Wait for Pihole pods to be ready
+- name: Wait for Pihole pods to be ready
+  community.kubernetes.k8s_info:
+    kubeconfig: "{{ KUBECONFIG }}"
+    kind: Pod
+    namespace: pihole
+  register: pihole_pods
+  retries: 30
+  delay: 10
+  until: pihole_pods is defined and 'resources' in pihole_pods and (pihole_pods.resources | selectattr('status.phase', 'equalto', 'Running') | list | length > 0)

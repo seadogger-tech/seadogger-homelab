@@ -16,16 +16,14 @@
         name: monitoring
   ignore_errors: true
 
-- name: Poll for monitoring namespace deletion
-  ansible.builtin.k8s_info:
+- name: Poll until Prometheus namespace is fully deleted
+  community.kubernetes.k8s_info:
     kubeconfig: "{{ KUBECONFIG }}"
-    api_version: v1
     kind: Namespace
-    name: monitoring
-  register: monitoring_ns
-  until: monitoring_ns.resources | length == 0
+  register: ns_poll
+  until: ns_poll is defined and 'resources' in ns_poll and (ns_poll.resources | selectattr('metadata.name', 'equalto', 'monitoring') | list | length == 0)
   retries: 30
-  delay: 2
+  delay: 5
   ignore_errors: true
 
 # Step 4: Create new Prometheus namespace
@@ -97,14 +95,14 @@
             - Replace=true
 
 - name: Wait for prometheus-crds ArgoCD app to be healthy
-  ansible.builtin.k8s_info:
+  community.kubernetes.k8s_info:
     kubeconfig: "{{ KUBECONFIG }}"
     api_version: argoproj.io/v1alpha1
     kind: Application
     namespace: argocd
     name: prometheus-crds
   register: prometheus_crds_status
-  until: prometheus_crds_status.resources[0].status.health.status == "Healthy"
+  until: prometheus_crds_status is defined and 'resources' in prometheus_crds_status and (prometheus_crds_status.resources[0].status.health.status == "Healthy")
   retries: 30
   delay: 4
 
@@ -140,13 +138,13 @@
             - CreateNamespace=true
 
 - name: Wait for prometheus ArgoCD app to be healthy
-  ansible.builtin.k8s_info:
+  community.kubernetes.k8s_info:
     kubeconfig: "{{ KUBECONFIG }}"
     api_version: argoproj.io/v1alpha1
     kind: Application
     namespace: argocd
     name: prometheus
   register: prometheus_status
-  until: prometheus_status.resources[0].status.health.status == "Healthy" 
+  until: prometheus_status is defined and 'resources' in prometheus_status and (prometheus_status.resources[0].status.health.status == "Healthy")
   retries: 30
   delay: 4

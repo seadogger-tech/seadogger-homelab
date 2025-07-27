@@ -15,16 +15,16 @@
   ignore_errors: true
   tags: n8n
 
-- name: Wait for n8n namespace to be fully deleted
+- name: Poll until n8n namespace is fully deleted
   kubernetes.core.k8s_info:
     kubeconfig: "{{ KUBECONFIG }}"
     api_version: v1
     kind: Namespace
-    name: n8n
-  register: n8n_namespace_info
-  until: n8n_namespace_info.resources | length == 0
+  register: ns_poll
+  until: ns_poll.resources | selectattr('metadata.name', 'equalto', 'n8n') | list | length == 0
   retries: 30
   delay: 2
+  delegate_to: "{{ inventory_hostname }}"
   tags: n8n
 
 - name: Create n8n namespace
@@ -68,7 +68,7 @@
             - CreateNamespace=true
   tags: n8n
 
-- name: Wait for n8n pod to become ready
+- name: Poll until n8n pods are ready
   kubernetes.core.k8s_info:
     kubeconfig: "{{ KUBECONFIG }}"
     kind: Pod
@@ -76,9 +76,10 @@
     label_selectors:
       - "app.kubernetes.io/instance=n8n"
   register: n8n_pods
-  until: n8n_pods.resources | selectattr('status.phase', 'equalto', 'Running') | list | length > 0
+  until: n8n_pods is defined and n8n_pods.resources is defined and (n8n_pods.resources | selectattr('status.phase', 'equalto', 'Running') | list | length) > 0
   retries: 30
   delay: 5
+  delegate_to: "{{ inventory_hostname }}"
   tags: n8n
 
 # Add this new task to set the environment variable correctly

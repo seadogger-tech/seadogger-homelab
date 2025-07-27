@@ -16,22 +16,16 @@
             name: bedrock-gateway
       ignore_errors: true
 
-    # Step 3: Wait for namespace deletion signal
-    - name: Wait for bedrock-gateway namespace to be deleted
-      ansible.builtin.wait_for:
-        path: /tmp/bedrock-ns-check
-        state: absent
-      delegate_to: localhost
+    # Step 3: Wait for namespace deletion
+    - name: Poll until bedrock-gateway namespace is fully deleted
+      community.kubernetes.k8s_info:
+        kubeconfig: "{{ KUBECONFIG }}"
+        kind: Namespace
+        name: bedrock-gateway
+      register: ns_poll
+      until: ns_poll.resources is not defined or (ns_poll.resources | length == 0)
       retries: 30
       delay: 2
-      register: ns_deleted_check
-      until: ns_deleted_check is succeeded
-    - name: Confirm namespace deleted
-      ansible.builtin.command: >
-        kubectl get ns bedrock-gateway --kubeconfig {{ KUBECONFIG }}
-      register: ns_check
-      failed_when: ns_check.rc == 0
-      changed_when: false
       ignore_errors: true
 
     # Step 4: Create new MetalLB namespace

@@ -18,6 +18,13 @@
         name: metallb-system
   ignore_errors: true
 
+- name: Check if kubeconfig exists on controller
+  ansible.builtin.stat:
+    path: "{{ KUBECONFIG }}"
+  delegate_to: localhost
+  become: false
+  register: kubeconfig_stat
+
 - name: Wait until MetalLB namespace is fully deleted
   vars:
     metallb_namespace: metallb-system
@@ -28,10 +35,12 @@
         kind: Namespace
         name: "{{ metallb_namespace }}"
       register: ns_info
+      until: ns_info.failed is defined or (ns_info.resources | default([])) | length == 0
       retries: 24
-      delay: 5
-      until: ns_info.resources | length == 0
+      delay: 10
+      failed_when: false
       delegate_to: localhost
+  when: kubeconfig_stat.stat.exists
 
 # Step 4: Create new MetalLB namespace
 - name: Create MetalLB namespace
@@ -101,13 +110,25 @@
           syncOptions:
             - CreateNamespace=true
 
-# Step 7: Wait for MetalLB pods to be ready
-- name: Wait for MetalLB pods to be ready
+# Step 7: Wait for MetalLB controller Deployment to be available
+- name: Wait for MetalLB controller Deployment to be available
   community.kubernetes.k8s_info:
     kubeconfig: "{{ KUBECONFIG }}"
-    kind: Pod
+    kind: Deployment
     namespace: metallb-system
-  register: metallb_pods
+  register: metallb_controller
+  retries: 24
+  delay: 15
+  until: >
+    metallb_controller.resources | selectattr('metadata.name', 'search', 'controller') | selectattr('status.availableReplicas', 'defined') | list | length > 0
+
+- name: Wait for MetalLB speaker DaemonSet to be ready
+  community.kubernetes.k8s_info:
+    kubeconfig: "{{ KUBECONFIG }}"
+    kind: DaemonSet
+    namespace: metallb-system
+  register: metallb_speaker
   retries: 24
   delay: 10
-  until: metallb_pods.resources | selectattr('status.phase', 'equalto', 'Running') | list | length > 0
+  until: >
+    metallb_speaker.resources | selectattr('metadata.name', 'search', 'speaker') | selectattr('status.numberReady', 'defined') | list | length > 0

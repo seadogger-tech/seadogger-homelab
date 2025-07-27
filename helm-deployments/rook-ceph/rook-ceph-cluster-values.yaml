@@ -124,51 +124,53 @@ cephObjectStores: []
 
 cephFileSystems:
   - name: ec-fs
-    activeCount: 1
-    metadataPool:
-      replicated:
-        size: 3
-    dataPools:
-      - erasureCoded:
-          dataChunks: 2
-          codingChunks: 1
-        name: ec-pool
-    metadataServer:
-      activeCount: 1
-      activeStandby: true
-      placement:
-        nodeAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-            nodeSelectorTerms:
-            - matchExpressions:
-              - key: kubernetes.io/hostname
-                operator: In
-                values:
-                - anakin
-                - obiwan
-                - rey
-      resources:
-        limits:
-          cpu: "500m"
-          memory: "512Mi"
-        requests:
-          cpu: "100m"
-          memory: "256Mi"
-      storageClass:
-        enabled: true
-        name: rook-ceph-block-storage-ec
-        isDefault: true
-        reclaimPolicy: Delete
-        allowVolumeExpansion: true
-        parameters:
-          fsName: ec-fs
-          clusterID: rook-ceph
-          csi.storage.k8s.io/provisioner-secret-name: rook-csi-cephfs-provisioner
-          csi.storage.k8s.io/provisioner-secret-namespace: rook-ceph
-          csi.storage.k8s.io/controller-expand-secret-name: rook-csi-cephfs-provisioner
-          csi.storage.k8s.io/controller-expand-secret-namespace: rook-ceph
-          csi.storage.k8s.io/node-stage-secret-name: rook-csi-cephfs-node
-          csi.storage.k8s.io/node-stage-secret-namespace: rook-ceph
+    spec:  # Add this spec level
+      metadataPool:
+        replicated:
+          size: 3
+      dataPools:
+        - name: ec-pool
+          erasureCoded:
+            dataChunks: 2
+            codingChunks: 1
+      metadataServer:
+        activeCount: 1
+        activeStandby: true
+        resources:
+          limits:
+            cpu: "500m"
+            memory: "512Mi"
+          requests:
+            cpu: "100m"
+            memory: "256Mi"
+        placement:
+          nodeAffinity:
+            requiredDuringSchedulingIgnoredDuringExecution:
+              nodeSelectorTerms:
+              - matchExpressions:
+                - key: kubernetes.io/hostname
+                  operator: In
+                  values:
+                  - anakin
+                  - obiwan
+                  - rey
+    storageClass:  # Move this outside of metadataServer
+      enabled: true
+      name: rook-ceph-block-storage-ec
+      isDefault: true
+      reclaimPolicy: Delete
+      allowVolumeExpansion: true
+      parameters:
+        fsName: ec-fs
+        pool: ec-pool
+        clusterID: rook-ceph
+        csi.storage.k8s.io/provisioner-secret-name: rook-csi-cephfs-provisioner
+        csi.storage.k8s.io/provisioner-secret-namespace: rook-ceph
+        csi.storage.k8s.io/controller-expand-secret-name: rook-csi-cephfs-provisioner
+        csi.storage.k8s.io/controller-expand-secret-namespace: rook-ceph
+        csi.storage.k8s.io/node-stage-secret-name: rook-csi-cephfs-node
+        csi.storage.k8s.io/node-stage-secret-namespace: rook-ceph
+
 
 csi:
   enableCephfsDriver: true
