@@ -95,12 +95,27 @@
       Waiting for the Ceph cluster to become ready. This may take 15–20 minutes depending on your system performance.
       Do not proceed with any other deployments until this step completes successfully.
 
-- name: Wait for Ceph cluster health to be OK and required pools to exist
+- name: Wait for Ceph cluster health to be OK and EC pool to be present with sufficient capacity
   ansible.builtin.shell: |
     set -e
+    # Check Ceph health
     kubectl -n rook-ceph exec deploy/rook-ceph-tools -- ceph health | grep -q HEALTH_OK
-    kubectl -n rook-ceph exec deploy/rook-ceph-tools -- ceph osd pool ls | grep -qw ec-fs-metadata
+
+    # Ensure EC pool exists
     kubectl -n rook-ceph exec deploy/rook-ceph-tools -- ceph osd pool ls | grep -qw ec-fs-ec-pool
+
+    # Check erasure coding profile
+    kubectl -n rook-ceph exec deploy/rook-ceph-tools -- \
+      ceph osd erasure-code-profile get ec-fs-ec-pool_ecprofile | \
+      grep -q '^k=2$'
+    kubectl -n rook-ceph exec deploy/rook-ceph-tools -- \
+      ceph osd erasure-code-profile get ec-fs-ec-pool_ecprofile | \
+      grep -q '^m=1$'
+
+    # Check usable size of ec-fs-ec-pool is >= 5 TiB
+    AVAILABLE=$(kubectl -n rook-ceph exec deploy/rook-ceph-tools -- \
+      ceph df | awk '/ec-fs-ec-pool/ {print $(NF)}' | sed 's/TiB//')
+    [ "$(echo "$AVAILABLE >= 5" | bc)" -eq 1 ]
   environment: "{{ env_vars }}"
   register: ceph_health_check
   retries: 60
