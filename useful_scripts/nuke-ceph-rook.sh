@@ -72,10 +72,39 @@ fi
 success "\n🏁 Rook-Ceph nuke complete!"
 
 
+
 # Step 5: Validate disk usage on worker nodes
 info "📦 Step 5: Validating disks on worker nodes..."
 
 for node in obiwan anakin rey; do
   echo -e "${YELLOW}🔍 Checking disk usage on $node...${NC}"
-  ssh "pi@${node}.local" 'df -hT / | grep -vE "^Filesystem|tmpfs|udev"' || fail "❌ SSH to $node.local failed or disk check error"
+  ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "pi@${node}.local" bash -s <<'EOF'
+    echo "🔎 lsblk -f:"
+    lsblk -f
+
+    echo "🔎 blkid:"
+    sudo blkid
+
+    echo "🔎 Mounted Ceph volumes:"
+    mount | grep ceph || echo "✅ No Ceph mounts found"
+
+    ceph_devs=$(lsblk -f | grep -i ceph | awk '{print $1}')
+    if [ -n "$ceph_devs" ]; then
+      echo "⚠️ Found Ceph partitions: $ceph_devs"
+      for dev in $ceph_devs; do
+        full_dev="/dev/$dev"
+        read -p "❓ Wipe $full_dev on $(hostname)? This will destroy all data. (y/n): " confirm
+        if [[ "$confirm" == "y" ]]; then
+          echo "💥 Wiping $full_dev"
+          sudo sgdisk --zap-all "$full_dev"
+          sudo wipefs -a "$full_dev"
+          echo "✅ $full_dev wiped"
+        else
+          echo "⏭️ Skipped $full_dev"
+        fi
+      done
+    else
+      echo "✅ No Ceph-labeled partitions found"
+    fi
+EOF
 done
