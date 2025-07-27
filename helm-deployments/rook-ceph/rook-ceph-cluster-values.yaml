@@ -33,20 +33,14 @@ cephClusterSpec:
   crashCollector:
     disable: true
 
-  # Enable monitoring with optimized resources
+  # Disable monitoring
   monitoring:
-    enabled: true
-    rulesNamespace: rook-ceph
-    metricsDisabled: false
-    externalMgrEndpoints: []
-    externalMgrPrometheusPort: 9283
+    enabled: false
 
   mgr:
     count: 1
     modules:
     - name: balancer
-      enabled: true
-    - name: prometheus
       enabled: true
     placement:
       nodeAffinity:
@@ -96,13 +90,6 @@ cephClusterSpec:
       requests:
         cpu: "50m"
         memory: "128Mi"
-    prometheus:
-      limits:
-        cpu: "200m"
-        memory: "256Mi"
-      requests:
-        cpu: "50m"
-        memory: "128Mi"
 
   storage:
     useAllNodes: false
@@ -129,7 +116,7 @@ cephBlockPools:
         codingChunks: 1
       parameters:
         crushRoot: "default"
-        compression: "aggressive"  # Added compression for better space efficiency
+        compression: "aggressive"
     storageClass:
       enabled: true
       name: "rook-ceph-ec-block"
@@ -147,10 +134,8 @@ cephBlockPools:
         csi.storage.k8s.io/node-stage-secret-namespace: rook-ceph
         imageFeatures: layering
 
-# Removed CephFileSystems as we're focusing on block storage
-
 csi:
-  enableCephfsDriver: false  # Disabled as we're not using CephFS
+  enableCephfsDriver: false
   enableRbdDriver: true
   
   provisionerResources:
@@ -169,16 +154,9 @@ csi:
       cpu: "50m"
       memory: "128Mi"
 
+# Disable monitoring completely
 monitoring:
-  enabled: true
-  createPrometheusRules: true
-  createServiceMonitors: true
-  serviceMonitors:
-    labels:
-      release: prometheus
-  prometheusRules:
-    labels:
-      release: prometheus
+  enabled: false
 
 dashboard:
   enabled: true
