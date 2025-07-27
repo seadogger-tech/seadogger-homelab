@@ -12,6 +12,10 @@ update_rpi_firmware: false  # Set to false to disable firmware updates
 enable_k3s_control_plane: false
 enable_k3s_workers: false
 
+# This one is a pain in the butt to deploy.  Should be the only thing you are deploying and make sure this is working before you 
+#. bring in any PVC PODS
+enable_rook_ceph: false
+
 # ArgoCD deployment to k3s 
 argocd_force_clean_install: false  # When false (default), safely updates existing installation. When true, performs complete removal and fresh install.
 enable_argocd: false
@@ -24,10 +28,6 @@ enable_argocd_svc: false
 #  in the next app sync 
 enable_bedrock: false
 enable_pihole: false
-
-# This one is a pain in the butt to deploy.  Should be the only thing you are deploying and make sure this is working before you 
-#. bring in any PVC PODS
-enable_rook_ceph: false
 
 # ArgoCD managed apps with PVC.  Setting these to true with perform a clean install of the app. 
 #  If you are trybing to change the configuration of one of these apps you should make the change in the 

@@ -1,37 +1,76 @@
 ---
+# Step 1: Set KUBECONFIG globally
+- name: Set KUBECONFIG global
+  ansible.builtin.set_fact:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+
+# Step 2: Handle macOS fork safety
+- name: Detect operating system
+  ansible.builtin.set_fact:
+    is_macos: "{{ ansible_facts['os_family'] == 'Darwin' }}"
+
+- name: Set Python fork safety for macOS
+  ansible.builtin.set_fact:
+    ansible_python_interpreter: "python3 -E"
+    env_vars:
+      OBJC_DISABLE_INITIALIZE_FORK_SAFETY: "YES"
+      KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+  when: is_macos | bool
+
+- name: Set Linux environment variables
+  ansible.builtin.set_fact:
+    env_vars:
+      KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+  when: not is_macos | bool
+
+# Step 3: Add Helm repo using shell to avoid fork issues
 - name: Add Rook Helm repo
-  kubernetes.core.helm_repository:
-    name: rook-release
-    repo_url: https://charts.rook.io/release
+  ansible.builtin.shell:
+    cmd: helm repo add rook-release https://charts.rook.io/release && helm repo update
+  environment: "{{ env_vars }}"
+  changed_when: false
 
+# Step 4: Install operator
 - name: Install Rook-Ceph Operator
-  kubernetes.core.helm:
-    name: rook-ceph
-    chart_ref: rook-release/rook-ceph
-    release_namespace: rook-ceph
-    create_namespace: true
-    values_files:
-      - "{{ playbook_dir }}/../helm-deployments/rook-ceph/rook-ceph-operator-values.yaml"
-    wait: true
+  ansible.builtin.shell:
+    cmd: >-
+      helm upgrade --install rook-ceph rook-release/rook-ceph
+      --namespace rook-ceph
+      --create-namespace
+      -f https://raw.githubusercontent.com/seadogger/seadogger-homelab/master/helm-deployments/rook-ceph/rook-ceph-operator-values.yaml
+      --wait
+  environment: "{{ env_vars }}"
+  register: helm_operator_result
+  changed_when: "'STATUS: deployed' in helm_operator_result.stdout"
 
+# Step 5: Wait for operator
 - name: Wait for operator to be ready
-  kubernetes.core.k8s_info:
-    kind: Pod
-    namespace: rook-ceph
-    label_selectors:
-      - app=rook-ceph-operator
-    field_selectors:
-      - status.phase=Running
-  register: operator_pod
-  until: operator_pod.resources | length > 0
-  retries: 30
-  delay: 10
+  ansible.builtin.shell:
+    cmd: kubectl -n rook-ceph wait --for=condition=ready pod -l app=rook-ceph-operator --timeout=300s
+  environment: "{{ env_vars }}"
+  register: wait_result
+  retries: 10
+  delay: 30
+  until: wait_result.rc == 0
 
+# Step 6: Install cluster
 - name: Install Rook-Ceph Cluster
-  kubernetes.core.helm:
-    name: rook-ceph-cluster
-    chart_ref: rook-release/rook-ceph-cluster
-    release_namespace: rook-ceph
-    values_files:
-      - "{{ playbook_dir }}/../helm-deployments/rook-ceph/rook-ceph-cluster-values.yaml"
-    wait: true
+  ansible.builtin.shell:
+    cmd: >-
+      helm upgrade --install rook-ceph-cluster rook-release/rook-ceph-cluster
+      --namespace rook-ceph
+      -f https://raw.githubusercontent.com/seadogger/seadogger-homelab/master/helm-deployments/rook-ceph/rook-ceph-cluster-values.yaml
+      --wait
+  environment: "{{ env_vars }}"
+  register: helm_cluster_result
+  changed_when: "'STATUS: deployed' in helm_cluster_result.stdout"
+
+# Step 7: Verify cluster status
+- name: Wait for Ceph cluster to be ready
+  ansible.builtin.shell:
+    cmd: kubectl -n rook-ceph wait --for=condition=ready cephcluster/rook-ceph --timeout=600s
+  environment: "{{ env_vars }}"
+  register: cluster_wait_result
+  retries: 20
+  delay: 30
+  until: cluster_wait_result.rc == 0
