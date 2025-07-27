@@ -107,6 +107,12 @@ cephClusterSpec:
       devices:
       - name: nvme0n1p3
 
+# Explicitly disable CephFS
+cephFileSystems: []
+
+# Explicitly disable Object Store
+cephObjectStores: []
+
 cephBlockPools:
   - name: ec-pool
     spec:
@@ -137,6 +143,9 @@ cephBlockPools:
 csi:
   enableCephfsDriver: false
   enableRbdDriver: true
+  enableCephfsSnapshotter: false
+  enableRBDSnapshotter: true
+  enableNFSDriver: false
   
   provisionerResources:
     limits:
