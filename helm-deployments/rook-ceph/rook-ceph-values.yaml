@@ -1,5 +1,3 @@
-# rook-ceph-values.yaml
-
 crds:
   enabled: true
 
@@ -19,18 +17,37 @@ dashboard:
     type: LoadBalancer
     loadBalancerIP: 192.168.1.248
 
-# Skip creating ingress
 ingress:
   enabled: false
 
-# Clean minimal resources for Pi cluster
-resources:
-  limits:
-    cpu: 500m
-    memory: 512Mi
-  requests:
-    cpu: 250m
-    memory: 256Mi
-
-# Only enable components needed
 enableDiscoveryDaemon: false
+
+# Per-component resource overrides
+mon:
+  count: 3
+  allowMultiplePerNode: false
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+    requests:
+      cpu: 500m
+      memory: 768Mi
+
+mgr:
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 250m
+      memory: 256Mi
+
+osd:
+  resources:
+    limits:
+      cpu: 750m
+      memory: 1Gi
+    requests:
+      cpu: 500m
+      memory: 512Mi
