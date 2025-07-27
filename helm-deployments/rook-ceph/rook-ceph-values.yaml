@@ -1,0 +1,36 @@
+# rook-ceph-values.yaml
+
+crds:
+  enabled: true
+
+csi:
+  enableRbdDriver: true
+  enableCephfsDriver: false
+
+monitoring:
+  enabled: false
+
+toolbox:
+  enabled: false
+
+dashboard:
+  enabled: true
+  service:
+    type: LoadBalancer
+    loadBalancerIP: 192.168.1.248
+
+# Skip creating ingress
+ingress:
+  enabled: false
+
+# Clean minimal resources for Pi cluster
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 250m
+    memory: 256Mi
+
+# Only enable components needed
+enableDiscoveryDaemon: false
