@@ -21,8 +21,8 @@
   ansible.builtin.shell: |
     pkill -9 -f rook || true
     pkill -9 -f ceph || true
-  args:
-    warn: false
+  changed_when: false
+  ignore_errors: true
 
 - name: Uninstall k3s agent if present
   ansible.builtin.command:
@@ -50,7 +50,7 @@
     - /var/log/ceph
     - /opt/rook
     - /opt/ceph
-    - ~/.kube
+    - /root/.kube
     - /var/lib/cni
     - /etc/cni
     - /run/containerd
@@ -66,8 +66,7 @@
     ip link delete cni0 2>/dev/null || true
     ip link delete flannel.1 2>/dev/null || true
     ip link delete ceph0 2>/dev/null || true
-  args:
-    warn: false
+  no_log: true
 
 - name: Flush all iptables rules and set default policies to ACCEPT
   ansible.builtin.shell: |
@@ -80,33 +79,28 @@
     iptables -P INPUT ACCEPT
     iptables -P FORWARD ACCEPT
     iptables -P OUTPUT ACCEPT
-  args:
-    warn: false
+  no_log: true
 
 - name: Wipe storage device partitions and zero beginning of partition
   block:
     - name: Wipe filesystem signatures
       ansible.builtin.shell: wipefs -af /dev/nvme0n1p3
-      args:
-        warn: false
+      no_log: true
       ignore_errors: true
 
     - name: Zero first 100MB of partition
       ansible.builtin.shell: dd if=/dev/zero of=/dev/nvme0n1p3 bs=1M count=100
-      args:
-        warn: false
+      no_log: true
       ignore_errors: true
 
     - name: Zap all partition data
       ansible.builtin.shell: sgdisk --zap-all /dev/nvme0n1p3
-      args:
-        warn: false
+      no_log: true
       ignore_errors: true
 
 - name: Remove all device mapper devices
   ansible.builtin.shell: dmsetup remove_all
-  args:
-    warn: false
+  no_log: true
   ignore_errors: true
 
 - name: Remove Ceph device mapper entries
@@ -122,8 +116,7 @@
   ansible.builtin.shell: |
     umount -f /var/lib/kubelet/pods/* || true
     umount -f /var/lib/rook/* || true
-  args:
-    warn: false
+  no_log: true
 
 - name: Remove systemd service override files for k3s and containerd
   ansible.builtin.file:
@@ -153,20 +146,21 @@
 
 - name: Remove all container runtime pods
   ansible.builtin.shell: crictl rm $(crictl ps -aq)
-  args:
-    warn: false
+  no_log: true
   ignore_errors: true
 
 - name: Remove all container runtime images
   ansible.builtin.shell: crictl rmi $(crictl images -q)
-  args:
-    warn: false
+  no_log: true
   ignore_errors: true
 
 - name: Verify cleanup - storage device
-  ansible.builtin.shell: lsblk -f /dev/nvme0n1p3
-  register: storage_output
+  block:
+    - name: Try to read storage device state
+      ansible.builtin.shell: lsblk -f /dev/nvme0n1p3
+      register: storage_output
+      ignore_errors: true
 
-- name: Display storage device state
-  ansible.builtin.debug:
-    msg: "{{ storage_output.stdout_lines }}"
+    - name: Display storage device state
+      ansible.builtin.debug:
+        msg: "{{ storage_output.stdout_lines | default(['Device not found or inaccessible']) }}"
