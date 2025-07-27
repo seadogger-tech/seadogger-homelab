@@ -120,29 +120,37 @@ cephClusterSpec:
       devices:
       - name: nvme0n1p3
 
-cephFileSystems:
-  - name: ceph-filesystem
+cephBlockPools:
+  - name: ec-pool
     spec:
-      metadataPool:
-        replicated:
-          size: 3
-      dataPools:
-        - name: replicated
-          replicated:
-            size: 3
-      metadataServer:
-        activeCount: 1
-        activeStandby: false
-        resources:
-          limits:
-            cpu: "300m"
-            memory: "384Mi"
-          requests:
-            cpu: "100m"
-            memory: "256Mi"
+      failureDomain: host
+      erasureCoded:
+        dataChunks: 2
+        codingChunks: 1
+      parameters:
+        crushRoot: "default"
+        compression: "aggressive"  # Added compression for better space efficiency
+    storageClass:
+      enabled: true
+      name: "rook-ceph-ec-block"
+      isDefault: true
+      reclaimPolicy: Delete
+      allowVolumeExpansion: true
+      parameters:
+        pool: ec-pool
+        thick-provisioning: "false"
+        csi.storage.k8s.io/provisioner-secret-name: rook-csi-rbd-provisioner
+        csi.storage.k8s.io/provisioner-secret-namespace: rook-ceph
+        csi.storage.k8s.io/controller-expand-secret-name: rook-csi-rbd-provisioner
+        csi.storage.k8s.io/controller-expand-secret-namespace: rook-ceph
+        csi.storage.k8s.io/node-stage-secret-name: rook-csi-rbd-node
+        csi.storage.k8s.io/node-stage-secret-namespace: rook-ceph
+        imageFeatures: layering
+
+# Removed CephFileSystems as we're focusing on block storage
 
 csi:
-  enableCephfsDriver: true
+  enableCephfsDriver: false  # Disabled as we're not using CephFS
   enableRbdDriver: true
   
   provisionerResources:
@@ -172,44 +180,12 @@ monitoring:
     labels:
       release: prometheus
 
-# Enable Ceph Dashboard
 dashboard:
   enabled: true
   ssl: false
-  # Create Ingress for dashboard (optional)
   ingress:
     enabled: false
 
-# Storage Class configurations
-storageClass:
-  # For block storage (RBD)
-  enabled: true
-  isDefault: true
-  name: "rook-ceph-block"
-  reclaimPolicy: Delete
-  allowVolumeExpansion: true
-  parameters:
-    # Replication factor
-    replication: "3"
-    # Enable data pool compression
-    compression: "none"
-    # Enable encryption
-    encrypted: "false"
-
-  # For filesystem storage (CephFS)
-  cephfs:
-    enabled: true
-    name: "rook-cephfs"
-    pool: "ceph-filesystem"
-    reclaimPolicy: Delete
-    allowVolumeExpansion: true
-    parameters:
-      # Replication factor for metadata
-      fsName: "ceph-filesystem"
-      # Enable data pool compression
-      compression: "none"
-
-# Configure toolbox (debugging tool)
 toolbox:
   enabled: true
   resources:
