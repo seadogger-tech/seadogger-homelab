@@ -100,16 +100,24 @@ resources:
     useAllDevices: false
     config:
       osdsPerDevice: "1"
+      storeType: "bluestore"
+      deviceClass: "nvme"
     nodes:
-    - name: obiwan
+    - name: anakin.local
       devices:
-      - name: nvme0n1p3
-    - name: anakin
+      - name: /dev/nvme0n1p3
+        config:
+          deviceClass: "nvme"
+    - name: obiwan.local
       devices:
-      - name: nvme0n1p3
-    - name: rey
+      - name: /dev/nvme0n1p3
+        config:
+          deviceClass: "nvme"
+    - name: rey.local
       devices:
-      - name: nvme0n1p3
+      - name: /dev/nvme0n1p3
+        config:
+          deviceClass: "nvme"
 
 # Explicitly disable CephFS
 cephFileSystems: []

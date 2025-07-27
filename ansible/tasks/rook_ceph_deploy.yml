@@ -1,4 +1,25 @@
 ---
+ # Step 0: Wipe and validate device partitions
+- name: Wipe Ceph device partitions
+  ansible.builtin.shell: |
+    set -e
+    sgdisk --zap-all {{ device_path }}
+    dd if=/dev/zero of={{ device_path }} bs=1M count=100 conv=fsync
+    wipefs -a {{ device_path }}
+  when: device_path is defined
+  ignore_errors: false
+
+- name: Validate partition is clean
+  ansible.builtin.shell: |
+    lsblk -f {{ device_path }} | grep -Ev '^(NAME|$)' | awk '{print $2}'
+  register: partition_check
+  changed_when: false
+
+- name: Fail if partition still has filesystem or label
+  ansible.builtin.fail:
+    msg: "Device {{ device_path }} is not clean. Filesystem or label found: {{ partition_check.stdout_lines }}"
+  when: partition_check.stdout != ""
+
 # Step 1: Set KUBECONFIG globally
 - name: Set KUBECONFIG global
   ansible.builtin.set_fact:
@@ -43,7 +64,7 @@
   register: helm_operator_result
   changed_when: "'STATUS: deployed' in helm_operator_result.stdout"
 
-# Step 5: Wait for operator
+# Step 5: Wait for operator to be ready
 - name: Wait for operator to be ready
   ansible.builtin.shell:
     cmd: kubectl -n rook-ceph wait --for=condition=ready pod -l app=rook-ceph-operator --timeout=300s
@@ -65,12 +86,18 @@
   register: helm_cluster_result
   changed_when: "'STATUS: deployed' in helm_cluster_result.stdout"
 
+- name: Display message about Ceph cluster readiness time
+  ansible.builtin.debug:
+    msg: |
+      Waiting for the Ceph cluster to become ready. This may take 15–20 minutes depending on your system performance.
+      Do not proceed with any other deployments until this step completes successfully.
+
 # Step 7: Verify cluster status
-- name: Wait for Ceph cluster to be ready
-  ansible.builtin.shell:
-    cmd: kubectl -n rook-ceph wait --for=condition=ready cephcluster/rook-ceph --timeout=600s
+- name: Wait for Ceph cluster health to be OK
+  ansible.builtin.shell: |
+    kubectl -n rook-ceph exec deploy/rook-ceph-tools -- ceph health | grep HEALTH_OK
   environment: "{{ env_vars }}"
-  register: cluster_wait_result
-  retries: 20
+  register: ceph_health_check
+  retries: 60
   delay: 30
-  until: cluster_wait_result.rc == 0
+  until: ceph_health_check.rc == 0
