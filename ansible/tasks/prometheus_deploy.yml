@@ -16,10 +16,17 @@
         name: monitoring
   ignore_errors: true
 
-# Step 3: Wait for namespace deletion
-- name: Wait for namespace deletion
-  ansible.builtin.pause:
-    seconds: 30
+- name: Poll for monitoring namespace deletion
+  ansible.builtin.k8s_info:
+    kubeconfig: "{{ KUBECONFIG }}"
+    api_version: v1
+    kind: Namespace
+    name: monitoring
+  register: monitoring_ns
+  until: monitoring_ns.resources | length == 0
+  retries: 30
+  delay: 2
+  ignore_errors: true
 
 # Step 4: Create new Prometheus namespace
 - name: Create Prometheus namespace
@@ -89,10 +96,17 @@
             - CreateNamespace=true
             - Replace=true
 
-# Add a pause to ensure resources are fully ready
-- name: Additional wait for resources to settle
-  ansible.builtin.pause:
-    seconds: 60
+- name: Wait for prometheus-crds ArgoCD app to be healthy
+  ansible.builtin.k8s_info:
+    kubeconfig: "{{ KUBECONFIG }}"
+    api_version: argoproj.io/v1alpha1
+    kind: Application
+    namespace: argocd
+    name: prometheus-crds
+  register: prometheus_crds_status
+  until: prometheus_crds_status.resources[0].status.health.status == "Healthy"
+  retries: 30
+  delay: 4
 
 # Step 7: Create main Prometheus ArgoCD Application
 - name: Create main Prometheus ArgoCD Application
@@ -125,7 +139,14 @@
           syncOptions:
             - CreateNamespace=true
 
-# Step 8: Wait for main Prometheus deployment
-- name: Wait for main Prometheus deployment
-  ansible.builtin.pause:
-    minutes: 2
+- name: Wait for prometheus ArgoCD app to be healthy
+  ansible.builtin.k8s_info:
+    kubeconfig: "{{ KUBECONFIG }}"
+    api_version: argoproj.io/v1alpha1
+    kind: Application
+    namespace: argocd
+    name: prometheus
+  register: prometheus_status
+  until: prometheus_status.resources[0].status.health.status == "Healthy" 
+  retries: 30
+  delay: 4

@@ -154,21 +154,21 @@ cephFileSystems:
         requests:
           cpu: "100m"
           memory: "256Mi"
-
-cephFileSystemVolumeMounts:
-  - name: rook-ceph-block-storage-ec
-    isDefault: true
-    reclaimPolicy: Delete
-    allowVolumeExpansion: true
-    parameters:
-      fsName: ec-fs
-      clusterID: rook-ceph
-      csi.storage.k8s.io/provisioner-secret-name: rook-csi-cephfs-provisioner
-      csi.storage.k8s.io/provisioner-secret-namespace: rook-ceph
-      csi.storage.k8s.io/controller-expand-secret-name: rook-csi-cephfs-provisioner
-      csi.storage.k8s.io/controller-expand-secret-namespace: rook-ceph
-      csi.storage.k8s.io/node-stage-secret-name: rook-csi-cephfs-node
-      csi.storage.k8s.io/node-stage-secret-namespace: rook-ceph
+      storageClass:
+        enabled: true
+        name: rook-ceph-block-storage-ec
+        isDefault: true
+        reclaimPolicy: Delete
+        allowVolumeExpansion: true
+        parameters:
+          fsName: ec-fs
+          clusterID: rook-ceph
+          csi.storage.k8s.io/provisioner-secret-name: rook-csi-cephfs-provisioner
+          csi.storage.k8s.io/provisioner-secret-namespace: rook-ceph
+          csi.storage.k8s.io/controller-expand-secret-name: rook-csi-cephfs-provisioner
+          csi.storage.k8s.io/controller-expand-secret-namespace: rook-ceph
+          csi.storage.k8s.io/node-stage-secret-name: rook-csi-cephfs-node
+          csi.storage.k8s.io/node-stage-secret-namespace: rook-ceph
 
 csi:
   enableCephfsDriver: true

@@ -16,15 +16,22 @@
         name: pihole
   ignore_errors: true
 
-# Step 3: Wait for namespace deletion
-- name: Wait for namespace deletion
-  ansible.builtin.pause:
-    seconds: 30
+# Step 3: Wait until Pihole namespace is deleted
+- name: Wait until Pihole namespace is deleted
+  ansible.builtin.wait_for:
+    timeout: 120
+    state: absent
+    path: /tmp  # dummy path, required for module
+  register: namespace_check
+  until: >
+    "pihole" not in lookup('community.kubernetes.k8s', kind='Namespace', kubeconfig=KUBECONFIG, namespace='pihole', api_version='v1')
+  retries: 12
+  delay: 5
 
 # Step 4: Create new MetalLB namespace
 - name: Create Pihole namespace
   ansible.builtin.k8s:
-    kubeconfig: "{{ KUBECONFIG }}"
+    kubeconfig: "{{ KUBECONFIG }}" 
     state: present
     definition:
       apiVersion: v1

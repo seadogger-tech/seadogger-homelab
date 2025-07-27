@@ -18,9 +18,16 @@
       become: true
       when: argocd_force_clean_install | default(false)
 
-    - name: Wait for namespace deletion
-      ansible.builtin.pause:
-        seconds: 30
+    - name: Wait for ArgoCD namespace to be deleted
+      ansible.builtin.k8s_info:
+        api_version: v1
+        kind: Namespace
+        name: argocd
+        kubeconfig: "{{ KUBECONFIG }}"
+      register: ns_status
+      retries: 20
+      delay: 3
+      until: ns_status.resources | length == 0
       when: argocd_force_clean_install | default(false)
 
     # Common steps for both paths
@@ -68,10 +75,14 @@
 
     # Wait for pods
     - name: Wait for ArgoCD pods to be running
-      ansible.builtin.shell:
-        cmd: |
-          while [[ $(kubectl get pods -n argocd -l app.kubernetes.io/name=argocd-server -o 'jsonpath={.items[?(@.status.phase!="Running")].metadata.name}' | wc -w) -gt 0 ]]; do
-            echo "Waiting for ArgoCD pods to be running..."
-            sleep 5
-          done
-      become: true
+      ansible.builtin.k8s_info:
+        api_version: v1
+        kind: Pod
+        namespace: argocd
+        label_selectors:
+          - "app.kubernetes.io/name=argocd-server"
+        kubeconfig: "{{ KUBECONFIG }}"
+      register: argocd_pods
+      retries: 20
+      delay: 5
+      until: argocd_pods.resources | selectattr('status.phase', 'equalto', 'Running') | list | length == (argocd_pods.resources | length)

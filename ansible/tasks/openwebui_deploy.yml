@@ -16,10 +16,15 @@
         name: openwebui
   ignore_errors: true
 
-# Step 3: Wait for namespace deletion
-- name: Wait for namespace deletion
-  ansible.builtin.pause:
-    seconds: 30
+# Step 3: Wait for namespace to be fully deleted
+- name: Wait for namespace to be fully deleted
+  ansible.builtin.command: kubectl get namespace openwebui --kubeconfig {{ KUBECONFIG }}
+  register: ns_check
+  until: ns_check.rc != 0
+  retries: 30
+  delay: 2
+  failed_when: false
+  changed_when: false
 
 # Step 4: Create new OpenWebUI namespace
 - name: Create OpenWebUI namespace
@@ -62,8 +67,12 @@
           syncOptions:
             - CreateNamespace=true
 
-# Step 6: Wait for OpenWebUI deployment through ArgoCD
-- name: Wait for OpenWebUI deployment through ArgoCD
-  ansible.builtin.pause:
-    minutes: 1
-  become: true
+# Step 6: Wait for OpenWebUI pod to be ready
+- name: Wait for OpenWebUI pod to be running
+  ansible.builtin.shell: |
+    kubectl get pods -n openwebui --no-headers --kubeconfig {{ KUBECONFIG }} | grep -q '1/1 *Running'
+  register: pod_check
+  retries: 30
+  delay: 10
+  until: pod_check.rc == 0
+  changed_when: false

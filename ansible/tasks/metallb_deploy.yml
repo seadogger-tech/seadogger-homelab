@@ -18,10 +18,20 @@
         name: metallb-system
   ignore_errors: true
 
-# Step 3: Wait for namespace deletion
-- name: Wait for namespace deletion
-  ansible.builtin.pause:
-    seconds: 30
+- name: Wait until MetalLB namespace is fully deleted
+  vars:
+    metallb_namespace: metallb-system
+  block:
+    - name: Poll for MetalLB namespace deletion
+      community.kubernetes.k8s_info:
+        kubeconfig: "{{ KUBECONFIG }}"
+        kind: Namespace
+        name: "{{ metallb_namespace }}"
+      register: ns_info
+      retries: 24
+      delay: 5
+      until: ns_info.resources | length == 0
+      delegate_to: localhost
 
 # Step 4: Create new MetalLB namespace
 - name: Create MetalLB namespace
@@ -91,8 +101,13 @@
           syncOptions:
             - CreateNamespace=true
 
-# Step 7: Pause for 2 minutes to allow ArgoCD to sync and deploy MetalLB
-- name: Wait for MetalLB deployment through ArgoCD
-  ansible.builtin.pause:
-    minutes: 1
-  become: true
+# Step 7: Wait for MetalLB pods to be ready
+- name: Wait for MetalLB pods to be ready
+  community.kubernetes.k8s_info:
+    kubeconfig: "{{ KUBECONFIG }}"
+    kind: Pod
+    namespace: metallb-system
+  register: metallb_pods
+  retries: 24
+  delay: 10
+  until: metallb_pods.resources | selectattr('status.phase', 'equalto', 'Running') | list | length > 0

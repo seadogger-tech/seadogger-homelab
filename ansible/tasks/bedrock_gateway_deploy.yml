@@ -16,10 +16,23 @@
             name: bedrock-gateway
       ignore_errors: true
 
-    # Step 3: Wait for namespace deletion
-    - name: Wait for namespace deletion
-      ansible.builtin.pause:
-        seconds: 15
+    # Step 3: Wait for namespace deletion signal
+    - name: Wait for bedrock-gateway namespace to be deleted
+      ansible.builtin.wait_for:
+        path: /tmp/bedrock-ns-check
+        state: absent
+      delegate_to: localhost
+      retries: 30
+      delay: 2
+      register: ns_deleted_check
+      until: ns_deleted_check is succeeded
+    - name: Confirm namespace deleted
+      ansible.builtin.command: >
+        kubectl get ns bedrock-gateway --kubeconfig {{ KUBECONFIG }}
+      register: ns_check
+      failed_when: ns_check.rc == 0
+      changed_when: false
+      ignore_errors: true
 
     # Step 4: Create new MetalLB namespace
     - name: Create bedrock-gateway namespace
@@ -32,10 +45,16 @@
           metadata:
             name: bedrock-gateway
 
-    # Step 5: Wait for namespace deletion
-    - name: Wait for namespace creation
-      ansible.builtin.pause:
-        seconds: 15
+    # Step 5: Wait for namespace creation signal
+    - name: Wait until bedrock-gateway namespace exists
+      ansible.builtin.k8s_info:
+        kubeconfig: "{{ KUBECONFIG }}"
+        kind: Namespace
+        name: bedrock-gateway
+      register: ns_created_check
+      until: ns_created_check.resources | length > 0
+      retries: 15
+      delay: 2
 
     # Step 6: Create AWS Bedrock secrets
     - name: Create AWS Bedrock secrets

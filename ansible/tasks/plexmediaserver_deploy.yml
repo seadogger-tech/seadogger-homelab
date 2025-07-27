@@ -16,10 +16,17 @@
         name: plex
   ignore_errors: true
 
-# Step 3: Wait for namespace deletion
-- name: Wait for namespace deletion
-  ansible.builtin.pause:
-    seconds: 30
+# Step 3: Wait for Plex namespace to terminate
+- name: Wait for Plex namespace to terminate
+  ansible.builtin.wait_for:
+    path: /tmp/namespace_deleted_check
+    timeout: 300
+  delegate_to: localhost
+  until: >
+    lookup('community.kubernetes.k8s', api_version='v1', kind='Namespace',
+           resource_name='plex', kubeconfig=KUBECONFIG, fail_on_missing=False) is none
+  retries: 30
+  delay: 10
 
 # Step 4: Create new Plex namespace
 - name: Create Plex namespace
@@ -77,8 +84,13 @@
           syncOptions:
             - CreateNamespace=true
 
-# Step 7: Wait for Plex deployment through ArgoCD
-- name: Wait for Plex deployment through ArgoCD
-  ansible.builtin.pause:
-    minutes: 1
-  become: true
+# Step 7: Wait for Plex application to be healthy
+- name: Wait for Plex application to be healthy
+  ansible.builtin.command:
+    cmd: >
+      kubectl --kubeconfig {{ KUBECONFIG }} -n argocd get application plex
+      -o jsonpath='{.status.health.status}'
+  register: plex_status
+  until: plex_status.stdout == "Healthy"
+  retries: 30
+  delay: 10
