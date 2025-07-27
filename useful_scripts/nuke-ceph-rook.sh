@@ -1,43 +1,74 @@
 #!/bin/bash
-set -e
 
-echo "🔪 Full force rook-ceph annihilation initiated."
+set -euo pipefail
 
-# Step 0: Warning
-echo "⚠️  WARNING: This will aggressively wipe all rook-ceph references from your cluster, skipping all cleanup logic."
-read -p "Press ENTER to proceed or Ctrl+C to cancel..."
+echo "\n🔪 Nuking rook-ceph from your cluster..."
 
-# Step 1: Brutally kill namespace (no hanging)
-echo "🧹 Force deleting namespace rook-ceph (in background)..."
-(kubectl delete ns rook-ceph --grace-period=0 --force || true) &
+### STEP 1: Delete namespace
+if kubectl get ns rook-ceph &>/dev/null; then
+  echo "🧹 Step 1: Forcibly delete rook-ceph namespace..."
+  kubectl delete ns rook-ceph --grace-period=0 --force || true
+else
+  echo "✅ Namespace rook-ceph already deleted"
+fi
 
-# Step 2: Nuke CRDs in background
-echo "🧹 Force deleting all Rook/Ceph CRDs..."
-kubectl get crd | grep -Ei 'ceph|rook' | awk '{print $1}' | while read crd; do
-  echo "  🔸 Deleting $crd..."
-  (kubectl delete crd "$crd" --wait=false --timeout=1s || true) &
+### STEP 2: Delete CRDs
+echo "🧹 Step 2: Delete all rook/ceph CRDs (skip if gone)..."
+kubectl get crd | grep -Ei 'rook|ceph' | awk '{print $1}' | while read -r crd; do
+  echo "  🔸 Deleting $crd"
+  kubectl delete crd "$crd" --ignore-not-found || true
 done
 
-# Step 3: Kill leftover secrets, configmaps, finalizer crap
-echo "🧹 Killing leftover Ceph secrets/configmaps..."
-kubectl get secret -A | grep rook | awk '{print $1 " " $2}' | while read ns name; do
-  kubectl delete secret "$name" -n "$ns" --ignore-not-found &
-done
+### STEP 3: Remove Helm release
+if helm list -A | grep -q rook-ceph; then
+  echo "🧹 Step 3: Uninstalling rook-ceph Helm release..."
+  helm uninstall rook-ceph -n rook-ceph || true
+else
+  echo "✅ Helm release rook-ceph already removed"
+fi
 
-kubectl get configmap -A | grep rook | awk '{print $1 " " $2}' | while read ns name; do
-  kubectl delete configmap "$name" -n "$ns" --ignore-not-found &
-done
+### STEP 4: Delete any lingering PVCs or PVs
+echo "🧹 Step 4: Deleting lingering PVCs and PVs..."
+kubectl delete pvc -l app=rook-ceph --all-namespaces --ignore-not-found || true
+kubectl delete pv -l app=rook-ceph --ignore-not-found || true
 
-# Step 4: Kill operator if somehow still present
-echo "🧹 Killing rook-ceph-operator if still alive..."
-kubectl delete deploy rook-ceph-operator -n rook-ceph --ignore-not-found || true
+### STEP 5: Delete leftover filesystem data
+echo "🧹 Step 5: Removing data directories..."
+sudo rm -rf /var/lib/rook || true
+sudo rm -rf /var/lib/kubelet/plugins/rook* || true
 
-# Step 5: Full disk nuke
-echo "🧨 Removing all Rook data from disk..."
-sudo rm -rf /var/lib/rook /var/lib/kubelet/plugins/rook*
+### STEP 6: Validation
 
-# Step 6: Flush final stuck NS objects manually if needed
-echo "🧨 Forcing cleanup of stuck namespaces..."
-(kubectl get ns rook-ceph -o json | sed 's/"kubernetes"//' | sed '/finalizers/,+2d' | kubectl replace --raw "/api/v1/namespaces/rook-ceph/finalize" -f -) 2>/dev/null || true
+echo -e "\n✅ Validating rook-ceph cleanup..."
 
-echo "✅ Rook-Ceph purge complete. You may now reinstall cleanly."
+if kubectl get ns | grep -q rook-ceph; then
+  echo "❌ Namespace rook-ceph still exists"
+else
+  echo "✅ Namespace rook-ceph not found"
+fi
+
+if kubectl get crd | grep -Ei 'rook|ceph'; then
+  echo "❌ Rook/Ceph CRDs still present"
+else
+  echo "✅ No Rook/Ceph CRDs found"
+fi
+
+if helm list -A | grep -q rook-ceph; then
+  echo "❌ Helm release rook-ceph still exists"
+else
+  echo "✅ Helm release rook-ceph not found"
+fi
+
+if [ -d /var/lib/rook ]; then
+  echo "❌ Found /var/lib/rook directory"
+else
+  echo "✅ /var/lib/rook not present"
+fi
+
+if ls /var/lib/kubelet/plugins/ 2>/dev/null | grep -q rook; then
+  echo "❌ Found rook plugin directories"
+else
+  echo "✅ No rook plugin directories"
+fi
+
+echo -e "\n🎉 Cleanup and validation complete!"
