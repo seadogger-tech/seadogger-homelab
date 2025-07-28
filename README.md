@@ -4,6 +4,58 @@
 
 ![Pi Cluster Architecture](images/Architecture.png)
 
+
+## Current Working State
+
+### Core Infrastructure
+
+1. Node Configuration
+   - Control Plane: yoda (192.168.1.95)
+   - Workers: anakin.local, obiwan.local, rey.local
+   - K3s Version: v1.32.6+k3s1
+   - OS: Debian GNU/Linux 12 (bookworm)
+   - Kernel: 6.6.51+rpt-rpi-2712
+
+2. Storage System (Rook-Ceph)
+   - Status: HEALTH_OK
+   - Capacity: 11 TiB total available
+   - Configuration:
+     * 3 OSDs using NVMe devices
+     * 1 active MDS with 1 hot standby
+     * Erasure-coded data pool (2+1)
+     * Replicated metadata pool (size 3)
+
+3. Network Configuration
+   - MetalLB IP Range: 192.168.1.241-254
+   - Service IP Assignments:
+     * Traefik: 192.168.1.241
+     * Bedrock Gateway: 192.168.1.242
+     * OpenWebUI: 192.168.1.243
+     * ArgoCD: 192.168.1.247
+     * PiHole Web: 192.168.1.249
+     * PiHole DNS: 192.168.1.250
+
+### Deployed Applications
+
+1. Core Services
+   - ArgoCD: GitOps deployment management
+   - Traefik: Ingress controller
+   - MetalLB: Load balancer for bare metal
+
+2. User Services
+   - PiHole: DNS and ad blocking
+   - OpenWebUI: Web interface for AI interactions
+   - Bedrock Access Gateway: AWS Bedrock integration
+   - N8N: Workflow automation
+
+### Storage Classes
+   - rook-ceph-filesystem-ec: Erasure-coded filesystem (default for shared storage)
+   - ceph-block: RBD block storage (default for block storage)
+   - local-path: Local storage provisioner
+
+All components are managed through ArgoCD, ensuring GitOps practices and consistent deployment states.
+
+
 ## Prerequisites
 
 ### Hardware Requirements
