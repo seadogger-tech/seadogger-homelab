@@ -129,7 +129,7 @@ cephFileSystems:
         replicated:
           size: 3
       dataPools:
-        - name: ec-pool
+        - name: ec-fs-ec-pool
           failureDomain: host
           erasureCoded:
             dataChunks: 2
@@ -167,7 +167,7 @@ cephFileSystems:
       allowVolumeExpansion: true
       parameters:
         fsName: ec-fs
-        pool: ec-pool
+        pool: ec-fs-ec-pool
         clusterID: rook-ceph
         csi.storage.k8s.io/provisioner-secret-name: rook-csi-cephfs-provisioner
         csi.storage.k8s.io/provisioner-secret-namespace: rook-ceph
