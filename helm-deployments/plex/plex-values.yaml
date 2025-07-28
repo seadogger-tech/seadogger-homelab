@@ -1,4 +1,3 @@
-# Docker image configuration
 image:
   registry: index.docker.io
   repository: plexinc/pms-docker
@@ -6,7 +5,10 @@ image:
   pullPolicy: IfNotPresent
   architecture: arm64
 
-# Service configuration
+pms:
+  storageClassName: ceph-block
+  configStorage: 50Gi
+
 service:
   main:
     type: LoadBalancer
@@ -14,25 +16,8 @@ service:
     ports:
       http:
         port: 32400
-        targetPort: 32400
-        protocol: TCP
 
-# Storage configuration
-persistence:
-  config:
-    enabled: true
-    storageClass: "ceph-block"
-    size: 50Gi
-    accessMode: ReadWriteOnce
-  
-  transcode:
-    enabled: true
-    medium: Memory
-    size: 10Gi
-    type: emptyDir
-
-# Environment variables
-env:
+extraEnv:
   - name: "HOSTNAME"
     value: "PlexServer"
   - name: "TZ"
@@ -45,7 +30,6 @@ env:
   - name: "ADVERTISE_IP"
     value: "http://192.168.1.244:32400"
 
-# Resource limits
 resources:
   limits:
     cpu: 3000m
@@ -54,73 +38,10 @@ resources:
     cpu: 1000m
     memory: 2Gi
 
-# Pod configuration
-podSecurityContext:
-  runAsUser: 1000
-  runAsGroup: 1000
-  fsGroup: 1000
-
-# Service account configuration
 serviceAccount:
   create: true
   automountServiceAccountToken: true
   name: "plex-plex-media-server"
 
-# Health checks
-probes:
-  liveness:
-    enabled: true
-    initialDelaySeconds: 60
-    periodSeconds: 10
-    timeoutSeconds: 5
-    failureThreshold: 3
-    successThreshold: 1
-    port: 32400
-    path: /identity
-  readiness:
-    enabled: true
-    initialDelaySeconds: 60
-    periodSeconds: 10
-    timeoutSeconds: 5
-    failureThreshold: 3
-    successThreshold: 1
-    port: 32400
-    path: /identity
-
-# Pod annotations
-podAnnotations: {}
-
-# Additional labels
-labels: {}
-
-# Node selection
-nodeSelector: {}
-
-# Pod affinity rules
-affinity: {}
-
-# Pod tolerations
-tolerations: []
-
-# Update strategy
-strategy:
-  type: RollingUpdate
-
-# Security context for containers
-securityContext:
-  allowPrivilegeEscalation: false
-  capabilities:
-    drop:
-      - ALL
-
-# Init containers configuration
-initContainers: []
-
-# Additional volumes
-extraVolumes: []
-
-# Additional volume mounts
-extraVolumeMounts: []
-
-# Extra environment variables (deprecated - use env instead)
-extraEnv: []
+# Remove any port definitions that might conflict with env vars
+ports: []
