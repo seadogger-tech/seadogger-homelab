@@ -2,8 +2,8 @@
 replicaCount: 1
 
 image:
-  repository: k8s.gcr.io/sig-storage/nfs-server-provisioner
-  tag: v4.0.2
+  repository: gcr.io/k8s-staging-sig-storage/nfs-provisioner
+  tag: v3.0.1
   pullPolicy: IfNotPresent
 
 persistence:
