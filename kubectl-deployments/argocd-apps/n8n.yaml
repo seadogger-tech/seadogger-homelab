@@ -1,0 +1,23 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: n8n
+  namespace: argocd
+spec:
+  destination:
+    namespace: n8n
+    server: https://kubernetes.default.svc
+  project: default
+  source:
+    chart: n8n
+    helm:
+      valueFiles:
+        - https://raw.githubusercontent.com/seadogger/seadogger-homelab/master/helm-deployments/n8n/n8n-values.yaml
+    repoURL: https://community-charts.github.io/helm-charts
+    targetRevision: 1.13.5
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
