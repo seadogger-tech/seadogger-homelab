@@ -14,8 +14,6 @@ postgresql:
       enabled: true
       storageClass: "ceph-block"
       size: 50Gi
-      volumeName: "data"
-      mountPath: /bitnami/postgresql
   auth:
     username: n8n
     password: n8npass
