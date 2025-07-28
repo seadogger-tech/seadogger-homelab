@@ -130,9 +130,13 @@ cephFileSystems:
           size: 3
       dataPools:
         - name: ec-pool
+          failureDomain: host
           erasureCoded:
             dataChunks: 2
             codingChunks: 1
+          parameters:
+            pg_num: "512"
+            enable_ec_overwrites: "true"
       metadataServer:
         activeCount: 1
         activeStandby: true
