@@ -1,11 +1,10 @@
 service:
   enabled: false  # Disable helm chart's service creation
 
-n8n:
-  persistence:
-    enabled: true
-    storageClass: "ceph-block"
-    size: 50Gi
+persistence:
+  enabled: true
+  storageClass: "ceph-block"
+  size: 50Gi
 
 # PostgreSQL configuration using Bitnami subchart
 postgresql:
