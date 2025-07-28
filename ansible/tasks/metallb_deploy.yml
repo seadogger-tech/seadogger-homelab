@@ -117,8 +117,8 @@
     kind: Deployment
     namespace: metallb-system
   register: metallb_controller
-  retries: 24
-  delay: 15
+  retries: 30
+  delay: 30
   until: >
     metallb_controller.resources | selectattr('metadata.name', 'search', 'controller') | selectattr('status.availableReplicas', 'defined') | list | length > 0
 

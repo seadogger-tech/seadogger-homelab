@@ -33,7 +33,7 @@ ingress:
 pms:
   # -- The storage class to use when provisioning the pms config volume
   # this needs to be created manually, null will use the default
-  storageClassName: rook-ceph-block-storage-ec
+  storageClassName: ceph-block
 
   # -- The volume size to provision for the PMS database
   configStorage: 50Gi
