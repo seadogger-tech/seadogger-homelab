@@ -129,14 +129,14 @@ cephFileSystems:
         replicated:
           size: 3
       dataPools:
-        - name: datapool
+        - name: data
           failureDomain: host
           erasureCoded:
             dataChunks: 2
             codingChunks: 1
           parameters:
-            pg_num: "512"
-            enable_ec_overwrites: "true"
+            pg_num: "128"
+            allow_ec_overwrites: "true"
             bulk: "true"
       metadataServer:
         activeCount: 1
@@ -167,7 +167,7 @@ cephFileSystems:
       allowVolumeExpansion: true
       parameters:
         fsName: ec-fs
-        pool: ec-fs-datapool
+        pool: ec-fs-data
         clusterID: rook-ceph
         csi.storage.k8s.io/provisioner-secret-name: rook-csi-cephfs-provisioner
         csi.storage.k8s.io/provisioner-secret-namespace: rook-ceph
