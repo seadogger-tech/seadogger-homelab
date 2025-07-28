@@ -173,12 +173,12 @@ serviceAccount:
   # -- Specifies whether a service account should be created
   create: true
   # -- If the service account token should be auto mounted
-  automountServiceAccountToken: false
+  automountServiceAccountToken: true
   # -- Annotations to add to the service account
   annotations: {}
   # -- The name of the service account to use.
   # If not set and create is true, a name is generated using the fullname template
-  name: ""
+  name: "k3s-plex-media-server"
 
 statefulSet:
   # -- Optional extra annotations to add to the service resource
