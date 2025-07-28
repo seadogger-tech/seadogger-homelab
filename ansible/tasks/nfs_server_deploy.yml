@@ -1,0 +1,86 @@
+---
+# Step 1: Set KUBECONFIG globally  
+- name: Set KUBECONFIG global
+  ansible.builtin.set_fact:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+
+# Step 2: Delete existing NFS server namespace if it exists
+- name: Delete existing NFS server namespace
+  ansible.builtin.k8s:
+    kubeconfig: "{{ KUBECONFIG }}"
+    state: absent
+    definition:
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: nfs-server
+  ignore_errors: true
+
+# Step 3: Poll until NFS server namespace is fully deleted
+- name: Poll until NFS server namespace is fully deleted
+  community.kubernetes.k8s_info:
+    api_version: v1
+    kind: Namespace
+    name: nfs-server
+    kubeconfig: "{{ KUBECONFIG }}"
+  register: ns_poll
+  until: ns_poll.resources is defined and ns_poll.resources | length == 0
+  retries: 30
+  delay: 10
+  ignore_errors: true
+
+# Step 4: Create new NFS server namespace
+- name: Create NFS server namespace
+  ansible.builtin.k8s:
+    kubeconfig: "{{ KUBECONFIG }}"
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: nfs-server
+
+# Step 5: Create ArgoCD NFS Server Application
+- name: Create NFS Server ArgoCD Application
+  ansible.builtin.k8s:
+    kubeconfig: "{{ KUBECONFIG }}"
+    state: present
+    definition:
+      apiVersion: argoproj.io/v1alpha1
+      kind: Application
+      metadata:
+        name: nfs-server
+        namespace: argocd
+      spec:
+        project: default
+        source:
+          chart: nfs-server-provisioner
+          repoURL: https://kubernetes-sigs.github.io/nfs-ganesha-server-and-external-provisioner
+          targetRevision: 1.8.0
+          helm:
+            valueFiles:
+              - https://raw.githubusercontent.com/seadogger/seadogger-homelab/master/helm-deployments/nfs-server/nfs-server-values.yaml
+        destination:
+          server: https://kubernetes.default.svc
+          namespace: nfs-server
+        syncPolicy:
+          automated:
+            prune: true
+            selfHeal: true
+          syncOptions:
+            - CreateNamespace=true
+
+# Step 6: Wait for NFS server application to be healthy
+- name: Wait for NFS server application to be healthy
+  community.kubernetes.k8s_info:
+    api_version: argoproj.io/v1alpha1
+    kind: Application
+    name: nfs-server
+    namespace: argocd
+    kubeconfig: "{{ KUBECONFIG }}"
+  register: nfs_status
+  until: nfs_status.resources is defined and
+         nfs_status.resources[0].status.health.status is defined and
+         nfs_status.resources[0].status.health.status == "Healthy"
+  retries: 30
+  delay: 10

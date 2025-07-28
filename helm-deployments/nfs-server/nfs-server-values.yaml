@@ -1,0 +1,47 @@
+# NFS Ganesha Server Configuration
+replicaCount: 1
+
+image:
+  repository: registry.k8s.io/sig-storage/nfs-server-provisioner
+  tag: v4.0.2
+  pullPolicy: IfNotPresent
+
+persistence:
+  enabled: true
+  storageClass: rook-ceph-filesystem-ec
+  size: 6000Gi
+
+service:
+  type: ClusterIP
+  nfsPort: 2049
+  mountdPort: 20048
+  rpcbindPort: 111
+  nfsNodePort:
+  mountdNodePort:
+  rpcbindNodePort:
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+securityContext:
+  privileged: true
+  capabilities:
+    add:
+      - DAC_READ_SEARCH
+      - SYS_RESOURCE
+
+# Storage provisioner configuration
+storageClass:
+  create: true
+  name: nfs
+  defaultClass: false
+  allowVolumeExpansion: true
+  reclaimPolicy: Delete
+  mountOptions:
+    - vers=4.1
+    - noatime
