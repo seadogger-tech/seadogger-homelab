@@ -1,11 +1,13 @@
 service:
   enabled: false  # Disable helm chart's service creation
 
-persistence:
-  enabled: true
-  storageClass: "ceph-block"  # Using Ceph block storage
-  size: 50Gi  # For n8n workflow data
+n8n:
+  persistence:
+    enabled: true
+    storageClass: "ceph-block"
+    size: 50Gi
 
+# PostgreSQL configuration using Bitnami subchart
 postgresql:
   enabled: true
   primary:
