@@ -20,25 +20,18 @@ pms:
   storageClassName: ceph-block
   configStorage: 50Gi
 
-# Container configuration
-containers:
-  - name: plex
-    image: plexinc/pms-docker:latest
-    ports:
-      - name: pms
-        containerPort: 32400
-    env:
-      - name: HOSTNAME
-        value: "PlexServer"
-      - name: TZ
-        value: "America/New_York"
-      - name: PLEX_CLAIM
-        valueFrom:
-          secretKeyRef:
-            name: plex-claim-secret
-            key: claim
-      - name: ADVERTISE_IP
-        value: "http://192.168.1.244:32400"
+extraEnv:
+  - name: HOSTNAME
+    value: "PlexServer"
+  - name: TZ
+    value: "America/New_York"
+  - name: PLEX_CLAIM
+    valueFrom:
+      secretKeyRef:
+        name: plex-claim-secret
+        key: claim
+  - name: ADVERTISE_IP
+    value: "http://192.168.1.244:32400"
 
 resources:
   limits:
