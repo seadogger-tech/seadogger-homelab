@@ -18,9 +18,9 @@ cephClusterSpec:
             - key: kubernetes.io/hostname
               operator: In
               values:
-              - anakin
-              - obiwan
-              - rey
+              - anakin.local
+              - obiwan.local
+              - rey.local
 
   dashboard:
     enabled: true
@@ -50,9 +50,9 @@ cephClusterSpec:
             - key: kubernetes.io/hostname
               operator: In
               values:
-              - anakin
-              - obiwan
-              - rey
+              - anakin.local
+              - obiwan.local
+              - rey.local
 
 resources:
   mgr:
@@ -124,7 +124,7 @@ cephObjectStores: []
 
 cephFileSystems:
   - name: ec-fs
-    spec:  # Add this spec level
+    spec:
       metadataPool:
         replicated:
           size: 3
@@ -137,6 +137,7 @@ cephFileSystems:
           parameters:
             pg_num: "512"
             enable_ec_overwrites: "true"
+            bulk: "true"
       metadataServer:
         activeCount: 1
         activeStandby: true
@@ -155,9 +156,9 @@ cephFileSystems:
                 - key: kubernetes.io/hostname
                   operator: In
                   values:
-                  - anakin
-                  - obiwan
-                  - rey
+                  - anakin.local
+                  - obiwan.local
+                  - rey.local
     storageClass:  # Move this outside of metadataServer
       enabled: true
       name: rook-ceph-filesystem-ec
