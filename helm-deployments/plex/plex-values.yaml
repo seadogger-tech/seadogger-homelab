@@ -1,3 +1,4 @@
+# Docker image configuration
 image:
   registry: index.docker.io
   repository: plexinc/pms-docker
@@ -5,10 +6,7 @@ image:
   pullPolicy: IfNotPresent
   architecture: arm64
 
-pms:
-  storageClassName: ceph-block
-  configStorage: 50Gi
-
+# Service configuration
 service:
   main:
     type: LoadBalancer
@@ -17,18 +15,30 @@ service:
       http:
         port: 32400
 
-extraEnv:
-  - name: "HOSTNAME"
-    value: "PlexServer"
-  - name: "TZ"
-    value: "America/New_York"
-  - name: "PLEX_CLAIM"
-    valueFrom:
-      secretKeyRef:
-        name: plex-claim-secret
-        key: claim
-  - name: "ADVERTISE_IP"
-    value: "http://192.168.1.244:32400"
+# Storage configuration
+pms:
+  storageClassName: ceph-block
+  configStorage: 50Gi
+
+# Container configuration
+containers:
+  - name: plex
+    image: plexinc/pms-docker:latest
+    ports:
+      - name: pms
+        containerPort: 32400
+    env:
+      - name: HOSTNAME
+        value: "PlexServer"
+      - name: TZ
+        value: "America/New_York"
+      - name: PLEX_CLAIM
+        valueFrom:
+          secretKeyRef:
+            name: plex-claim-secret
+            key: claim
+      - name: ADVERTISE_IP
+        value: "http://192.168.1.244:32400"
 
 resources:
   limits:
@@ -41,7 +51,3 @@ resources:
 serviceAccount:
   create: true
   automountServiceAccountToken: true
-  name: "plex-plex-media-server"
-
-# Remove any port definitions that might conflict with env vars
-ports: []
