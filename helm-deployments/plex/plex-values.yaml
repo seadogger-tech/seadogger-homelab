@@ -19,19 +19,15 @@ service:
 pms:
   storageClassName: ceph-block
   configStorage: 50Gi
+  claimSecret:
+    name: plex-claim-secret
+    key: claim
 
 extraEnv:
   - name: HOSTNAME
     value: "PlexServer"
   - name: TZ
     value: "America/New_York"
-  - name: ADVERTISE_IP
-    value: "http://192.168.1.244:32400"
-  - name: PLEX_CLAIM
-    valueFrom:
-      secretKeyRef:
-        name: plex-claim-secret
-        key: claim
 
 resources:
   limits:
