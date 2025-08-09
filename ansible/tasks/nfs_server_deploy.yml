@@ -166,13 +166,13 @@
         namespace: nfs-server
       data:
         exports: |
-          /export 192.168.1.0/24(rw,sync,no_subtree_check,no_root_squash)
+          /shared 192.168.1.0/24(rw,sync,no_subtree_check,no_root_squash)
 
-# Step 9: Patch StatefulSet to use NFS Exports ConfigMap
-- name: Patch NFS Server StatefulSet with Exports
+# Step 9: Patch StatefulSet to use NFS Exports ConfigMap and Create Shared Directory
+- name: Patch NFS Server StatefulSet with Exports and Shared Directory
   ansible.builtin.shell: |
     kubectl patch statefulset nfs-server-nfs-server-provisioner -n nfs-server \
-      -p '{"spec":{"template":{"spec":{"volumes":[{"name":"exports","configMap":{"name":"nfs-exports"}}],"containers":[{"name":"nfs-server-provisioner","volumeMounts":[{"name":"exports","mountPath":"/etc/exports","subPath":"exports"}]}]}}}}'
+      -p '{"spec":{"template":{"spec":{"initContainers":[{"name":"init-shared-dir","image":"busybox","command":["sh","-c","mkdir -p /export/shared && chown -R 65534:65534 /export/shared"],"volumeMounts":[{"name":"export","mountPath":"/export"}]}],"volumes":[{"name":"exports","configMap":{"name":"nfs-exports"}}],"containers":[{"name":"nfs-server-provisioner","volumeMounts":[{"name":"exports","mountPath":"/etc/exports","subPath":"exports"}]}]}}}}'
   args:
     executable: /bin/bash
   environment:
