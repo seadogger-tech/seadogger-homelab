@@ -12,13 +12,15 @@ persistence:
   size: 6000Gi
 
 service:
-  type: ClusterIP
+  type: LoadBalancer
   nfsPort: 2049
   mountdPort: 20048
   rpcbindPort: 111
   nfsNodePort:
   mountdNodePort:
   rpcbindNodePort:
+  annotations:
+    metallb.universe.tf/loadBalancerIPs: "192.168.1.253"
 
 resources:
   requests:
@@ -34,6 +36,8 @@ securityContext:
     add:
       - DAC_READ_SEARCH
       - SYS_RESOURCE
+      - SETPCAP
+      - SYS_ADMIN
 
 # Storage provisioner configuration
 storageClass:
