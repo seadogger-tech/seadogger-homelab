@@ -152,3 +152,28 @@
           port: 662
           protocol: UDP
           targetPort: statd-udp
+
+# Step 8: Create ConfigMap for NFS Exports
+- name: Create NFS Exports ConfigMap
+  ansible.builtin.k8s:
+    kubeconfig: "{{ KUBECONFIG }}"
+    state: present
+    definition:
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: nfs-exports
+        namespace: nfs-server
+      data:
+        exports: |
+          /export 192.168.1.0/24(rw,sync,no_subtree_check,no_root_squash)
+
+# Step 9: Patch StatefulSet to use NFS Exports ConfigMap
+- name: Patch NFS Server StatefulSet with Exports
+  ansible.builtin.shell: |
+    kubectl patch statefulset nfs-server-nfs-server-provisioner -n nfs-server \
+      -p '{"spec":{"template":{"spec":{"volumes":[{"name":"exports","configMap":{"name":"nfs-exports"}}],"containers":[{"name":"nfs-server-provisioner","volumeMounts":[{"name":"exports","mountPath":"/etc/exports","subPath":"exports"}]}]}}}}'
+  args:
+    executable: /bin/bash
+  environment:
+    KUBECONFIG: "{{ KUBECONFIG }}"
