@@ -16,9 +16,9 @@ service:
   nfsPort: 2049
   mountdPort: 20048
   rpcbindPort: 111
-  nfsNodePort:
-  mountdNodePort:
-  rpcbindNodePort:
+  nfsNodePort: 32049
+  mountdNodePort: 32048
+  rpcbindNodePort: 32111
   annotations:
     metallb.universe.tf/loadBalancerIPs: "192.168.1.253"
 
