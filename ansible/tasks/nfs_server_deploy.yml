@@ -72,18 +72,43 @@
 
 # Step 6: Wait for NFS server application to be healthy
 - name: Wait for NFS server application to be healthy
-  community.kubernetes.k8s_info:
-    api_version: argoproj.io/v1alpha1
-    kind: Application
-    name: nfs-server
-    namespace: argocd
-    kubeconfig: "{{ KUBECONFIG }}"
-  register: nfs_status
-  until: nfs_status.resources is defined and
-         nfs_status.resources[0].status.health.status is defined and
-         nfs_status.resources[0].status.health.status == "Healthy"
-  retries: 30
-  delay: 10
+  block:
+    - name: Check NFS server application status
+      community.kubernetes.k8s_info:
+        api_version: argoproj.io/v1alpha1
+        kind: Application
+        name: nfs-server
+        namespace: argocd
+        kubeconfig: "{{ KUBECONFIG }}"
+      register: nfs_status
+      until: nfs_status.resources is defined and
+             nfs_status.resources[0].status.health.status is defined
+      retries: 30
+      delay: 10
+
+    - name: Debug NFS server application status
+      ansible.builtin.debug:
+        var: nfs_status.resources[0].status
+
+    - name: Fail if application is not healthy
+      ansible.builtin.fail:
+        msg: "NFS server application is not healthy: {{ nfs_status.resources[0].status.health.status }}"
+      when: nfs_status.resources[0].status.health.status != "Healthy"
+
+  rescue:
+    - name: Retrieve ArgoCD application events
+      ansible.builtin.shell: |
+        kubectl get events -n nfs-server
+      register: nfs_events
+      changed_when: false
+
+    - name: Display NFS server namespace events
+      ansible.builtin.debug:
+        var: nfs_events.stdout_lines
+
+    - name: Fail the playbook with detailed error
+      ansible.builtin.fail:
+        msg: "Failed to deploy NFS server. Check the events above for more information."
 
 # Step 7: Create LoadBalancer Service for NFS Server
 - name: Create NFS Server LoadBalancer Service
