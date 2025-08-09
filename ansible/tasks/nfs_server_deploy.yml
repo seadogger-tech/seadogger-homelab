@@ -84,3 +84,71 @@
          nfs_status.resources[0].status.health.status == "Healthy"
   retries: 30
   delay: 10
+
+# Step 7: Create LoadBalancer Service for NFS Server
+- name: Create NFS Server LoadBalancer Service
+  ansible.builtin.k8s:
+    kubeconfig: "{{ KUBECONFIG }}"
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: nfs-server-loadbalancer
+        namespace: nfs-server
+        annotations:
+          metallb.universe.tf/loadBalancerIPs: "192.168.1.253"
+      spec:
+        type: LoadBalancer
+        selector:
+          app: nfs-server-provisioner
+          release: nfs-server
+        ports:
+        - name: nfs
+          port: 2049
+          protocol: TCP
+          targetPort: nfs
+        - name: nfs-udp
+          port: 2049
+          protocol: UDP
+          targetPort: nfs-udp
+        - name: nlockmgr
+          port: 32803
+          protocol: TCP
+          targetPort: nlockmgr
+        - name: nlockmgr-udp
+          port: 32803
+          protocol: UDP
+          targetPort: nlockmgr-udp
+        - name: mountd
+          port: 20048
+          protocol: TCP
+          targetPort: mountd
+        - name: mountd-udp
+          port: 20048
+          protocol: UDP
+          targetPort: mountd-udp
+        - name: rquotad
+          port: 875
+          protocol: TCP
+          targetPort: rquotad
+        - name: rquotad-udp
+          port: 875
+          protocol: UDP
+          targetPort: rquotad-udp
+        - name: rpcbind
+          port: 111
+          protocol: TCP
+          targetPort: rpcbind
+        - name: rpcbind-udp
+          port: 111
+          protocol: UDP
+          targetPort: rpcbind-udp
+        - name: statd
+          port: 662
+          protocol: TCP
+          targetPort: statd
+        - name: statd-udp
+          port: 662
+          protocol: UDP
+          targetPort: statd-udp
