@@ -43,7 +43,7 @@ securityContext:
 nfsExports:
   - path: /export
     access: "*"
-    options: rw,sync,no_subtree_check,no_root_squash
+    options: rw,no_root_squash,insecure,no_subtree_check
 
 # Storage provisioner configuration
 storageClass:
