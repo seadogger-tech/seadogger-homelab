@@ -13,11 +13,22 @@ persistence:
 
 service:
   type: LoadBalancer
-  nfsPort: 2049
-  mountdPort: 20048
-  rpcbindPort: 111
+  externalTrafficPolicy: Local
   annotations:
     metallb.universe.tf/loadBalancerIPs: "192.168.1.253"
+  ports:
+    - name: nfs
+      port: 2049
+      protocol: TCP
+      targetPort: 2049
+    - name: mountd
+      port: 20048
+      protocol: TCP
+      targetPort: 20048
+    - name: rpcbind
+      port: 111
+      protocol: TCP
+      targetPort: 111
 
 resources:
   requests:
