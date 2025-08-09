@@ -102,7 +102,11 @@
     namespace: argocd
     name: prometheus-crds
   register: prometheus_crds_status
-  until: prometheus_crds_status is defined and 'resources' in prometheus_crds_status and (prometheus_crds_status.resources[0].status.health.status == "Healthy")
+  until: >
+    prometheus_crds_status is defined and 
+    'resources' in prometheus_crds_status and 
+    (prometheus_crds_status.resources[0].status.health.status == "Healthy") and
+    (prometheus_crds_status.resources[0].status.sync.status in ["Synced", "OutOfSync"])
   retries: 30
   delay: 4
 
@@ -145,6 +149,11 @@
     namespace: argocd
     name: prometheus
   register: prometheus_status
-  until: prometheus_status is defined and 'resources' in prometheus_status and (prometheus_status.resources[0].status.health.status == "Healthy")
+  until: >
+    prometheus_status is defined and 
+    'resources' in prometheus_status and 
+    prometheus_status.resources[0].status is defined and
+    prometheus_status.resources[0].status.get('health', {}) is defined and
+    (prometheus_status.resources[0].status.health.get('status', '') in ["Healthy", "Degraded", "Progressing"])
   retries: 30
   delay: 4
