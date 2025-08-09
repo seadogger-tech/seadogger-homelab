@@ -32,12 +32,20 @@ resources:
 
 securityContext:
   privileged: true
+  fsGroup: 2000
+  runAsUser: 2000
   capabilities:
     add:
       - DAC_READ_SEARCH
       - SYS_RESOURCE
       - SETPCAP
       - SYS_ADMIN
+
+# NFS Export Configuration
+nfsExports:
+  - path: /export
+    access: 192.168.1.0/24
+    options: rw,sync,no_subtree_check,no_root_squash
 
 # Storage provisioner configuration
 storageClass:
