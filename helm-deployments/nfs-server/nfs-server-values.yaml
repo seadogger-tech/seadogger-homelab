@@ -32,8 +32,6 @@ resources:
 
 securityContext:
   privileged: true
-  fsGroup: 2000
-  runAsUser: 2000
   capabilities:
     add:
       - DAC_READ_SEARCH
@@ -44,7 +42,7 @@ securityContext:
 # NFS Export Configuration
 nfsExports:
   - path: /export
-    access: 192.168.1.0/24
+    access: "*"
     options: rw,sync,no_subtree_check,no_root_squash
 
 # Storage provisioner configuration
