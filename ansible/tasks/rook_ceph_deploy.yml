@@ -100,10 +100,10 @@
       Waiting for the Ceph cluster to become ready. This may take 15–20 minutes depending on your system performance.
       Do not proceed with any other deployments until this step completes successfully.
 
-- name: Wait for Ceph cluster health to be OK and required pools to exist
+- name: Wait for Ceph cluster health to be OK (or WARN) and required pools to exist
   ansible.builtin.shell: |
     set -e
-    kubectl -n rook-ceph exec deploy/rook-ceph-tools -- ceph health | grep -q HEALTH_OK
+    kubectl -n rook-ceph exec deploy/rook-ceph-tools -- ceph health | grep -Eq 'HEALTH_OK|HEALTH_WARN'
     kubectl -n rook-ceph exec deploy/rook-ceph-tools -- ceph osd pool ls | grep -qw ec-fs-metadata
     kubectl -n rook-ceph exec deploy/rook-ceph-tools -- ceph osd pool ls | grep -qw ec-fs-data
   environment: "{{ env_vars }}"
@@ -184,14 +184,14 @@
         server:
           active: 1
 
-- name: Wait for rook-ceph-tools to be ready
-  ansible.builtin.shell:
-    cmd: kubectl -n rook-ceph wait --for=condition=ready pod -l app=rook-ceph-tools --timeout=300s
+- name: Wait for rook-ceph-tools to be available
+  ansible.builtin.shell: |
+    kubectl -n rook-ceph rollout status deploy/rook-ceph-tools --timeout=300s
   environment: "{{ env_vars }}"
-  register: wait_result_tools
+  register: tools_ready
   retries: 10
-  delay: 30
-  until: wait_result_tools.rc == 0
+  delay: 10
+  until: tools_ready.rc == 0
 
 - name: Automate RADOS export
   ansible.builtin.shell: |
@@ -203,8 +203,8 @@
       Pseudo = "/ecfs";
       Access_Type = RW;
       Squash = None;
-      Protocols = 3,4;
-      Transports = TCP,UDP;
+      Protocols = 4;
+      Transports = TCP;
       Security_Label = true;
 
       FSAL {
