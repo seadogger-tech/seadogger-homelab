@@ -170,8 +170,8 @@
       spec:
         name: .nfs
         replicated:
-          size: 1
-          requireSafeReplicaSize: false
+          size: 3
+          requireSafeReplicaSize: true
 
 - name: Create CephNFS server
   ansible.builtin.k8s:
