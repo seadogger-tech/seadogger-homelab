@@ -189,7 +189,7 @@
   delay: 10
   until: tools_ready.rc == 0
 
-- name: Automate RADOS export
+- name: Automate RADOS export with retries
   ansible.builtin.shell: |
     set -e
     cat > /tmp/export-100 <<'EOF'
@@ -212,9 +212,8 @@
       SecType = ["sys"];
     }
     EOF
-    TOOLBOX_POD=$(kubectl -n rook-ceph get pods -l app=rook-ceph-tools -o name | head -n 1)
-    kubectl -n rook-ceph cp /tmp/export-100 ${TOOLBOX_POD}:/tmp/export-100
-    kubectl -n rook-ceph exec ${TOOLBOX_POD} -- /bin/bash -c '
+    kubectl -n rook-ceph cp /tmp/export-100 $(kubectl -n rook-ceph get pods -l app=rook-ceph-tools -o name | head -n 1):/tmp/export-100
+    kubectl -n rook-ceph exec $(kubectl -n rook-ceph get pods -l app=rook-ceph-tools -o name | head -n 1) -- /bin/bash -c '
       rados -p .nfs --namespace nfs-ec put export-100 /tmp/export-100
       rados -p .nfs --namespace nfs-ec get conf-nfs.nfs-ec /tmp/conf-nfs.nfs-ec
       if ! grep -q "%url \"rados://.nfs/nfs-ec/export-100\"" /tmp/conf-nfs.nfs-ec; then
@@ -223,6 +222,10 @@
       fi
     '
   environment: "{{ env_vars }}"
+  register: rados_export_result
+  retries: 5
+  delay: 10
+  until: rados_export_result.rc == 0
 
 - name: Reload Ganesha pods
   ansible.builtin.shell: |
