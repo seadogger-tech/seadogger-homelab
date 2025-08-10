@@ -356,17 +356,6 @@ ansible all -m reboot -b
 ## Technologies
 - [Kubernetes (k3s)](https://docs.k3s.io/architecture) architecture and deployment
 - [kubectl](https://kubernetes.io/docs/reference/kubectl/) for cluster management
-- [Helm](https://helm.sh) package management
-- [Rook-Ceph](https://rook.io/) distributed storage
-- [Prometheus](https://prometheus.io) & [Grafana](https://grafana.com) monitoring stack 
-- [ArgoCD](https://argo-cd.readthedocs.io/en/stable/) for GitOps
-- [Ansible](https://docs.ansible.com) for Infrastructure as Code
-
-## Essential Reading
-- [Docker Containers for Beginners](https://www.freecodecamp.org/news/a-beginner-friendly-introduction-to-containers-vms-and-docker-79a9e3e119b)
-- [Network Chuck's Raspberry Pi Cluster Guide](https://youtu.be/Wjrdr0NU4Sk)
-- [Jeff Geerling's Homelab Blog](https://www.jeffgeerling.com/blog)
-- [Alex's Cloud Infrastructure Guide](https://alexstan.cloud/posts/homelab/homelab-setup/)
 - [Deploying Plex on Kubernetes](https://www.debontonline.com/2021/01/part-14-deploy-plexserver-yaml-with.html)
 
 ## Author
