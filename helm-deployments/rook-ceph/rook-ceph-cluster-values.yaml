@@ -159,6 +159,8 @@ cephFileSystems:
                   - anakin.local
                   - obiwan.local
                   - rey.local
+    storageClass:
+      enabled: false
 
 
 csi:
