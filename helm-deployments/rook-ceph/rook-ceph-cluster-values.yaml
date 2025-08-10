@@ -245,18 +245,6 @@ cephNFS:
           SecType = sys;
       }
 
-storageClass:
-  enabled: true
-  name: rook-ceph-nfs
-  reclaimPolicy: Delete
-  parameters:
-    server: "rook-ceph-nfs-ec-nfs.rook-ceph.svc.cluster.local" # The DNS name of the NFS server service
-    share: "/"
-    clusterID: rook-ceph
-    csi.storage.k8s.io/provisioner-secret-name: rook-csi-nfs-provisioner
-    csi.storage.k8s.io/provisioner-secret-namespace: rook-ceph
-    csi.storage.k8s.io/node-stage-secret-name: rook-csi-nfs-node
-    csi.storage.k8s.io/node-stage-secret-namespace: rook-ceph
 
 dashboard:
   enabled: true

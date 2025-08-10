@@ -124,6 +124,26 @@
     kubectl patch storageclass ceph-block -p '{"metadata": {"annotations": {"storageclass.kubernetes.io/is-default-class": "true"}}}'
   environment: "{{ env_vars }}"
 
+- name: Create NFS StorageClass
+  ansible.builtin.k8s:
+    kubeconfig: "{{ KUBECONFIG }}"
+    state: present
+    definition:
+      apiVersion: storage.k8s.io/v1
+      kind: StorageClass
+      metadata:
+        name: rook-ceph-nfs
+      provisioner: rook-ceph.nfs.csi.ceph.com
+      reclaimPolicy: Retain
+      parameters:
+        server: "rook-ceph-nfs-ec-nfs.rook-ceph.svc.cluster.local"
+        share: "/"
+        clusterID: rook-ceph
+        csi.storage.k8s.io/provisioner-secret-name: rook-csi-nfs-provisioner
+        csi.storage.k8s.io/provisioner-secret-namespace: rook-ceph
+        csi.storage.k8s.io/node-stage-secret-name: rook-csi-nfs-node
+        csi.storage.k8s.io/node-stage-secret-namespace: rook-ceph
+
 - name: Create NFS LoadBalancer Service
   ansible.builtin.k8s:
     kubeconfig: "{{ KUBECONFIG }}"

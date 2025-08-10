@@ -91,6 +91,3 @@
       import_tasks: tasks/n8n-deploy.yml
       when: enable_n8n | default(true)
 
-    - name: Deploy NFS Server
-      import_tasks: tasks/nfs_server_deploy.yml
-      when: enable_nfs_server | default(true)
