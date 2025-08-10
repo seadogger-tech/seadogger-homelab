@@ -196,17 +196,7 @@ cephNFS:
     namespace: rook-ceph
     server:
       active: 1
-      placement:
-        nodeAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-            nodeSelectorTerms:
-            - matchExpressions:
-              - key: kubernetes.io/hostname
-                operator: In
-                values:
-                - anakin.local
-                - obiwan.local
-                - rey.local
+      placement: {}
       resources:
         limits:
           cpu: "1000m"
