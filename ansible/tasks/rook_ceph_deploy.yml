@@ -183,7 +183,7 @@
         type: LoadBalancer
         selector:
           app: rook-ceph-nfs
-          nfs: ec-nfs
+          ceph_nfs: nfs-ec
         ports:
         - name: nfs
           port: 2049
