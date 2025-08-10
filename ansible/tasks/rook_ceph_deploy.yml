@@ -105,7 +105,7 @@
     set -e
     kubectl -n rook-ceph exec deploy/rook-ceph-tools -- ceph health | grep -q HEALTH_OK
     kubectl -n rook-ceph exec deploy/rook-ceph-tools -- ceph osd pool ls | grep -qw ec-fs-metadata
-    kubectl -n rook-ceph exec deploy/rook-ceph-tools -- ceph osd pool ls | grep -qw ec-fs-ec-pool
+    kubectl -n rook-ceph exec deploy/rook-ceph-tools -- ceph osd pool ls | grep -qw ec-fs-data
   environment: "{{ env_vars }}"
   register: ceph_health_check
   retries: 60
