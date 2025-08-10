@@ -17,6 +17,7 @@ enable_k3s_workers: false
 
 # This one is a pain in the butt to deploy.   Note this is not an Argo deployed configuration so it will not show up there.
 enable_rook_ceph: false
+wipe_ceph_disks_on_install: false # DANGER: Set to true ONLY for a cold start on new disks. This is DESTRUCTIVE.
 
 # ArgoCD deployment to k3s 
 argocd_force_clean_install: false  # When false (default), safely updates existing installation. When true, performs complete removal and fresh install.

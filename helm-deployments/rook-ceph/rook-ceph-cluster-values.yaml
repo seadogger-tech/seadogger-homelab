@@ -183,7 +183,7 @@ csi:
   enableRbdDriver: false
   enableCephfsSnapshotter: false
   enableRBDSnapshotter: true
-  enableNFSDriver: false
+  enableNFSDriver: true
   
   provisionerResources:
     limits:
@@ -204,6 +204,59 @@ csi:
 # Disable monitoring completely
 monitoring:
   enabled: false
+
+cephNFS:
+  nfs-ganesha:
+    name: ec-nfs
+    namespace: rook-ceph
+    server:
+      active: 1
+      placement:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: kubernetes.io/hostname
+                operator: In
+                values:
+                - anakin.local
+                - obiwan.local
+                - rey.local
+      resources:
+        limits:
+          cpu: "1000m"
+          memory: "1Gi"
+        requests:
+          cpu: "500m"
+          memory: "512Mi"
+    ganeshaConfig: |
+      NFS_Core_Param {
+          NFS_Protocols = 4;
+      }
+      EXPORT {
+          Export_Id = 1;
+          Path = "/";
+          FSAL {
+              Name = CEPH;
+              Ceph_fs = "ec-fs";
+          }
+          Access_Type = RW;
+          Squash = None;
+          SecType = sys;
+      }
+
+storageClass:
+  enabled: true
+  name: rook-ceph-nfs
+  reclaimPolicy: Delete
+  parameters:
+    server: "rook-ceph-nfs-ec-nfs.rook-ceph.svc.cluster.local" # The DNS name of the NFS server service
+    share: "/"
+    clusterID: rook-ceph
+    csi.storage.k8s.io/provisioner-secret-name: rook-csi-nfs-provisioner
+    csi.storage.k8s.io/provisioner-secret-namespace: rook-ceph
+    csi.storage.k8s.io/node-stage-secret-name: rook-csi-nfs-node
+    csi.storage.k8s.io/node-stage-secret-namespace: rook-ceph
 
 dashboard:
   enabled: true
