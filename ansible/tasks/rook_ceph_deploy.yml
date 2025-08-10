@@ -100,6 +100,15 @@
       Waiting for the Ceph cluster to become ready. This may take 15–20 minutes depending on your system performance.
       Do not proceed with any other deployments until this step completes successfully.
 
+- name: Wait for rook-ceph-tools to be available
+  ansible.builtin.shell: |
+    kubectl -n rook-ceph rollout status deploy/rook-ceph-tools --timeout=300s
+  environment: "{{ env_vars }}"
+  register: tools_ready
+  retries: 10
+  delay: 10
+  until: tools_ready.rc == 0
+
 - name: Wait for Ceph cluster health to be OK (or WARN) and required pools to exist
   ansible.builtin.shell: |
     set -e
@@ -180,14 +189,6 @@
         server:
           active: 1
 
-- name: Wait for rook-ceph-tools to be available
-  ansible.builtin.shell: |
-    kubectl -n rook-ceph rollout status deploy/rook-ceph-tools --timeout=300s
-  environment: "{{ env_vars }}"
-  register: tools_ready
-  retries: 10
-  delay: 10
-  until: tools_ready.rc == 0
 
 - name: Automate RADOS export with retries
   ansible.builtin.shell: |
