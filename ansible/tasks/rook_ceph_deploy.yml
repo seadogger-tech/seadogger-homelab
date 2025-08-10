@@ -177,10 +177,6 @@
         rados:
           pool: .nfs
           namespace: nfs-ec
-        security:
-          sssd:
-            sidecar:
-              enabled: true
         server:
           active: 1
 
