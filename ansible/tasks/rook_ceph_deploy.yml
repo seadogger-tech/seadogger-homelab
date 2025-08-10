@@ -112,6 +112,29 @@
   delay: 30
   until: ceph_health_check.rc == 0
 
+- name: Create CephFS Erasure Coded StorageClass
+  ansible.builtin.k8s:
+    kubeconfig: "{{ KUBECONFIG }}"
+    state: present
+    definition:
+      apiVersion: storage.k8s.io/v1
+      kind: StorageClass
+      metadata:
+        name: rook-ceph-filesystem-ec
+      provisioner: rook-ceph.cephfs.csi.ceph.com
+      reclaimPolicy: Delete
+      allowVolumeExpansion: true
+      parameters:
+        clusterID: rook-ceph
+        fsName: ec-fs
+        pool: data
+        csi.storage.k8s.io/provisioner-secret-name: rook-csi-cephfs-provisioner
+        csi.storage.k8s.io/provisioner-secret-namespace: rook-ceph
+        csi.storage.k8s.io/controller-expand-secret-name: rook-csi-cephfs-provisioner
+        csi.storage.k8s.io/controller-expand-secret-namespace: rook-ceph
+        csi.storage.k8s.io/node-stage-secret-name: rook-csi-cephfs-node
+        csi.storage.k8s.io/node-stage-secret-namespace: rook-ceph
+
 - name: Unset all default StorageClasses
   ansible.builtin.shell: |
     for sc in $(kubectl get storageclass -o jsonpath='{.items[*].metadata.name}'); do
