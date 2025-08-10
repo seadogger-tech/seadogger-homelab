@@ -5,7 +5,10 @@
 ![Pi Cluster Architecture](images/Architecture.png)
 
 
-## Current Working State
+## Project Status
+For detailed, up-to-date information about the project's context, architecture, and progress, please refer to the `memory-bank/` directory.
+
+### Current Working State
 
 ### Core Infrastructure
 
@@ -31,9 +34,15 @@
      * Traefik: 192.168.1.241
      * Bedrock Gateway: 192.168.1.242
      * OpenWebUI: 192.168.1.243
+     * Prometheus: 192.168.1.244
+     * Grafana: 192.168.1.245
+     * Alertmanager: 192.168.1.246
      * ArgoCD: 192.168.1.247
+     * Ceph Dashboard: 192.168.1.248
      * PiHole Web: 192.168.1.249
      * PiHole DNS: 192.168.1.250
+     * Plex: 192.168.1.251
+     * N8N: 192.168.1.252
 
 ### Deployed Applications
 
@@ -299,11 +308,13 @@ ansible-playbook main.yml
    - Deploy PODs/Apps thru ArgoCD  
 
       - MetalLB
+      - Rook-Ceph
       - AWS Bedrock
       - PiHole
       - Prometheus and Grafana
       - OpenWeb UI
-      - `TODO - Plex Media Server`
+      - Plex Media Server
+      - N8N
       - `TODO - Minecraft Server`
 
 > **Note**: Applications are deployed declaratively through ArgoCD, ensuring GitOps best practices
@@ -346,7 +357,7 @@ ansible all -m reboot -b
 - [Kubernetes (k3s)](https://docs.k3s.io/architecture) architecture and deployment
 - [kubectl](https://kubernetes.io/docs/reference/kubectl/) for cluster management
 - [Helm](https://helm.sh) package management
-- [Longhorn](https://longhorn.io) distributed storage
+- [Rook-Ceph](https://rook.io/) distributed storage
 - [Prometheus](https://prometheus.io) & [Grafana](https://grafana.com) monitoring stack 
 - [ArgoCD](https://argo-cd.readthedocs.io/en/stable/) for GitOps
 - [Ansible](https://docs.ansible.com) for Infrastructure as Code
