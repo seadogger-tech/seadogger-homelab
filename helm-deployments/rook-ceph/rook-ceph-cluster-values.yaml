@@ -210,10 +210,10 @@ cephNFS:
       resources:
         limits:
           cpu: "1000m"
-          memory: "1Gi"
-        requests:
-          cpu: "500m"
           memory: "512Mi"
+        requests:
+          cpu: "250m"
+          memory: "256Mi"
     ganeshaConfig: |
       NFS_Core_Param {
           NFS_Protocols = 4;
