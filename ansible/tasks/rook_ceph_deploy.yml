@@ -147,6 +147,79 @@
     kubectl patch storageclass ceph-block -p '{"metadata": {"annotations": {"storageclass.kubernetes.io/is-default-class": "true"}}}'
   environment: "{{ env_vars }}"
 
+- name: Create Ganesha metadata pool
+  ansible.builtin.k8s:
+    kubeconfig: "{{ KUBECONFIG }}"
+    state: present
+    definition:
+      apiVersion: ceph.rook.io/v1
+      kind: CephBlockPool
+      metadata:
+        name: nfs-ganesha-pool
+        namespace: rook-ceph
+      spec:
+        name: .nfs
+        replicated:
+          size: 1
+          requireSafeReplicaSize: false
+
+- name: Create CephNFS server
+  ansible.builtin.k8s:
+    kubeconfig: "{{ KUBECONFIG }}"
+    state: present
+    definition:
+      apiVersion: ceph.rook.io/v1
+      kind: CephNFS
+      metadata:
+        name: nfs-ec
+        namespace: rook-ceph
+      spec:
+        rados:
+          pool: .nfs
+          namespace: nfs-ec
+        server:
+          active: 1
+
+- name: Automate RADOS export
+  ansible.builtin.shell: |
+    set -e
+    cat > /tmp/export-100 <<'EOF'
+    EXPORT {
+      Export_Id = 100;
+      Path = "/volumes/nfs/nfs-ec-6t/20af9899-03ef-44f0-afc2-31660f4ce54d";
+      Pseudo = "/ecfs";
+      Access_Type = RW;
+      Squash = None;
+      Protocols = 3,4;
+      Transports = TCP,UDP;
+      Security_Label = true;
+
+      FSAL {
+        Name = CEPH;
+        User_Id = "client.nfs.nfs-ec.1";
+        Secret_Access_Key = "AQB7YpdoZ0SsEhAAbL9xUDiUDaH4fleOk8WuFw==";
+        Filesystem = "ec-fs";
+      }
+      SecType = ["sys"];
+    }
+    EOF
+    TOOLBOX_POD=$(kubectl -n rook-ceph get pods -l app=rook-ceph-tools -o name | head -n 1)
+    kubectl -n rook-ceph cp /tmp/export-100 ${TOOLBOX_POD}:/tmp/export-100
+    kubectl -n rook-ceph exec ${TOOLBOX_POD} -- /bin/bash -c '
+      rados -p .nfs --namespace nfs-ec put export-100 /tmp/export-100
+      rados -p .nfs --namespace nfs-ec get conf-nfs.nfs-ec /tmp/conf-nfs.nfs-ec
+      if ! grep -q "%url \"rados://.nfs/nfs-ec/export-100\"" /tmp/conf-nfs.nfs-ec; then
+        printf "%s\n" "%url \"rados://.nfs/nfs-ec/export-100\"" >> /tmp/conf-nfs.nfs-ec
+        rados -p .nfs --namespace nfs-ec put conf-nfs.nfs-ec /tmp/conf-nfs.nfs-ec
+      fi
+    '
+  environment: "{{ env_vars }}"
+
+- name: Reload Ganesha pods
+  ansible.builtin.shell: |
+    kubectl -n rook-ceph rollout restart deployment rook-ceph-nfs-nfs-ec-a
+  environment: "{{ env_vars }}"
+
 - name: Create NFS StorageClass
   ansible.builtin.k8s:
     kubeconfig: "{{ KUBECONFIG }}"
@@ -189,15 +262,3 @@
           port: 2049
           protocol: TCP
           targetPort: 2049
-        - name: nfs-udp
-          port: 2049
-          protocol: UDP
-          targetPort: 2049
-        - name: rpcbind
-          port: 111
-          protocol: TCP
-          targetPort: 111
-        - name: rpcbind-udp
-          port: 111
-          protocol: UDP
-          targetPort: 111

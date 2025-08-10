@@ -1,0 +1,17 @@
+EXPORT {
+  Export_Id = 100;
+  Path = "/volumes/nfs/nfs-ec-6t/20af9899-03ef-44f0-afc2-31660f4ce54d";
+  Pseudo = "/ecfs";
+  Access_Type = RW;
+  Squash = None;
+  Protocols = 4;
+  Transports = TCP;
+  Security_Label = true;
+
+  FSAL {
+    Name = CEPH;
+    User_Id = "client.nfs.nfs-ec.1";
+    Secret_Access_Key = "AQB7YpdoZ0SsEhAAbL9xUDiUDaH4fleOk8WuFw==";
+    Filesystem = "ec-fs";
+  }
+}

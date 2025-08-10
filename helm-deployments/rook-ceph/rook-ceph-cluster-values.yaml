@@ -190,38 +190,6 @@ csi:
 monitoring:
   enabled: false
 
-cephNFS:
-  nfs-ganesha:
-    name: ec-nfs
-    namespace: rook-ceph
-    server:
-      active: 1
-      placement: {}
-      resources:
-        limits:
-          cpu: "1000m"
-          memory: "512Mi"
-        requests:
-          cpu: "250m"
-          memory: "256Mi"
-    ganeshaConfig: |
-      NFS_Core_Param {
-        Protocols = 4;
-      }
-      EXPORT {
-        Export_Id = 1;
-        Path = "/";
-        FSAL {
-          Name = CEPH;
-          Ceph_fs = "ec-fs";
-        }
-        Access_Type = RW;
-        Squash = None;
-        SecType = ["sys"];
-        Protocols = [4];
-      }
-
-
 dashboard:
   enabled: true
   ssl: false

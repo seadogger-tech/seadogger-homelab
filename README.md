@@ -65,6 +65,70 @@ For detailed, up-to-date information about the project's context, architecture, 
 All components are managed through ArgoCD, ensuring GitOps practices and consistent deployment states.
 
 
+## Architecture Decision Records (ADRs)
+
+### ADR-001: NFS Ganesha Configuration for Rook-Ceph v1.17.7
+
+- **Status:** Accepted
+- **Date:** 2025-08-10
+
+#### Context
+
+The project required a stable, persistent, and shareable storage solution for various applications within the Kubernetes cluster (e.g., Plex, N8N). The chosen storage backend is a Rook-Ceph cluster utilizing an erasure-coded CephFS filesystem for data efficiency. The goal was to expose this CephFS filesystem via an NFS share.
+
+Initial attempts to configure the NFS share using high-level abstractions provided by Rook-Ceph failed. Specifically, for Rook version `v1.17.7`, the following approaches were unsuccessful:
+1.  Defining the NFS server and export via the `cephNFS` block in the Helm `values.yaml` for the `rook-ceph-cluster` chart.
+2.  Creating a `CephNFSExport` Custom Resource Definition (CRD) to define the share.
+3.  Using the `ceph fs export create` command from within the `rook-ceph-tools` pod, which was not available in this version.
+
+These failures led to the conclusion that the standard, documented methods were not applicable to this specific, and somewhat dated, version of Rook-Ceph.
+
+#### Decision
+
+We adopted a low-level configuration approach that bypasses the high-level Rook APIs and interacts directly with the underlying RADOS (Reliable Autonomic Distributed Object Store) layer of Ceph. This method is the canonical way Ganesha itself is configured when using Ceph as a backend.
+
+The implemented solution consists of the following automated steps, codified within the `seadogger-homelab/ansible/tasks/rook_ceph_deploy.yml` playbook:
+
+1.  **Create a RADOS Object for the Export:** A RADOS object containing the full `EXPORT` block configuration is created and uploaded to the `.nfs` pool within the `nfs-ec` namespace. This object defines all parameters for the NFS share, including the `Export_Id`, the `Path` on the CephFS filesystem, the `Pseudo` path for the client, access controls (`Access_Type`, `Squash`), and the `FSAL` (File System Abstraction Layer) block which specifies the CephFS filesystem and the `cephx` user credentials.
+
+    ```yaml
+    # Snippet from the EXPORT object configuration
+    EXPORT {
+      Export_Id = 100;
+      Path = "/volumes/nfs/nfs-ec-6t/20af9899-03ef-44f0-afc2-31660f4ce54d";
+      Pseudo = "/ecfs";
+      Access_Type = RW;
+      # ... other parameters
+      FSAL {
+        Name = CEPH;
+        User_Id = "client.nfs.nfs-ec.1";
+        # ... other FSAL parameters
+      }
+    }
+    ```
+
+2.  **Update the Main Ganesha Config:** The main Ganesha configuration object (`conf-nfs.nfs-ec` in the same RADOS pool and namespace) is updated to include a `%url` directive that points to the export object created in the previous step.
+
+    ```
+    %url "rados://.nfs/nfs-ec/export-100"
+    ```
+
+3.  **Reload Ganesha Pods:** After the RADOS configuration is updated, the `nfs-nfs-ec-*` pods are reloaded to force them to read the new configuration from RADOS and apply the changes.
+
+This entire process is idempotent and fully automated via an Ansible task, ensuring the NFS share can be reliably provisioned and re-provisioned.
+
+#### Consequences
+
+-   **Positive:**
+    -   Provides a stable, working NFS share on the desired erasure-coded CephFS backend.
+    -   The solution is automated and idempotent, aligning with the project's GitOps principles.
+    -   The configuration is now explicitly managed in source control via the Ansible playbook.
+
+-   **Negative:**
+    -   The solution is highly specific to this version of Rook-Ceph and the underlying Ganesha implementation. It may break with future upgrades if the low-level configuration mechanism changes.
+    -   It requires a deeper understanding of Ceph and RADOS to troubleshoot, as the configuration is abstracted away from the more user-friendly Kubernetes CRDs.
+    -   The `Path` in the export configuration is tied to a specific CephFS subvolume path, which was discovered through manual introspection. This path is not easily discoverable.
+
 ## Prerequisites
 
 ### Hardware Requirements
