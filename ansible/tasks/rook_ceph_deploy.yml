@@ -222,14 +222,16 @@
   register: caps_check
   changed_when: false
   failed_when: caps_check.rc != 0
+  tags:
+    - rook_ceph
 
 - name: Automate RADOS export via ceph-mgr (idempotent)
   ansible.builtin.shell: |
     set -euo pipefail
-    mgr() { kubectl -n rook-ceph get pods -l app=rook-ceph-mgr -o name | head -n1; }
+    MGR_POD=$(kubectl -n rook-ceph get pods -l app=rook-ceph-mgr -o name | head -n1)
 
-    # Create export content *inside* the mgr pod (avoid cp tar races)
-    kubectl -n rook-ceph exec "$(mgr)" -- sh -lc 'cat > /tmp/export-100 <<EOF
+    # Create export content *inside* the mgr pod to avoid races
+    kubectl -n rook-ceph exec "$MGR_POD" -- sh -lc 'cat > /tmp/export-100 <<EOF
     EXPORT {
       Export_Id = 100;
       Path = "/volumes/nfs/nfs-ec-6t/20af9899-03ef-44f0-afc2-31660f4ce54d";
@@ -241,7 +243,7 @@
       Security_Label = true;
       FSAL {
         Name = CEPH;
-        User_Id = "{{ (nfs_user_id.stdout | default('client.nfs.nfs-ec.1')) | trim }}";
+        User_Id = "{{ (nfs_user_id.stdout | default("client.nfs.nfs-ec.1")) | trim }}";
         Secret_Access_Key = "{{ nfs_user_key.stdout | trim }}";
         Filesystem = "ec-fs";
       }
@@ -249,36 +251,42 @@
     }
     EOF'
 
-    # Put/append using rados from the mgr
-    kubectl -n rook-ceph exec "$(mgr)" -- \
+    # Put the export object into RADOS from the mgr pod
+    kubectl -n rook-ceph exec "$MGR_POD" -- \
       rados -p .nfs --namespace nfs-ec put export-100 /tmp/export-100
 
-    kubectl -n rook-ceph exec "$(mgr)" -- sh -lc '
+    # Idempotently ensure the main config includes the export URL
+    kubectl -n rook-ceph exec "$MGR_POD" -- sh -lc '
       set -e
-      if ! rados -p .nfs --namespace nfs-ec stat conf-nfs.nfs-ec >/dev/null 2>&1; then
-        : > /tmp/conf-nfs.nfs-ec
-        rados -p .nfs --namespace nfs-ec put conf-nfs.nfs-ec /tmp/conf-nfs.nfs-ec
-      fi
-      rados -p .nfs --namespace nfs-ec get conf-nfs.nfs-ec /tmp/conf-nfs.nfs-ec
-      grep -q "rados://.nfs/nfs-ec/export-100" /tmp/conf-nfs.nfs-ec || \
+      # Get current config, or create if non-existent
+      rados -p .nfs --namespace nfs-ec get conf-nfs.nfs-ec /tmp/conf-nfs.nfs-ec || : > /tmp/conf-nfs.nfs-ec
+
+      # Add the include URL if it is not already present
+      if ! grep -q "rados://.nfs/nfs-ec/export-100" /tmp/conf-nfs.nfs-ec; then
         printf "%s\n" "%url \"rados://.nfs/nfs-ec/export-100\"" >> /tmp/conf-nfs.nfs-ec
+      fi
+
+      # Write the updated config back to RADOS
       rados -p .nfs --namespace nfs-ec put conf-nfs.nfs-ec /tmp/conf-nfs.nfs-ec
     '
 
-    # Show final objects
-    kubectl -n rook-ceph exec "$(mgr)" -- \
+    # Show final objects for verification
+    kubectl -n rook-ceph exec "$MGR_POD" -- \
       rados -p .nfs --namespace nfs-ec ls | sort
   environment: "{{ env_vars }}"
   register: rados_export
   retries: 5
   delay: 6
   until: rados_export.rc == 0
+  tags:
+    - rook_ceph
 
-- name: Restart NFS deployment and wait
-  ansible.builtin.shell: |
-    kubectl -n rook-ceph rollout restart deploy/rook-ceph-nfs-nfs-ec-a
-    kubectl -n rook-ceph rollout status  deploy/rook-ceph-nfs-nfs-ec-a --timeout=300s
-  environment: "{{ env_vars }}"
+- name: Restart NFS Ganesha pods to apply configuration
+  ansible.builtin.command: >
+    kubectl delete pod -n rook-ceph -l app=rook-ceph-nfs,ceph_nfs=nfs-ec
+  changed_when: true
+  tags:
+    - rook_ceph
 
 - name: Create NFS StorageClass
   ansible.builtin.k8s:
