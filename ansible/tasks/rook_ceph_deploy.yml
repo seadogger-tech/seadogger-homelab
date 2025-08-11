@@ -1,4 +1,53 @@
 ---
+# Step -2: Handle macOS fork safety
+- name: Detect operating system
+  ansible.builtin.set_fact:
+    is_macos: "{{ ansible_facts['os_family'] == 'Darwin' }}"
+
+- name: Set Python fork safety for macOS
+  ansible.builtin.set_fact:
+    ansible_python_interpreter: "python3 -E"
+    env_vars:
+      OBJC_DISABLE_INITIALIZE_FORK_SAFETY: "YES"
+      KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+  when: is_macos | bool
+
+- name: Set Linux environment variables
+  ansible.builtin.set_fact:
+    env_vars:
+      KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+  when: not is_macos | bool
+
+# Step -1: Nuke the entire Rook-Ceph cluster to ensure a clean slate
+- name: Uninstall Rook-Ceph Cluster Helm chart
+  ansible.builtin.shell:
+    cmd: helm uninstall rook-ceph-cluster -n rook-ceph
+  environment: "{{ env_vars }}"
+  register: helm_uninstall_cluster_result
+  changed_when: "'release \"rook-ceph-cluster\" uninstalled' in helm_uninstall_cluster_result.stdout"
+  ignore_errors: true
+
+- name: Uninstall Rook-Ceph Operator Helm chart
+  ansible.builtin.shell:
+    cmd: helm uninstall rook-ceph -n rook-ceph
+  environment: "{{ env_vars }}"
+  register: helm_uninstall_operator_result
+  changed_when: "'release \"rook-ceph\" uninstalled' in helm_uninstall_operator_result.stdout"
+  ignore_errors: true
+
+- name: Force delete all resources in rook-ceph namespace
+  ansible.builtin.shell:
+    cmd: kubectl delete all --all -n rook-ceph --force --grace-period=0
+  environment: "{{ env_vars }}"
+  changed_when: true
+  ignore_errors: true
+
+- name: Delete rook-ceph namespace
+  ansible.builtin.shell:
+    cmd: kubectl delete namespace rook-ceph --ignore-not-found --force --grace-period=0
+  environment: "{{ env_vars }}"
+  changed_when: true
+
 # Step 0: Wipe and validate device partitions (CONDITIONAL)
 - name: Wipe Ceph device partitions
   ansible.builtin.shell: |
@@ -32,25 +81,6 @@
 - name: Set KUBECONFIG global
   ansible.builtin.set_fact:
     KUBECONFIG: /etc/rancher/k3s/k3s.yaml
-
-# Step 2: Handle macOS fork safety
-- name: Detect operating system
-  ansible.builtin.set_fact:
-    is_macos: "{{ ansible_facts['os_family'] == 'Darwin' }}"
-
-- name: Set Python fork safety for macOS
-  ansible.builtin.set_fact:
-    ansible_python_interpreter: "python3 -E"
-    env_vars:
-      OBJC_DISABLE_INITIALIZE_FORK_SAFETY: "YES"
-      KUBECONFIG: /etc/rancher/k3s/k3s.yaml
-  when: is_macos | bool
-
-- name: Set Linux environment variables
-  ansible.builtin.set_fact:
-    env_vars:
-      KUBECONFIG: /etc/rancher/k3s/k3s.yaml
-  when: not is_macos | bool
 
 # Step 3: Add Helm repo using shell to avoid fork issues
 - name: Add Rook Helm repo
@@ -109,18 +139,26 @@
   delay: 10
   until: mgr_ready.rc == 0
 
-- name: Wait for Ceph health OK or WARN and pools exist
+- name: Wait until required CephFS pools exist
   ansible.builtin.shell: |
     set -e
     kubectl -n rook-ceph exec "$(kubectl -n rook-ceph get pods -l app=rook-ceph-mgr -o name | head -n1)" -- \
-      sh -lc 'ceph health | grep -Eq "HEALTH_OK|HEALTH_WARN" \
-      && ceph osd pool ls | grep -qw ec-fs-metadata \
-      && ceph osd pool ls | grep -qw ec-fs-data'
-  environment: "{{ env_vars }}"
-  register: ceph_health_check
+      sh -lc 'ceph osd pool ls | grep -qw ec-fs-metadata && ceph osd pool ls | grep -qw ec-fs-data'
+  register: pools_exist
+  retries: 60
+  delay: 10
+  until: pools_exist.rc == 0
+  changed_when: false
+
+- name: Wait for Ceph health to be OK or WARN
+  ansible.builtin.shell: |
+    kubectl -n rook-ceph exec "$(kubectl -n rook-ceph get pods -l app=rook-ceph-mgr -o name | head -n1)" -- \
+      sh -lc 'ceph health | grep -Eq "HEALTH_OK|HEALTH_WARN"'
+  register: health_ok_or_warn
   retries: 60
   delay: 30
-  until: ceph_health_check.rc == 0
+  until: health_ok_or_warn.rc == 0
+  changed_when: false
 
 - name: Create CephFS Erasure Coded StorageClass
   ansible.builtin.k8s:
@@ -190,38 +228,72 @@
         server:
           active: 1
 
-- name: Discover NFS client secret for nfs-ec
+- name: Set NFS export path fact
+  ansible.builtin.set_fact:
+    nfs_export_path: "/volumes/nfs/nfs-ec-6t/20af9899-03ef-44f0-afc2-31660f4ce54d"
+  tags:
+    - rook_ceph
+
+- name: Ensure .nfs pool has correct replica size
+  ansible.builtin.shell: |
+    set -euo pipefail
+    MGR_POD=$(kubectl -n rook-ceph get pods -l app=rook-ceph-mgr -o name | head -n1)
+    kubectl -n rook-ceph exec "$MGR_POD" -- bash -lc '
+      cur=$(ceph osd pool get .nfs size 2>/dev/null | awk "/size:/ {print \$2}" || echo "")
+      [ "$cur" = "3" ] || ceph osd pool set .nfs size 3
+      curmin=$(ceph osd pool get .nfs min_size 2>/dev/null | awk "/min_size:/ {print \$2}" || echo "")
+      [ "$curmin" = "2" ] || ceph osd pool set .nfs min_size 2
+    '
+  changed_when: false
+  tags:
+    - rook_ceph
+
+- name: Discover NFS client secret for nfs-ec (with retry)
   ansible.builtin.shell: |
     kubectl -n rook-ceph get secret \
       -l app=rook-ceph-nfs,ceph_nfs=nfs-ec \
       -o jsonpath='{.items[0].metadata.name}'
   register: nfs_secret_name
   changed_when: false
+  failed_when: nfs_secret_name.rc != 0 or nfs_secret_name.stdout == ""
+  retries: 20
+  delay: 6
+  tags:
+    - rook_ceph
 
 - name: Read userID from NFS client secret
   ansible.builtin.shell: |
     kubectl -n rook-ceph get secret "{{ nfs_secret_name.stdout }}" -o jsonpath='{.data.userID}' | base64 --decode
   register: nfs_user_id
   changed_when: false
-  failed_when: false
+  failed_when: nfs_user_id.rc != 0 or nfs_user_id.stdout == ""
+  no_log: true
+  tags:
+    - rook_ceph
 
 - name: Read userKey/key from NFS client secret
   ansible.builtin.shell: |
+    set -euo pipefail
     kubectl -n rook-ceph get secret "{{ nfs_secret_name.stdout }}" -o jsonpath='{.data.userKey}' 2>/dev/null \
       | base64 --decode || \
     kubectl -n rook-ceph get secret "{{ nfs_secret_name.stdout }}" -o jsonpath='{.data.key}' \
       | base64 --decode
   register: nfs_user_key
   changed_when: false
+  failed_when: nfs_user_key.rc != 0 or nfs_user_key.stdout == ""
+  no_log: true
+  tags:
+    - rook_ceph
 
-- name: Verify cephx caps include the export path
+- name: Verify cephx caps include the export path and filesystem
   ansible.builtin.shell: |
     kubectl -n rook-ceph exec "$(kubectl -n rook-ceph get pods -l app=rook-ceph-mgr -o name | head -n1)" -- \
-      sh -lc 'ceph auth get "{{ (nfs_user_id.stdout | default("client.nfs.nfs-ec.1")) | trim }}"' | grep -F 'mds' | grep -F 'path=/volumes/nfs/nfs-ec-6t/20af9899-03ef-44f0-afc2-31660f4ce54d'
+      sh -lc 'ceph auth get "{{ nfs_user_id.stdout | trim }}"'
   environment: "{{ env_vars }}"
-  register: caps_check
+  register: cephx_user_caps
   changed_when: false
-  failed_when: caps_check.rc != 0
+  failed_when: cephx_user_caps.rc != 0 or ('path=' ~ nfs_export_path) not in cephx_user_caps.stdout or 'fs=ec-fs' not in cephx_user_caps.stdout
+  no_log: true
   tags:
     - rook_ceph
 
@@ -241,13 +313,14 @@
       Protocols = 4;
       Transports = TCP;
       Security_Label = true;
+      SecType = ["sys"];
+
       FSAL {
         Name = CEPH;
-        User_Id = "{{ (nfs_user_id.stdout | default("client.nfs.nfs-ec.1")) | trim }}";
+        User_Id = "{{ nfs_user_id.stdout | trim }}";
         Secret_Access_Key = "{{ nfs_user_key.stdout | trim }}";
-        Filesystem = "ec-fs";
+        fs_name = "ec-fs";
       }
-      SecType = ["sys"];
     }
     EOF'
 
@@ -278,6 +351,7 @@
   retries: 5
   delay: 6
   until: rados_export.rc == 0
+  no_log: true
   tags:
     - rook_ceph
 
@@ -285,6 +359,26 @@
   ansible.builtin.command: >
     kubectl delete pod -n rook-ceph -l app=rook-ceph-nfs,ceph_nfs=nfs-ec
   changed_when: true
+  tags:
+    - rook_ceph
+
+- name: Wait for NFS Ganesha deployment to be ready
+  ansible.builtin.shell: |
+    kubectl -n rook-ceph wait --for=condition=Available deployment/rook-ceph-nfs-nfs-ec-a --timeout=300s
+  environment: "{{ env_vars }}"
+  changed_when: false
+  tags:
+    - rook_ceph
+
+- name: Verify Ganesha loaded export-100 from RADOS
+  ansible.builtin.shell: |
+    kubectl -n rook-ceph logs deploy/rook-ceph-nfs-nfs-ec-a --since=5m \
+    | grep -E 'Export .* created .* pseudo \(/ecfs\)'
+  register: ganesha_loaded
+  retries: 12
+  delay: 5
+  until: ganesha_loaded.rc == 0
+  changed_when: false
   tags:
     - rook_ceph
 
