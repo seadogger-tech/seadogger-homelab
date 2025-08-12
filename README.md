@@ -69,7 +69,7 @@ All components are managed through ArgoCD, ensuring GitOps practices and consist
 
 ### ADR-001: NFS Ganesha Configuration for Rook-Ceph v1.17.7
 
-- **Status:** Accepted
+- **Status:** Implemented & Verified
 - **Date:** 2025-08-10
 
 #### Context
@@ -81,53 +81,79 @@ Initial attempts to configure the NFS share using high-level abstractions provid
 2.  Creating a `CephNFSExport` Custom Resource Definition (CRD) to define the share.
 3.  Using the `ceph fs export create` command from within the `rook-ceph-tools` pod, which was not available in this version.
 
-These failures led to the conclusion that the standard, documented methods were not applicable to this specific, and somewhat dated, version of Rook-Ceph.
+These failures led to the conclusion that the standard, documented methods were not applicable to this specific, and somewhat dated, version of Rook-Ceph. The deployment consistently failed during the Ansible task designed to verify the NFS Ganesha server startup, with the `rook-ceph-nfs` pod entering a `CrashLoopBackOff` state.
 
 #### Decision
 
 We adopted a low-level configuration approach that bypasses the high-level Rook APIs and interacts directly with the underlying RADOS (Reliable Autonomic Distributed Object Store) layer of Ceph. This method is the canonical way Ganesha itself is configured when using Ceph as a backend.
 
-The implemented solution consists of the following automated steps, codified within the `seadogger-homelab/ansible/tasks/rook_ceph_deploy.yml` playbook:
+The implemented solution, codified within the `seadogger-homelab/ansible/tasks/rook_ceph_deploy.yml` playbook, involved several key fixes:
 
-1.  **Create a RADOS Object for the Export:** A RADOS object containing the full `EXPORT` block configuration is created and uploaded to the `.nfs` pool within the `nfs-ec` namespace. This object defines all parameters for the NFS share, including the `Export_Id`, the `Path` on the CephFS filesystem, the `Pseudo` path for the client, access controls (`Access_Type`, `Squash`), and the `FSAL` (File System Abstraction Layer) block which specifies the CephFS filesystem and the `cephx` user credentials.
+1.  **Correct `cephx` User ID Format:** The primary issue causing the `CrashLoopBackOff` was an authentication failure within Ganesha. The `User_Id` in the `FSAL` block of the RADOS export configuration was incorrectly specified as `"client.nfs.nfs-ec"`. Ganesha automatically prepends the `client.` prefix, resulting in a malformed user ID (`client.client.nfs.nfs-ec`) and a `Permission denied` error. The fix was to provide the `User_Id` without the prefix.
 
     ```yaml
-    # Snippet from the EXPORT object configuration
+    # Snippet from the corrected EXPORT object configuration
     EXPORT {
-      Export_Id = 100;
-      Path = "/volumes/nfs/nfs-ec-6t/20af9899-03ef-44f0-afc2-31660f4ce54d";
-      Pseudo = "/ecfs";
-      Access_Type = RW;
       # ... other parameters
       FSAL {
         Name = CEPH;
-        User_Id = "client.nfs.nfs-ec.1";
-        # ... other FSAL parameters
+        User_Id = "nfs.nfs-ec"; # Corrected: Removed "client." prefix
+        Secret_Access_Key = "{{ nfs_user_key }}";
+        Filesystem = "ec-fs";
       }
     }
     ```
 
-2.  **Update the Main Ganesha Config:** The main Ganesha configuration object (`conf-nfs.nfs-ec` in the same RADOS pool and namespace) is updated to include a `%url` directive that points to the export object created in the previous step.
+2.  **Robust Verification Task:** The Ansible task to verify the Ganesha export was made more resilient. It was modified to use `/bin/bash` explicitly to avoid `pipefail` errors on certain shells and the log-checking regex was improved for more reliable detection of the successful export creation.
+
+3.  **Playbook Cleanup:** A redundant `Create Ganesha metadata pool` task was removed from the playbook. Rook automatically creates the necessary `.nfs` pool, making this task unnecessary and a potential source of conflict.
+
+4.  **RADOS Configuration Update:** The core logic remains the same: create a RADOS object for the export configuration and update the main Ganesha config object (`conf-nfs.nfs-ec`) to point to it using a `%url` directive.
 
     ```
     %url "rados://.nfs/nfs-ec/export-100"
     ```
 
-3.  **Reload Ganesha Pods:** After the RADOS configuration is updated, the `nfs-nfs-ec-*` pods are reloaded to force them to read the new configuration from RADOS and apply the changes.
+5.  **Pod Reload:** After the RADOS configuration is updated, the `nfs-nfs-ec-*` pods are reloaded to force them to read the new configuration from RADOS and apply the changes.
 
-This entire process is idempotent and fully automated via an Ansible task, ensuring the NFS share can be reliably provisioned and re-provisioned.
+This entire process is now idempotent and fully automated via the Ansible playbook, ensuring the NFS share can be reliably provisioned.
 
 #### Consequences
 
 -   **Positive:**
-    -   Provides a stable, working NFS share on the desired erasure-coded CephFS backend.
+    -   Provides a stable, working NFS share on the desired erasure-coded CephFS backend. The Ansible playbook now completes successfully.
     -   The solution is automated and idempotent, aligning with the project's GitOps principles.
-    -   The configuration is now explicitly managed in source control via the Ansible playbook.
+    -   The configuration and the logic behind the fix are now explicitly documented and managed in source control.
 
 -   **Negative:**
     -   The solution is highly specific to this version of Rook-Ceph and the underlying Ganesha implementation. It may break with future upgrades if the low-level configuration mechanism changes.
     -   It requires a deeper understanding of Ceph and RADOS to troubleshoot, as the configuration is abstracted away from the more user-friendly Kubernetes CRDs.
-    -   The `Path` in the export configuration is tied to a specific CephFS subvolume path, which was discovered through manual introspection. This path is not easily discoverable.
+
+-   **Next Steps:**
+    -   The NFS deployment is now fully functional.
+
+### ADR-002: MetalLB Webhook and ArgoCD Configuration
+
+- **Status:** Implemented & Verified
+- **Date:** 2025-08-11
+
+#### Context
+
+Following the successful deployment of the Rook-Ceph NFS server, the `mount` command from a client failed with a timeout. Investigation revealed that the `rook-nfs-loadbalancer` service had a `<pending>` external IP, indicating that MetalLB was failing to assign one.
+
+#### Decision
+
+The investigation traced the failure to the `metallb-config` ArgoCD application, which was failing to sync because a required `metallb-webhook-service` was not found. The root cause was an incorrect configuration in the main `metallb` ArgoCD application within `seadogger-homelab/ansible/tasks/metallb_deploy.yml`. It was using a `valueFiles` entry that pointed to a raw manifest instead of a Helm values file, which prevented the main MetalLB chart from deploying all its required components.
+
+The fix involved removing the incorrect `valueFiles` override from the `metallb` ArgoCD application definition. This allowed the main MetalLB chart to deploy correctly, including the essential webhook service. Once the webhook was running, the `metallb-config` application could sync successfully, create the `IPAddressPool`, and assign the external IP to the NFS service.
+
+#### Consequences
+
+-   **Positive:**
+    -   MetalLB now deploys correctly and reliably assigns IP addresses to LoadBalancer services.
+    -   The NFS share is now accessible from outside the cluster.
+-   **Negative:**
+    -   None. The change corrected a fundamental misconfiguration.
 
 ## Prerequisites
 

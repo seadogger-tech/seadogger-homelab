@@ -51,6 +51,10 @@
   vars_files:
     - config.yml
   tasks:
+    - name: Deploy Rook-Ceph - Part 1 (Core Components)
+      import_tasks: tasks/rook_ceph_deploy_part1.yml
+      when: enable_rook_ceph_part1 | default(false)
+
     - name: Deploy ArgoCD
       import_tasks: tasks/argocd_deploy.yml
       when: enable_argocd | default(true)
@@ -63,6 +67,10 @@
       import_tasks: tasks/argocd_svc_metallb_deploy.yml
       when: enable_argocd_svc | default(true)
 
+    - name: Deploy Rook-Ceph - Part 2 (NFS Server)
+      import_tasks: tasks/rook_ceph_deploy_part2.yml
+      when: enable_rook_ceph_part2 | default(false)
+
     - name: Deploy Bedrock Gateway
       import_tasks: tasks/bedrock_gateway_deploy.yml
       when: enable_bedrock | default(true)
@@ -70,10 +78,6 @@
     - name: Deploy PiHole
       import_tasks: tasks/pihole_deploy.yml
       when: enable_pihole | default(true)
-
-    - name: Deploy Rook-Ceph
-      import_tasks: tasks/rook_ceph_deploy.yml
-      when: enable_rook_ceph | default(false)
 
     - name: Deploy Prometheus
       import_tasks: tasks/prometheus_deploy.yml
@@ -90,4 +94,3 @@
     - name: Deploy n8n
       import_tasks: tasks/n8n-deploy.yml
       when: enable_n8n | default(true)
-

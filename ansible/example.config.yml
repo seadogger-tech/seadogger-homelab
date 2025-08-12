@@ -15,8 +15,16 @@ enable_wipe_k3s_cluster: false
 enable_k3s_control_plane: false
 enable_k3s_workers: false
 
-# This one is a pain in the butt to deploy.   Note this is not an Argo deployed configuration so it will not show up there.
-enable_rook_ceph: false
+# Rook-Ceph Deployment Configuration
+#
+# IMPORTANT DEPLOYMENT ORDER:
+# 1. enable_rook_ceph_part1 MUST be true to deploy the core storage components.
+# 2. enable_argocd and enable_metallb MUST be true and run successfully after Part 1.
+# 3. enable_rook_ceph_part2 can then be run to deploy the NFS server, which depends on MetalLB.
+#
+# For a complete initial deployment, all three (part1, argocd/metallb, part2) must be run in order.
+enable_rook_ceph_part1: false
+enable_rook_ceph_part2: false
 wipe_ceph_disks_on_install: false # DANGER: Set to true ONLY for a cold start on new disks. This is DESTRUCTIVE.
 
 # ArgoCD deployment to k3s 

@@ -1,0 +1,294 @@
+---
+- name: Create CephNFS server
+  ansible.builtin.k8s:
+    kubeconfig: "{{ KUBECONFIG }}"
+    state: present
+    definition:
+      apiVersion: ceph.rook.io/v1
+      kind: CephNFS
+      metadata:
+        name: nfs-ec
+        namespace: rook-ceph
+      spec:
+        rados:
+          pool: .nfs
+          namespace: nfs-ec
+        server:
+          active: 1
+
+- name: Wait for NFS Ganesha deployment to be ready
+  ansible.builtin.shell: |
+    kubectl -n rook-ceph wait --for=condition=Available deployment/rook-ceph-nfs-nfs-ec-a --timeout=300s
+  environment: "{{ env_vars }}"
+  changed_when: false
+  tags:
+    - rook_ceph
+
+- name: Ensure CephFS subvolumegroup nfs exists
+  ansible.builtin.shell:
+    cmd: |
+      set -euo pipefail
+      P=$(kubectl -n rook-ceph get pods -l app=rook-ceph-tools -o name | head -n1)
+      # create if missing; ignore EEXIST
+      kubectl -n rook-ceph exec "$P" -- sh -lc 'ceph fs subvolumegroup create ec-fs nfs 2>/dev/null || true'
+    executable: /bin/bash
+  changed_when: false
+
+- name: Ensure CephFS subvolume nfs-ec-6t exists in group nfs
+  ansible.builtin.shell:
+    cmd: |
+      set -euo pipefail
+      P=$(kubectl -n rook-ceph get pods -l app=rook-ceph-tools -o name | head -n1)
+      kubectl -n rook-ceph exec "$P" -- sh -lc '
+        ceph fs subvolume info ec-fs nfs-ec-6t --group_name nfs >/dev/null 2>&1 || \
+        ceph fs subvolume create ec-fs nfs-ec-6t --group_name nfs
+      '
+    executable: /bin/bash
+  changed_when: false
+  retries: 5
+  delay: 2
+
+- name: Resolve CephFS subvolume path from MDS (authoritative)
+  ansible.builtin.shell:
+    cmd: |
+      set -euo pipefail
+      P=$(kubectl -n rook-ceph get pods -l app=rook-ceph-tools -o name | head -n1)
+      kubectl -n rook-ceph exec "$P" -- \
+        ceph fs subvolume getpath ec-fs nfs-ec-6t --group_name nfs
+    executable: /bin/bash
+  register: subvol_path
+  retries: 5
+  delay: 2
+  until: subvol_path.rc == 0 and (subvol_path.stdout | trim) != ""
+
+- name: Use resolved CephFS path for export
+  ansible.builtin.set_fact:
+    nfs_export_path: "{{ subvol_path.stdout | trim }}"
+
+- name: Ensure .nfs pool has correct replica size
+  ansible.builtin.shell:
+    cmd: |
+      set -euo pipefail
+      TOOLS_POD=$(kubectl -n rook-ceph get pods -l app=rook-ceph-tools -o name | head -n1)
+      kubectl -n rook-ceph exec "$TOOLS_POD" -- bash -lc '
+        cur=$(ceph osd pool get .nfs size 2>/dev/null | awk "/size:/ {print \$2}" || echo "")
+        [ "$cur" = "3" ] || ceph osd pool set .nfs size 3
+        curmin=$(ceph osd pool get .nfs min_size 2>/dev/null | awk "/min_size:/ {print \$2}" || echo "")
+        [ "$curmin" = "2" ] || ceph osd pool set .nfs min_size 2
+      '
+    executable: /bin/bash
+  changed_when: false
+  tags:
+    - rook_ceph
+
+- name: Create/ensure cephx user for NFS export with full CephFS caps
+  ansible.builtin.shell:
+    cmd: |
+      set -euo pipefail
+      P=$(kubectl -n rook-ceph get pods -l app=rook-ceph-tools -o name | head -n1)
+      kubectl -n rook-ceph exec "$P" -- \
+        ceph auth get-or-create client.nfs.nfs-ec \
+          mon 'allow r' \
+          mgr 'allow r' \
+          mds "allow rw fsname=ec-fs" \
+          osd "allow rw pool=.nfs namespace=nfs-ec" \
+          osd "allow rw tag cephfs data=ec-fs" \
+          osd "allow rw tag cephfs metadata=ec-fs"
+    executable: /bin/bash
+  changed_when: false
+
+- name: Fetch raw cephx key for Ganesha (no brackets)
+  ansible.builtin.shell:
+    cmd: |
+      set -euo pipefail
+      P=$(kubectl -n rook-ceph get pods -l app=rook-ceph-tools -o name | head -n1)
+      kubectl -n rook-ceph exec "$P" -- ceph auth get-key client.nfs.nfs-ec
+    executable: /bin/bash
+  register: nfs_key_raw
+  changed_when: false
+
+- name: Set cephx and FSAL ids + clean key
+  ansible.builtin.set_fact:
+    cephx_user_id: "client.nfs.nfs-ec"
+    fsal_user_id: "nfs.nfs-ec"
+    nfs_user_key: "{{ nfs_key_raw.stdout | trim }}"
+  tags:
+    - rook_ceph
+
+- name: Automate RADOS export via ceph-tools (idempotent)
+  ansible.builtin.shell:
+    cmd: |
+      set -euo pipefail
+      TOOLS_POD=$(kubectl -n rook-ceph get pods -l app=rook-ceph-tools -o name | head -n1)
+
+      # Create export content *inside* the tools pod to avoid races
+      kubectl -n rook-ceph exec "$TOOLS_POD" -- sh -lc "cat > /tmp/export-100 <<EOF
+      EXPORT {
+        Export_Id = 100;
+        Path = \"{{ nfs_export_path }}\";
+        Pseudo = \"/ecfs\";
+        Access_Type = RW;
+        Squash = None;
+        Protocols = 4;
+        Transports = TCP;
+        SecType = sys;
+        FSAL {
+          Name = CEPH;
+          User_Id = \"{{ fsal_user_id }}\";
+          Secret_Access_Key = \"{{ nfs_user_key }}\";
+          Filesystem = \"ec-fs\";
+        }
+      }
+      EOF"
+
+      # Put the export object into RADOS from the tools pod
+      kubectl -n rook-ceph exec "$TOOLS_POD" -- \
+        rados -p .nfs --namespace nfs-ec put export-100 /tmp/export-100
+
+      # Idempotently ensure the main config includes the export URL
+      kubectl -n rook-ceph exec "$TOOLS_POD" -- sh -lc '
+        set -e
+        # Get current config, or create if non-existent
+        rados -p .nfs --namespace nfs-ec get conf-nfs.nfs-ec /tmp/conf-nfs.nfs-ec || : > /tmp/conf-nfs.nfs-ec
+
+        # Add the include URL if it is not already present
+        if ! grep -q "rados://.nfs/nfs-ec/export-100" /tmp/conf-nfs.nfs-ec; then
+          printf "%s\n" "%url \"rados://.nfs/nfs-ec/export-100\"" >> /tmp/conf-nfs.nfs-ec
+        fi
+
+        # Write the updated config back to RADOS
+        rados -p .nfs --namespace nfs-ec put conf-nfs.nfs-ec /tmp/conf-nfs.nfs-ec
+      '
+
+      # Show final objects for verification
+      kubectl -n rook-ceph exec "$TOOLS_POD" -- \
+        rados -p .nfs --namespace nfs-ec ls | sort
+    executable: /bin/bash
+  environment: "{{ env_vars }}"
+  register: rados_export
+  retries: 5
+  delay: 6
+  until: rados_export.rc == 0
+  tags:
+    - rook_ceph
+
+- name: Verify cephx caps include the export path and filesystem
+  ansible.builtin.shell:
+    cmd: |
+      kubectl -n rook-ceph exec "$(kubectl -n rook-ceph get pods -l app=rook-ceph-tools -o name | head -n1)" -- \
+        sh -lc 'ceph auth get "{{ cephx_user_id }}"'
+    executable: /bin/bash
+  environment: "{{ env_vars }}"
+  register: cephx_user_caps
+  changed_when: false
+  failed_when: cephx_user_caps.rc != 0 or 'fsname=ec-fs' not in cephx_user_caps.stdout
+  tags:
+    - rook_ceph
+
+- name: Inject NFSv4 macOS compatibility (enable v4.0) into RADOS (fixed heredoc)
+  ansible.builtin.shell:
+    cmd: |
+      set -euo pipefail
+      TOOLS_POD=$(kubectl -n rook-ceph get pods -l app=rook-ceph-tools -o name | head -n1)
+      # Write correct multi-line content (no backslashes)
+      kubectl -n rook-ceph exec "$TOOLS_POD" -- sh -lc 'cat > /tmp/nfsv4-macos.conf << "EOF"
+      NFSV4 {
+        Minor_Versions = 0,1;
+      }
+      EOF'
+      # Overwrite the object
+      kubectl -n rook-ceph exec "$TOOLS_POD" -- \
+        rados -p .nfs --namespace nfs-ec put nfsv4-macos /tmp/nfsv4-macos.conf
+    executable: /bin/bash
+  changed_when: false
+
+- name: Ensure conf-nfs.nfs-ec includes nfsv4-macos BEFORE export include
+  ansible.builtin.shell:
+    cmd: |
+      set -euo pipefail
+      TOOLS_POD=$(kubectl -n rook-ceph get pods -l app=rook-ceph-tools -o name | head -n1)
+      kubectl -n rook-ceph exec "$TOOLS_POD" -- sh -lc '
+        rados -p .nfs --namespace nfs-ec get conf-nfs.nfs-ec /tmp/conf || : > /tmp/conf
+        if ! grep -q "rados://.nfs/nfs-ec/nfsv4-macos" /tmp/conf; then
+          # Prepend so global settings load before exports
+          printf "%s\n%s\n" "%url \"rados://.nfs/nfs-ec/nfsv4-macos\"" "$(cat /tmp/conf)" > /tmp/conf
+        fi
+        rados -p .nfs --namespace nfs-ec put conf-nfs.nfs-ec /tmp/conf
+      '
+    executable: /bin/bash
+  changed_when: false
+
+- name: Restart NFS Ganesha pods to apply configuration
+  ansible.builtin.command: >
+    kubectl delete pod -n rook-ceph -l app=rook-ceph-nfs,ceph_nfs=nfs-ec
+  changed_when: true
+  tags:
+    - rook_ceph
+
+- name: Wait for NFS Ganesha deployment to be ready after restart
+  ansible.builtin.shell: |
+    kubectl -n rook-ceph wait --for=condition=Available deployment/rook-ceph-nfs-nfs-ec-a --timeout=300s
+  environment: "{{ env_vars }}"
+  changed_when: false
+  tags:
+    - rook_ceph
+
+- name: Verify Ganesha loaded export-100 from RADOS
+  ansible.builtin.shell:
+    cmd: |
+      set -Eeuo pipefail
+      POD=$(kubectl -n rook-ceph get pods -l app=rook-ceph-nfs,ceph_nfs=nfs-ec -o jsonpath='{.items[*].metadata.name}' | awk '{print $1}')
+      [ -n "$POD" ]
+      kubectl -n rook-ceph logs "$POD" -c nfs-ganesha --since=15m \
+        | grep -E -i 'Export[^0-9]*100|Export .* created .* pseudo \(/ecfs\)|export.*pseudo.*/ecfs'
+    executable: /bin/bash
+  register: ganesha_loaded
+  retries: 12
+  delay: 5
+  until: ganesha_loaded.rc == 0
+  changed_when: false
+  tags:
+    - rook_ceph
+
+- name: Create NFS StorageClass
+  ansible.builtin.k8s:
+    kubeconfig: "{{ KUBECONFIG }}"
+    state: present
+    definition:
+      apiVersion: storage.k8s.io/v1
+      kind: StorageClass
+      metadata:
+        name: rook-ceph-nfs
+      provisioner: rook-ceph.nfs.csi.ceph.com
+      reclaimPolicy: Retain
+      parameters:
+        server: "rook-nfs-loadbalancer.rook-ceph.svc.cluster.local"
+        share: "/ecfs"
+        clusterID: rook-ceph
+        csi.storage.k8s.io/provisioner-secret-name: rook-csi-nfs-provisioner
+        csi.storage.k8s.io/provisioner-secret-namespace: rook-ceph
+        csi.storage.k8s.io/node-stage-secret-name: rook-csi-nfs-node
+        csi.storage.k8s.io/node-stage-secret-namespace: rook-ceph
+
+- name: Create NFS LoadBalancer Service
+  ansible.builtin.k8s:
+    kubeconfig: "{{ KUBECONFIG }}"
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: rook-nfs-loadbalancer
+        namespace: rook-ceph
+        annotations:
+          metallb.universe.tf/loadBalancerIPs: "192.168.1.254"
+      spec:
+        type: LoadBalancer
+        selector:
+          app: rook-ceph-nfs
+          ceph_nfs: nfs-ec
+        ports:
+        - name: nfs
+          port: 2049
+          protocol: TCP
+          targetPort: 2049
