@@ -70,9 +70,6 @@
           repoURL: https://metallb.github.io/metallb
           chart: metallb
           targetRevision: "*"
-          helm:
-            valueFiles:
-              - https://raw.githubusercontent.com/seadogger/seadogger-homelab/master/helm-deployments/metallb/metallb-values.yaml
         destination:
           server: https://kubernetes.default.svc
           namespace: metallb-system

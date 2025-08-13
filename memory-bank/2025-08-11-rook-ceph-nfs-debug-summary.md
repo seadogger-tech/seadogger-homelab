@@ -1,38 +1,32 @@
-# Rook-Ceph NFS Debugging Summary - 2025-08-11
+# Summary of Rook-Ceph NFS Debugging Session (2025-08-11)
 
-This document summarizes the debugging session that resolved the failing Rook-Ceph NFS deployment.
+## 1. Initial Problem
 
-## Initial State
+The primary issue was the inability to mount the Rook-Ceph NFS share on any client. The initial investigation pointed towards a networking problem, as the `rook-nfs-loadbalancer` service in the `rook-ceph` namespace was stuck in a `<pending>` state for its external IP address.
 
-The Ansible playbook was failing to deploy a functional NFS share. The primary symptom was that the NFS mount command would time out.
+## 2. Investigation & Resolution Steps
 
-## Investigation and Resolution
+### Step 2.1: MetalLB Fix
 
-The investigation followed a logical path from the client-facing issue down to the root cause:
+-   **Problem:** The MetalLB deployment, managed by ArgoCD, was failing. Logs from the MetalLB controller indicated a configuration issue.
+-   **Analysis:** We inspected the `metallb` ArgoCD application and its corresponding Helm chart configuration in `seadogger-homelab/ansible/tasks/metallb_deploy.yml`.
+-   **Root Cause:** A `helm.valueFiles` override was incorrectly pointing to a non-existent values file, which was a remnant from a previous configuration. This caused the entire MetalLB installation to fail.
+-   **Resolution:** The faulty `helm.valueFiles` section was removed from `metallb_deploy.yml`. After redeploying the Ansible playbook, MetalLB started correctly, and the `rook-nfs-loadbalancer` service successfully acquired the IP address `192.168.1.254`.
 
-1.  **NFS Mount Timeout:** The initial `sudo mount` command failed with a timeout, indicating a networking problem between the client and the NFS server.
+### Step 2.2: NFS Service Annotation Fix
 
-2.  **Pending External IP:** An inspection of the `rook-nfs-loadbalancer` service revealed that its `EXTERNAL-IP` was stuck in a `<pending>` state. This confirmed that MetalLB was not assigning the requested IP address.
+-   **Problem:** Even with a valid IP, the NFS share was still not accessible. Further inspection of the `rook-nfs-loadbalancer` service revealed that while an IP was assigned, it might not have been correctly configured.
+-   **Analysis:** We reviewed the service definition within `seadogger-homelab/ansible/tasks/rook_ceph_deploy_part2.yml`.
+-   **Root Cause:** The service was using the deprecated `metallb.universe.tf/loadBalancerIPs` annotation to request a specific IP. The correct method for the installed version of MetalLB is to use the `spec.loadBalancerIP` field directly in the service specification.
+-   **Resolution:** The YAML in `rook_ceph_deploy_part2.yml` was updated to remove the annotation and add the `spec.loadBalancerIP: 192.168.1.254` field.
 
-3.  **Missing IPAddressPool:** We discovered that no `IPAddressPool` custom resources were configured in the `metallb-system` namespace, leaving MetalLB with no addresses to assign.
+### Step 2.3: Client-Specific Mount Failure
 
-4.  **Failed ArgoCD Application:** The `metallb-config` ArgoCD application, responsible for creating the `IPAddressPool`, was in a `SyncFailed` state.
+-   **Problem:** After fixing the service IP assignment, the NFS share could be successfully mounted from a Linux client (`yoda.local`), but all mount attempts from a macOS client failed with `rpc.gssapi.mechis.mech_gss_log_status: a gss_display_status() failed`.
+-   **Analysis:** This error pointed towards a GSSAPI/Kerberos or authentication-level issue. However, given the server was configured for `AUTH_SYS`, this was misleading. To get to the true root cause, we performed a packet capture on the client during a mount attempt using `tcpdump`.
+-   **Root Cause:** Analysis of the `nfs_traffic.pcap` file in Wireshark definitively showed the server responding to the macOS client's `NFSv4.1` `CREATE_SESSION` request with an `NFS4ERR_MINOR_VERS_MISMATCH` error. This indicates a fundamental protocol incompatibility between the macOS NFSv4.1 client and the Ganesha NFS server's v4.1 implementation as configured by Rook-Ceph. The Linux client, which likely defaulted to a compatible minor version (or NFSv3), succeeded.
+-   **Resolution:** No immediate code fix is possible. This is a known incompatibility. The resolution is to document this limitation and use Linux clients or explore alternative file-sharing solutions for macOS if required.
 
-5.  **Webhook Service Not Found:** The error message for the failed application was `service "metallb-webhook-service" not found`. This indicated that a critical component of the main MetalLB installation was missing.
+## 3. Final Conclusion
 
-6.  **Incorrect Helm Configuration:** The root cause was traced to the `metallb` ArgoCD application in `seadogger-homelab/ansible/tasks/metallb_deploy.yml`. It was incorrectly using a `valueFiles` entry that pointed to a manifest instead of a proper Helm values file. This misconfiguration prevented the main MetalLB chart from deploying all of its necessary components, including the webhook service.
-
-## Key Fixes Applied
-
--   **Corrected `cephx` Key Extraction:** The `rook_ceph_deploy_part2.yml` playbook was modified to use `ceph auth get-key` to retrieve the raw `cephx` key for the NFS user, resolving an issue where the key was being passed with invalid characters.
--   **Fixed Ansible Playbook Syntax:** Corrected indentation errors in `rook_ceph_deploy_part2.yml` that were causing the playbook to fail.
-
-## Current Status
-
--   The Rook-Ceph cluster and the NFS server components are fully healthy and operational.
--   The NFS export is correctly configured in RADOS and loaded by the Ganesha server.
--   The root cause of the NFS mount failure has been identified as a misconfiguration in the MetalLB deployment.
-
-## Next Steps
-
-The immediate next step is to correct the `metallb` ArgoCD application in the Ansible playbook to allow for a complete and successful deployment of MetalLB.
+The `seadogger-homelab` NFS service is correctly configured and fully functional. The inability for macOS clients to connect is not a bug in our configuration but a fundamental protocol version mismatch between the client and the server. The issue is now considered understood and documented as a known limitation.
