@@ -143,15 +143,11 @@
   delay: 10
   until: mgr_ready.rc == 0
 
-- name: Wait until required pools exist
+- name: Wait until required CephFS pools exist
   ansible.builtin.shell: |
     set -e
     kubectl -n rook-ceph exec "$(kubectl -n rook-ceph get pods -l app=rook-ceph-tools -o name | head -n1)" -- \
-      sh -lc '
-        ceph osd pool ls | grep -qw ceph-blockpool && \
-        ceph osd pool ls | grep -qw ec-fs-metadata && \
-        ceph osd pool ls | grep -qw ec-fs-data
-      '
+      sh -lc 'ceph osd pool ls | grep -qw ec-fs-metadata && ceph osd pool ls | grep -qw ec-fs-data'
   register: pools_exist
   retries: 60
   delay: 10
@@ -183,15 +179,16 @@
           replicated:
             size: 3
         dataPools:
-          - name: ec-fs-data
+          # Use the default replicated block pool as the primary data pool
+          - name: ceph-blockpool
+            replicated:
+              size: 3
+          # Keep the erasure-coded pool as a secondary pool
+          - name: data
             failureDomain: host
             erasureCoded:
               dataChunks: 2
               codingChunks: 1
-            parameters:
-              pg_num: "128"
-              allow_ec_overwrites: "true"
-              bulk: "true"
         metadataServer:
           activeCount: 1
           activeStandby: true
@@ -211,7 +208,7 @@
       parameters:
         clusterID: rook-ceph
         fsName: ec-fs
-        pool: ec-fs-data
+        pool: data
         csi.storage.k8s.io/provisioner-secret-name: rook-csi-cephfs-provisioner
         csi.storage.k8s.io/provisioner-secret-namespace: rook-ceph
         csi.storage.k8s.io/controller-expand-secret-name: rook-csi-cephfs-provisioner
