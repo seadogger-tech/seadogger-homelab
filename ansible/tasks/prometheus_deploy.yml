@@ -26,7 +26,7 @@
   delay: 5
   ignore_errors: true
 
-# Step 4: Create new Prometheus namespace
+# Step 3: Create new Prometheus namespace
 - name: Create Prometheus namespace
   ansible.builtin.k8s:
     kubeconfig: "{{ KUBECONFIG }}"
@@ -37,8 +37,8 @@
       metadata:
         name: monitoring
 
-# Step 5: Create ArgoCD Prometheus CRDs Application, this is needed as there are race conditions with the creation of the CRDs and the Application stack using a single helm chart with ArgoCD
-- name: Create Prometheus CRDs ArgoCD Application
+# Step 4: Create Prometheus Stack ArgoCD Application
+- name: Create Prometheus Stack ArgoCD Application
   ansible.builtin.k8s:
     kubeconfig: "{{ KUBECONFIG }}"
     state: present
@@ -46,91 +46,14 @@
       apiVersion: argoproj.io/v1alpha1
       kind: Application
       metadata:
-        name: prometheus-crds
+        name: prometheus-stack
         namespace: argocd
       spec:
         project: default
         source:
-          chart: kube-prometheus-stack
-          repoURL: https://prometheus-community.github.io/helm-charts
-          targetRevision: "68.4.4"
-          helm:
-            skipCrds: false
-            values: |
-              fullnameOverride: prometheus
-              defaultRules:
-                create: false
-              alertmanager:
-                enabled: false
-              grafana:
-                enabled: false
-              kubeApiServer:
-                enabled: false
-              kubelet:
-                enabled: false
-              kubeControllerManager:
-                enabled: false
-              coreDns:
-                enabled: false
-              kubeEtcd:
-                enabled: false
-              kubeScheduler:
-                enabled: false
-              kubeProxy:
-                enabled: false
-              kubeStateMetrics:
-                enabled: false
-              nodeExporter:
-                enabled: false
-              prometheus:
-                enabled: false
-              prometheusOperator:
-                enabled: false
-        destination:
-          server: https://kubernetes.default.svc
-          namespace: monitoring
-        syncPolicy:
-          syncOptions:
-            - CreateNamespace=true
-            - Replace=true
-
-- name: Wait for prometheus-crds ArgoCD app to be healthy
-  community.kubernetes.k8s_info:
-    kubeconfig: "{{ KUBECONFIG }}"
-    api_version: argoproj.io/v1alpha1
-    kind: Application
-    namespace: argocd
-    name: prometheus-crds
-  register: prometheus_crds_status
-  until: >
-    prometheus_crds_status is defined and 
-    'resources' in prometheus_crds_status and 
-    (prometheus_crds_status.resources[0].status.health.status == "Healthy") and
-    (prometheus_crds_status.resources[0].status.sync.status in ["Synced", "OutOfSync"])
-  retries: 30
-  delay: 4
-
-# Step 7: Create main Prometheus ArgoCD Application
-- name: Create main Prometheus ArgoCD Application
-  ansible.builtin.k8s:
-    kubeconfig: "{{ KUBECONFIG }}"
-    state: present
-    definition:
-      apiVersion: argoproj.io/v1alpha1
-      kind: Application
-      metadata:
-        name: prometheus
-        namespace: argocd
-      spec:
-        project: default
-        source:
-          repoURL: https://prometheus-community.github.io/helm-charts
-          chart: kube-prometheus-stack
-          targetRevision: "68.4.4"
-          helm:
-            valueFiles:
-              - https://raw.githubusercontent.com/seadogger/seadogger-homelab/master/helm-deployments/prometheus/prometheus-values.yaml
-            skipCrds: true
+          repoURL: https://github.com/prometheus-operator/kube-prometheus
+          targetRevision: release-0.13
+          path: manifests
         destination:
           server: https://kubernetes.default.svc
           namespace: monitoring
@@ -141,19 +64,144 @@
           syncOptions:
             - CreateNamespace=true
 
-- name: Wait for prometheus ArgoCD app to be healthy
+# Step 5: Create LoadBalancer Services
+- name: Create Prometheus LoadBalancer Service
+  ansible.builtin.k8s:
+    kubeconfig: "{{ KUBECONFIG }}"
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: prometheus-k8s-lb
+        namespace: monitoring
+      spec:
+        type: LoadBalancer
+        loadBalancerIP: "192.168.1.244"
+        ports:
+        - port: 9090
+          targetPort: 9090
+          protocol: TCP
+        selector:
+          app.kubernetes.io/name: prometheus
+          prometheus: k8s
+
+- name: Create Grafana LoadBalancer Service
+  ansible.builtin.k8s:
+    kubeconfig: "{{ KUBECONFIG }}"
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: grafana-lb
+        namespace: monitoring
+      spec:
+        type: LoadBalancer
+        loadBalancerIP: "192.168.1.245"
+        ports:
+        - port: 3000
+          targetPort: 3000
+          protocol: TCP
+        selector:
+          app.kubernetes.io/name: grafana
+
+- name: Create Alertmanager LoadBalancer Service
+  ansible.builtin.k8s:
+    kubeconfig: "{{ KUBECONFIG }}"
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: alertmanager-main-lb
+        namespace: monitoring
+      spec:
+        type: LoadBalancer
+        loadBalancerIP: "192.168.1.246"
+        ports:
+        - port: 9093
+          targetPort: 9093
+          protocol: TCP
+        selector:
+          app.kubernetes.io/name: alertmanager
+          alertmanager: main
+
+# Step 6: Create Network Policies for External Access
+- name: Create Prometheus External Access Network Policy
+  ansible.builtin.k8s:
+    kubeconfig: "{{ KUBECONFIG }}"
+    state: present
+    definition:
+      apiVersion: networking.k8s.io/v1
+      kind: NetworkPolicy
+      metadata:
+        name: allow-prometheus-external
+        namespace: monitoring
+      spec:
+        podSelector:
+          matchLabels:
+            app.kubernetes.io/name: prometheus
+        policyTypes:
+          - Ingress
+        ingress:
+          - ports:
+              - port: 9090
+
+- name: Create Grafana External Access Network Policy
+  ansible.builtin.k8s:
+    kubeconfig: "{{ KUBECONFIG }}"
+    state: present
+    definition:
+      apiVersion: networking.k8s.io/v1
+      kind: NetworkPolicy
+      metadata:
+        name: allow-grafana-external
+        namespace: monitoring
+      spec:
+        podSelector:
+          matchLabels:
+            app.kubernetes.io/name: grafana
+        policyTypes:
+          - Ingress
+        ingress:
+          - ports:
+              - port: 3000
+
+- name: Create Alertmanager External Access Network Policy
+  ansible.builtin.k8s:
+    kubeconfig: "{{ KUBECONFIG }}"
+    state: present
+    definition:
+      apiVersion: networking.k8s.io/v1
+      kind: NetworkPolicy
+      metadata:
+        name: allow-alertmanager-external
+        namespace: monitoring
+      spec:
+        podSelector:
+          matchLabels:
+            app.kubernetes.io/name: alertmanager
+        policyTypes:
+          - Ingress
+        ingress:
+          - ports:
+              - port: 9093
+
+# Step 7: Wait for Prometheus Stack to be healthy
+- name: Wait for prometheus-stack ArgoCD app to be healthy
   community.kubernetes.k8s_info:
     kubeconfig: "{{ KUBECONFIG }}"
     api_version: argoproj.io/v1alpha1
     kind: Application
     namespace: argocd
-    name: prometheus
+    name: prometheus-stack
   register: prometheus_status
   until: >
     prometheus_status is defined and 
     'resources' in prometheus_status and 
     prometheus_status.resources[0].status is defined and
     prometheus_status.resources[0].status.get('health', {}) is defined and
-    (prometheus_status.resources[0].status.health.get('status', '') in ["Healthy", "Degraded", "Progressing"])
-  retries: 30
-  delay: 4
+    (prometheus_status.resources[0].status.health.get('status', '') == "Healthy")
+  retries: 60
+  delay: 10
