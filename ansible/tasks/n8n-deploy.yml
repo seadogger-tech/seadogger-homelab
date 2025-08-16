@@ -3,41 +3,6 @@
     KUBECONFIG: /etc/rancher/k3s/k3s.yaml
   tags: n8n
 
-- name: Delete existing n8n namespace
-  kubernetes.core.k8s:
-    kubeconfig: "{{ KUBECONFIG }}"
-    state: absent
-    definition:
-      apiVersion: v1
-      kind: Namespace
-      metadata:
-        name: n8n
-  ignore_errors: true
-  tags: n8n
-
-- name: Poll until n8n namespace is fully deleted
-  kubernetes.core.k8s_info:
-    kubeconfig: "{{ KUBECONFIG }}"
-    api_version: v1
-    kind: Namespace
-  register: ns_poll
-  until: ns_poll.resources | selectattr('metadata.name', 'equalto', 'n8n') | list | length == 0
-  retries: 30
-  delay: 2
-  delegate_to: "{{ inventory_hostname }}"
-  tags: n8n
-
-- name: Create n8n namespace
-  kubernetes.core.k8s:
-    kubeconfig: "{{ KUBECONFIG }}"
-    state: present
-    definition:
-      apiVersion: v1
-      kind: Namespace
-      metadata:
-        name: n8n
-  tags: n8n
-
 - name: Create n8n ArgoCD Application
   kubernetes.core.k8s:
     kubeconfig: "{{ KUBECONFIG }}"

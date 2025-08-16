@@ -475,11 +475,18 @@ Under advanced options set the boot order to boot the NVMe first.
 
 **This is where the magic of Ansible and ArgoCD take over**
 
-Run the playbook:
+Run the installation playbook:
 
 ```
 ansible-playbook main.yml
 ```
+
+To perform cleanup operations, from targeted application removal to a full cluster wipe, use the new cleanup playbook:
+
+```
+ansible-playbook cleanup.yml
+```
+See the detailed instructions within `ansible/config.yml` for usage patterns.
 
    - Updates apt package cache
    - Configures cgroups are configured correctly in cmdline.txt.
@@ -532,9 +539,21 @@ See the README file within the `benchmarks` folder.  **Credit and Thanks to [Jef
 
 ## Cold Start Procedure
 
-A full, destructive "cold start" of the cluster can be performed to validate the IaaC configuration. This process has been refactored into a safer, three-stage process: **Wipe**, **Install Infrastructure**, and **Install Applications**. This provides granular control over the cluster rebuild lifecycle. For a detailed guide, please refer to the [K3s Cluster Cold Start Procedure](memory-bank/2025-08-15-k3s-cold-start-procedure.md) in the memory bank.
+A full, destructive "cold start" of the cluster can be performed to validate the IaaC configuration. This process has been significantly refactored for safety and clarity.
 
-> **Warning:** The Stage 1 deployment process is currently unstable. The playbook may fail and require two to four re-runs to complete successfully. See the "Known Issues" section in the Cold Start Procedure for more details and planned fixes.
+The new workflow is a deliberate, two-playbook process:
+
+1.  **Teardown (`cleanup.yml`)**: This playbook is the single entry point for all destructive operations.
+    -   To perform a full cold start, edit `ansible/config.yml` and set `cold_start_stage_1_wipe_cluster: true`.
+    -   Run the command: `ansible-playbook cleanup.yml`.
+    -   This will gracefully tear down all applications and infrastructure in the correct order before wiping the k3s installation from all nodes.
+    -   For an even deeper clean that includes wiping the Ceph storage partition, also set `perform_physical_disk_wipe: true`. **Warning:** This is a data-loss operation.
+
+2.  **Installation (`main.yml`)**: This playbook is now solely responsible for installation and upgrades.
+    -   To install the cluster, edit `ansible/config.yml` and set `cold_start_stage_2_install_infrastructure: true` and `cold_start_stage_3_install_applications: true`.
+    -   Run the command: `ansible-playbook main.yml`.
+
+This two-step process prevents accidental cluster wipes and ensures a clear separation between build and destroy operations. For more granular cleanup options, see the detailed instructions in `ansible/config.yml`.
 
 ## Shutting down the cluster
 

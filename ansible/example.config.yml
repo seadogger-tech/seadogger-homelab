@@ -5,13 +5,19 @@ dns4_servers: "{{ ipv4_gateway }}"
 active_internet_interface: "eth0"
 
 # --- Cold Start Master Switches ---
-# STAGE 1: Set to true to run all DESTRUCTIVE wipe tasks.
-# WARNING: This stage is currently unstable and may require multiple runs to complete successfully.
-# See the "Known Issues" section in the Cold Start Procedure for more details.
+# These switches now control two separate playbooks: `main.yml` for installation and `cleanup.yml` for teardown.
+
+# --- STAGE 1: WIPE (cleanup.yml) ---
+# Set to true to authorize the `cleanup.yml` playbook to run its final, destructive stage of wiping k3s.
+# This has NO EFFECT on `main.yml`.
 cold_start_stage_1_wipe_cluster: false
-# STAGE 2: Set to true to install the core infrastructure (k3s, Ceph, etc.).
+
+# --- STAGE 2: INSTALL INFRASTRUCTURE (main.yml) ---
+# Set to true to run the infrastructure installation tasks in `main.yml`.
 cold_start_stage_2_install_infrastructure: false
-# STAGE 3: Set to true to deploy all applications and services.
+
+# --- STAGE 3: INSTALL APPLICATIONS (main.yml) ---
+# Set to true to run the application deployment tasks in `main.yml`.
 cold_start_stage_3_install_applications: false
 
 # --- Manual Install Toggles ---
@@ -34,14 +40,79 @@ aws_bedrock_api_key_id: "YOUR_AWS_ACCESS_KEY_ID_HERE"
 aws_bedrock_api_access_key: "YOUR_AWS_SECRET_ACCESS_KEY_HERE"
 plex_access_key: "YOUR_PLEX_CLAIM_TOKEN_HERE" # This key is only good for 5 minutes. You get this from https://plex.tv/claim
 
+# ==============================================================================
+# --- Granular Cleanup Configuration ---
+# ==============================================================================
+#
+# USAGE INSTRUCTIONS:
+#
+# This section controls the NEW `cleanup.yml` playbook (`ansible-playbook cleanup.yml`).
+# It allows for the targeted, graceful removal of applications and infrastructure.
+# It is SEPARATE from the `main.yml` deployment playbook.
+#
+# --- COMMON PATTERNS ---
+#
+# 1. To Remove a SINGLE POD (e.g., plex):
+#    - Set `run_pod_cleanup: true`
+#    - In `pod_cleanup_list`, ensure only the `plex` entry is present or uncommented.
+#    - Set `delete_pvc: false` for plex to keep its data.
+#
+# 2. To Remove a SINGLE POD AND ITS DATA (e.g., pihole):
+#    - Set `run_pod_cleanup: true`
+#    - In `pod_cleanup_list`, ensure only the `pihole` entry is present.
+#    - Set `delete_pvc: true` for pihole.
+#
+# 3. To Remove ALL PODS:
+#    - Set `run_pod_cleanup: true`
+#    - Ensure all desired applications are listed in `pod_cleanup_list`.
+#
+# 4. To Remove Prometheus (including its CRDs):
+#    - Set `run_prometheus_cleanup: true`
+#
+# 5. To Remove Infrastructure (e.g., MetalLB only):
+#    - Set `run_infrastructure_cleanup: true`
+#    - Set `infrastructure_cleanup_list: ["metallb"]`
+#
+# 6. To Wipe Everything (COLD START):
+#    - Set `cold_start_stage_1_wipe_cluster: true` below.
+#    - Then run the `ansible-playbook cleanup.yml` command. This will trigger
+#      the full, ordered teardown of all applications and infrastructure before
+#      wiping the k3s cluster itself.
+#
+# SAFETY: The `main.yml` playbook can NO LONGER perform any destructive actions.
+# All teardown operations MUST be initiated via `cleanup.yml`.
+# Physical disk wiping is still protected by the separate `perform_physical_disk_wipe` flag.
+
+# --- POD / APPLICATION CLEANUP ---
+run_pod_cleanup: false
+pod_cleanup_list:
+  - { name: "argocd", namespace: "argocd", selector: "app.kubernetes.io/name=argocd", delete_pvc: false }
+  - { name: "bedrock-access-gateway", namespace: "bedrock-gateway", selector: "app=bedrock-access-gateway", delete_pvc: false }
+  - { name: "pihole", namespace: "pihole", selector: "app.kubernetes.io/name=pihole", delete_pvc: true }
+  - { name: "openwebui", namespace: "openwebui", selector: "app.kubernetes.io/name=open-webui", delete_pvc: true }
+  - { name: "n8n", namespace: "n8n", selector: "app.kubernetes.io/instance=n8n", delete_pvc: true }
+  - { name: "plex", namespace: "plex", selector: "app=plex", delete_pvc: false }
+
+# --- HYBRID / PROMETHEUS CLEANUP ---
+run_prometheus_cleanup: false
+prometheus_delete_pvc: true # Explicit flag for Prometheus data
+
+# --- INFRASTRUCTURE CLEANUP ---
+run_infrastructure_cleanup: false
+infrastructure_cleanup_list:
+  - "metallb"
+  - "rook-ceph" # Note: This does NOT wipe physical disks.
+
 # ===================================================================================
 # --- Ansible Playbook Variables (GENERATED FROM THE SWITCHES ABOVE) ---
 # ===================================================================================
 
 # --- Stage 1: Wipe Cluster Variables (DESTRUCTIVE) ---
+# This variable is now ONLY used by cleanup.yml to trigger the final wipe stage.
 enable_wipe_k3s_cluster: "{{ cold_start_stage_1_wipe_cluster | bool }}"
-wipe_ceph_disks_on_install: "{{ cold_start_stage_1_wipe_cluster | bool }}" # DANGER: DESTRUCTIVE.
-argocd_force_clean_install: "{{ cold_start_stage_1_wipe_cluster | bool }}"
+# DANGER: This flag enables the wiping of physical storage devices on the nodes.
+# It should ONLY be used during a full, intentional cold start of the cluster.
+perform_physical_disk_wipe: false
 
 # --- Stage 2: Infrastructure Installation Variables ---
 enable_raspberry_pi_config: "{{ cold_start_stage_2_install_infrastructure | bool }}"

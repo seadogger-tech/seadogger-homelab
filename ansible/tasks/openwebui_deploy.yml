@@ -4,40 +4,7 @@
   ansible.builtin.set_fact:
     KUBECONFIG: /etc/rancher/k3s/k3s.yaml
 
-# Step 2: Delete existing OpenWebUI namespace if it exists
-- name: Delete existing OpenWebUI namespace
-  ansible.builtin.k8s:
-    kubeconfig: "{{ KUBECONFIG }}"
-    state: absent
-    definition:
-      apiVersion: v1
-      kind: Namespace
-      metadata:
-        name: openwebui
-  ignore_errors: true
-
-# Step 3: Wait for namespace to be fully deleted
-- name: Wait for namespace to be fully deleted
-  ansible.builtin.command: kubectl get namespace openwebui --kubeconfig {{ KUBECONFIG }}
-  register: ns_check
-  until: ns_check.rc != 0
-  retries: 30
-  delay: 2
-  failed_when: false
-  changed_when: false
-
-# Step 4: Create new OpenWebUI namespace
-- name: Create OpenWebUI namespace
-  ansible.builtin.k8s:
-    kubeconfig: "{{ KUBECONFIG }}"
-    state: present
-    definition:
-      apiVersion: v1
-      kind: Namespace
-      metadata:
-        name: openwebui
-
-# Step 5: Create ArgoCD OpenWebUI Application
+# Step 2: Create ArgoCD OpenWebUI Application
 - name: Create OpenWebUI ArgoCD Application
   ansible.builtin.k8s:
     kubeconfig: "{{ KUBECONFIG }}"
@@ -67,7 +34,7 @@
           syncOptions:
             - CreateNamespace=true
 
-# Step 6: Wait for OpenWebUI pods to be ready using signal-based validation
+# Step 3: Wait for OpenWebUI pods to be ready using signal-based validation
 - name: Wait for OpenWebUI pods to be ready
   community.kubernetes.k8s_info:
     kubeconfig: "{{ KUBECONFIG }}"

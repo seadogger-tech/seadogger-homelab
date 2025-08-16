@@ -1,5 +1,5 @@
 ---
-# Step -2: Handle macOS fork safety
+# Step 1: Handle macOS fork safety
 - name: Detect operating system
   ansible.builtin.set_fact:
     is_macos: "{{ ansible_facts['os_family'] == 'Darwin' }}"
@@ -18,70 +18,7 @@
       KUBECONFIG: /etc/rancher/k3s/k3s.yaml
   when: not is_macos | bool
 
-# Step -1: Nuke the entire Rook-Ceph cluster to ensure a clean slate
-- name: Uninstall Rook-Ceph Cluster Helm chart
-  ansible.builtin.shell:
-    cmd: helm uninstall rook-ceph-cluster -n rook-ceph
-  environment: "{{ env_vars }}"
-  register: helm_uninstall_cluster_result
-  changed_when: "'release \"rook-ceph-cluster\" uninstalled' in helm_uninstall_cluster_result.stdout"
-  ignore_errors: true
-  when: wipe_ceph_disks_on_install | bool
-
-- name: Uninstall Rook-Ceph Operator Helm chart
-  ansible.builtin.shell:
-    cmd: helm uninstall rook-ceph -n rook-ceph
-  environment: "{{ env_vars }}"
-  register: helm_uninstall_operator_result
-  changed_when: "'release \"rook-ceph\" uninstalled' in helm_uninstall_operator_result.stdout"
-  ignore_errors: true
-  when: wipe_ceph_disks_on_install | bool
-
-- name: Force delete all resources in rook-ceph namespace
-  ansible.builtin.shell:
-    cmd: kubectl delete all --all -n rook-ceph --force --grace-period=0
-  environment: "{{ env_vars }}"
-  changed_when: true
-  ignore_errors: true
-  when: wipe_ceph_disks_on_install | bool
-
-- name: Delete rook-ceph namespace
-  ansible.builtin.shell:
-    cmd: kubectl delete namespace rook-ceph --ignore-not-found --force --grace-period=0
-  environment: "{{ env_vars }}"
-  changed_when: true
-  when: wipe_ceph_disks_on_install | bool
-
-# Step 0: Wipe and validate device partitions (CONDITIONAL)
-- name: Wipe Ceph device partitions
-  ansible.builtin.shell: |
-    set -e
-    sgdisk --zap-all {{ hostvars[inventory_hostname]['device'] }}
-    dd if=/dev/zero of={{ hostvars[inventory_hostname]['device'] }} bs=1M count=100 conv=fsync
-    wipefs -a {{ hostvars[inventory_hostname]['device'] }}
-  when:
-    - hostvars[inventory_hostname]['device'] is defined
-    - wipe_ceph_disks_on_install | bool
-  ignore_errors: false
-
-- name: Validate partition is clean
-  ansible.builtin.shell: |
-    lsblk -f {{ hostvars[inventory_hostname]['device'] }} | grep -Ev '^(NAME|$)' | awk '{print $2}'
-  register: partition_check
-  changed_when: false
-  when:
-    - hostvars[inventory_hostname]['device'] is defined
-    - wipe_ceph_disks_on_install | bool
-
-- name: Fail if partition still has filesystem or label
-  ansible.builtin.fail:
-    msg: "Device {{ hostvars[inventory_hostname]['device'] }} is not clean. Filesystem or label found: {{ partition_check.stdout_lines }}"
-  when:
-    - hostvars[inventory_hostname]['device'] is defined
-    - wipe_ceph_disks_on_install | bool
-    - partition_check.stdout != ""
-
-# Step 1: Set KUBECONFIG globally
+# Step 2: Set KUBECONFIG globally
 - name: Set KUBECONFIG global
   ansible.builtin.set_fact:
     KUBECONFIG: /etc/rancher/k3s/k3s.yaml

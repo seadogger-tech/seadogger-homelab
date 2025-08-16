@@ -4,53 +4,7 @@
       ansible.builtin.set_fact:
         KUBECONFIG: /etc/rancher/k3s/k3s.yaml
 
-    # Step 2: Delete existing MetalLB namespace if it exists
-    - name: Delete existing Bedrock namespace
-      ansible.builtin.k8s:
-        kubeconfig: "{{ KUBECONFIG }}"
-        state: absent
-        definition:
-          apiVersion: v1
-          kind: Namespace
-          metadata:
-            name: bedrock-gateway
-      ignore_errors: true
-
-    # Step 3: Wait for namespace deletion
-    - name: Poll until bedrock-gateway namespace is fully deleted
-      community.kubernetes.k8s_info:
-        kubeconfig: "{{ KUBECONFIG }}"
-        kind: Namespace
-        name: bedrock-gateway
-      register: ns_poll
-      until: ns_poll.resources is not defined or (ns_poll.resources | length == 0)
-      retries: 30
-      delay: 2
-      ignore_errors: true
-
-    # Step 4: Create new MetalLB namespace
-    - name: Create bedrock-gateway namespace
-      ansible.builtin.k8s:
-        kubeconfig: "{{ KUBECONFIG }}"
-        state: present
-        definition:
-          apiVersion: v1
-          kind: Namespace
-          metadata:
-            name: bedrock-gateway
-
-    # Step 5: Wait for namespace creation signal
-    - name: Wait until bedrock-gateway namespace exists
-      ansible.builtin.k8s_info:
-        kubeconfig: "{{ KUBECONFIG }}"
-        kind: Namespace
-        name: bedrock-gateway
-      register: ns_created_check
-      until: ns_created_check.resources | length > 0
-      retries: 15
-      delay: 2
-
-    # Step 6: Create AWS Bedrock secrets
+    # Step 2: Create AWS Bedrock secrets
     - name: Create AWS Bedrock secrets
       ansible.builtin.k8s:
         kubeconfig: "{{ KUBECONFIG }}"
@@ -66,7 +20,7 @@
             aws-access-key-id: "{{ aws_bedrock_api_key_id }}"
             aws-secret-access-key: "{{ aws_bedrock_api_access_key }}"
 
-    # Step 7: Create ArgoCD Application 
+    # Step 3: Create ArgoCD Application 
     - name: Create Bedrock Access Gateway ArgoCD Application
       ansible.builtin.k8s:
         kubeconfig: "{{ KUBECONFIG }}"

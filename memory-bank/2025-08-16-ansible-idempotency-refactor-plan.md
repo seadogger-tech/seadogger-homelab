@@ -23,7 +23,7 @@ To handle the unique needs of different components, deployments are classified i
 
 ## 4. Phase 1: New Multi-Stage Cleanup Playbook
 
-A new `ansible/cleanup.yml` playbook will be created to orchestrate a graceful, multi-stage teardown.
+A new `ansible/cleanup.yml` playbook will be the single entry point for all teardown operations, from targeted application removal to a full cluster wipe. It will orchestrate a graceful, multi-stage teardown.
 
 - **Correct Teardown Order:**
     1.  **Clean POD Applications:** (`tasks/cleanup_pods.yml`) Terminates user-facing apps, releasing dependencies on infrastructure.
@@ -50,8 +50,8 @@ Every deployment task file in `ansible/tasks/` will be refactored:
 
 The cold start playbook will be made safer and more reliable.
 
-1.  **Rename:** The file will be renamed to `wipe_k3s_cluster.yml` for consistency.
-2.  **Integrate Graceful Cleanup:** The playbook will now begin by executing the new three-stage cleanup process (PODs -> Prometheus -> Infrastructure). This ensures a clean state before attempting to uninstall k3s.
+1.  **Consolidate Teardown Logic:** The `wipe_k3s_cluster` task will be removed from `main.yml` and integrated as the final stage into the `cleanup.yml` playbook. This creates a clear separation of concerns: `main.yml` builds, `cleanup.yml` destroys.
+2.  **Integrate Graceful Cleanup:** The `wipe_k3s_cluster.yml` task will now begin by executing the new three-stage cleanup process (PODs -> Prometheus -> Infrastructure). This ensures a clean state before attempting to uninstall k3s.
 3.  **Isolate Destructive Operations:**
     - The `wipe_ceph_disks_on_install` variable will be **removed**.
     - A new, explicit variable, `perform_physical_disk_wipe: false`, will be introduced in `config.yml`.

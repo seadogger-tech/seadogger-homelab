@@ -3,6 +3,24 @@
     msg: "Wipe K3s cluster is disabled in config.yml. Set 'enable_wipe_k3s_cluster: true' to run."
   when: not enable_wipe_k3s_cluster | default(false)
 
+- name: "STAGE 0: Graceful Application and Infrastructure Teardown"
+  block:
+    - name: "Clean up all POD Design Pattern Applications"
+      import_tasks: tasks/cleanup_pods.yml
+      vars:
+        run_pod_cleanup: true
+
+    - name: "Clean up Prometheus Hybrid Application"
+      import_tasks: tasks/cleanup_prometheus.yml
+      vars:
+        run_prometheus_cleanup: true
+
+    - name: "Clean up all Infrastructure Services"
+      import_tasks: tasks/cleanup_infrastructure.yml
+      vars:
+        run_infrastructure_cleanup: true
+        infrastructure_cleanup_list: ["metallb", "rook-ceph"]
+
 - name: Ensure iptables is installed
   ansible.builtin.apt:
     name: iptables
@@ -87,22 +105,23 @@
     iptables -P FORWARD ACCEPT
     iptables -P OUTPUT ACCEPT
 
-- name: Wipe storage device partitions and zero beginning of partition
+- name: "!!! DANGER ZONE: WIPE CEPH STORAGE PARTITION !!!"
   block:
-    - name: Wipe filesystem signatures
-      ansible.builtin.shell: wipefs -af /dev/nvme0n1p3
-      no_log: true
+    - name: "Wipe filesystem signatures from Ceph partition (nvme0n1p3)"
+      ansible.builtin.command: wipefs -af /dev/nvme0n1p3
+      changed_when: true
       ignore_errors: true
 
-    - name: Zero first 100MB of partition
-      ansible.builtin.shell: dd if=/dev/zero of=/dev/nvme0n1p3 bs=1M count=100
-      no_log: true
-      ignore_errors: true
+    - name: "Verify Ceph partition is clean"
+      ansible.builtin.command: lsblk -f /dev/nvme0n1p3
+      register: partition_check
+      changed_when: false
 
-    # - name: Zap all partition data
-    #   ansible.builtin.shell: sgdisk --zap-all /dev/nvme0n1p3
-    #   no_log: true
-    #   ignore_errors: true
+    - name: "Fail if Ceph partition still has a filesystem"
+      ansible.builtin.fail:
+        msg: "Partition /dev/nvme0n1p3 is not clean. Filesystem or label found: {{ partition_check.stdout_lines }}"
+      when: partition_check.stdout | length > 0 and 'nvme0n1p3' in partition_check.stdout
+  when: perform_physical_disk_wipe | default(false)
 
 - name: Remove all device mapper devices
   ansible.builtin.shell: dmsetup remove_all

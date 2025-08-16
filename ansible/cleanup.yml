@@ -1,0 +1,22 @@
+---
+- hosts: control_plane
+  gather_facts: false
+  become: true
+  vars_files:
+    - config.yml
+  tasks:
+    - name: "STAGE 1: Clean up all POD Design Pattern Applications"
+      import_tasks: tasks/cleanup_pods.yml
+      when: run_pod_cleanup | default(false)
+
+    - name: "STAGE 2: Clean up Prometheus Hybrid Application"
+      import_tasks: tasks/cleanup_prometheus.yml
+      when: run_prometheus_cleanup | default(false)
+
+    - name: "STAGE 3: Clean up all Infrastructure Services"
+      import_tasks: tasks/cleanup_infrastructure.yml
+      when: run_infrastructure_cleanup | default(false)
+
+    - name: "STAGE 4: Wipe K3s Cluster (COLD START)"
+      import_tasks: tasks/wipe_k3s_cluster.yml
+      when: cold_start_stage_1_wipe_cluster | default(false)

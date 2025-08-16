@@ -1,0 +1,124 @@
+---
+- name: Set KUBECONFIG global
+  ansible.builtin.set_fact:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+
+# === MetalLB Cleanup ===
+- name: "Clean up MetalLB Infrastructure"
+  block:
+    - name: "Delete MetalLB ArgoCD Applications (config first)"
+      community.kubernetes.k8s:
+        kubeconfig: "{{ KUBECONFIG }}"
+        state: absent
+        kind: Application
+        api_version: argoproj.io/v1alpha1
+        name: "{{ item }}"
+        namespace: argocd
+        wait: yes
+        timeout: 300
+      loop:
+        - metallb-config
+        - metallb
+      ignore_errors: true
+
+    - name: "Delete MetalLB Namespace"
+      community.kubernetes.k8s:
+        kubeconfig: "{{ KUBECONFIG }}"
+        state: absent
+        kind: Namespace
+        name: metallb-system
+        wait: yes
+        timeout: 600
+      ignore_errors: true
+  when: "'metallb' in infrastructure_cleanup_list"
+
+# === Rook-Ceph Cleanup (The Critical Path) ===
+- name: "Clean up Rook-Ceph Infrastructure"
+  block:
+    # Step 1: Teardown NFS services from part2.yml
+    - name: "Ceph Cleanup: Delete NFS LoadBalancer Service"
+      community.kubernetes.k8s:
+        kubeconfig: "{{ KUBECONFIG }}"
+        state: absent
+        kind: Service
+        name: rook-nfs-loadbalancer
+        namespace: rook-ceph
+      ignore_errors: true
+
+    - name: "Ceph Cleanup: Delete CephNFS CRD"
+      community.kubernetes.k8s:
+        kubeconfig: "{{ KUBECONFIG }}"
+        state: absent
+        kind: CephNFS
+        api_version: ceph.rook.io/v1
+        name: nfs-ec
+        namespace: rook-ceph
+        wait: yes
+        timeout: 300
+      ignore_errors: true
+
+    # Step 2: Delete Storage Classes and Filesystem
+    - name: "Ceph Cleanup: Delete StorageClasses"
+      community.kubernetes.k8s:
+        kubeconfig: "{{ KUBECONFIG }}"
+        state: absent
+        kind: StorageClass
+        name: "{{ item }}"
+      loop:
+        - rook-ceph-filesystem-ec
+        - rook-ceph-nfs
+        - ceph-block
+      ignore_errors: true
+
+    - name: "Ceph Cleanup: Delete CephFilesystem CRD"
+      community.kubernetes.k8s:
+        kubeconfig: "{{ KUBECONFIG }}"
+        state: absent
+        kind: CephFilesystem
+        api_version: ceph.rook.io/v1
+        name: ec-fs
+        namespace: rook-ceph
+        wait: yes
+        timeout: 300
+      ignore_errors: true
+
+    # Step 3: Uninstall Helm Charts (Cluster then Operator)
+    - name: "Ceph Cleanup: Uninstall Helm charts"
+      ansible.builtin.shell: "helm uninstall {{ item }} -n rook-ceph"
+      loop:
+        - rook-ceph-cluster
+        - rook-ceph
+      ignore_errors: true
+
+    # Step 4: Delete the namespace
+    - name: "Ceph Cleanup: Delete rook-ceph namespace"
+      community.kubernetes.k8s:
+        kubeconfig: "{{ KUBECONFIG }}"
+        state: absent
+        kind: Namespace
+        name: rook-ceph
+        wait: yes
+        timeout: 900
+      ignore_errors: true
+
+    # Step 5: Delete Rook-Ceph CRDs (LAST STEP)
+    - name: "Ceph Cleanup: Delete Rook-Ceph CRDs"
+      community.kubernetes.k8s:
+        kubeconfig: "{{ KUBECONFIG }}"
+        state: absent
+        kind: CustomResourceDefinition
+        name: "{{ item }}"
+      loop:
+        - "cephblockpools.ceph.rook.io"
+        - "cephclients.ceph.rook.io"
+        - "cephclusters.ceph.rook.io"
+        - "cephfilesystems.ceph.rook.io"
+        - "cephnfses.ceph.rook.io"
+        - "cephobjectstores.ceph.rook.io"
+        - "cephobjectstoreusers.ceph.rook.io"
+        - "cephobjectrealms.ceph.rook.io"
+        - "cephobjectzonegroups.ceph.rook.io"
+        - "cephobjectzones.ceph.rook.io"
+        - "cephrbdmirrors.ceph.rook.io"
+      ignore_errors: true
+  when: "'rook-ceph' in infrastructure_cleanup_list"

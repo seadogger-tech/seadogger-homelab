@@ -4,41 +4,7 @@
   ansible.builtin.set_fact:
     KUBECONFIG: /etc/rancher/k3s/k3s.yaml
 
-# Step 2: Delete existing Pihole namespace if it exists
-- name: Delete existing Pihole namespace
-  ansible.builtin.k8s:
-    kubeconfig: "{{ KUBECONFIG }}"
-    state: absent
-    definition:
-      apiVersion: v1
-      kind: Namespace
-      metadata:
-        name: pihole
-  ignore_errors: true
-
-# Step 3: Poll until Pihole namespace is fully deleted
-- name: Poll until Pihole namespace is fully deleted
-  community.kubernetes.k8s_info:
-    kubeconfig: "{{ KUBECONFIG }}"
-    kind: Namespace
-  register: ns_poll
-  until: ns_poll is defined and 'resources' in ns_poll and (ns_poll.resources | selectattr('metadata.name', 'equalto', 'pihole') | list | length == 0)
-  retries: 30
-  delay: 5
-  ignore_errors: true
-
-# Step 4: Create new MetalLB namespace
-- name: Create Pihole namespace
-  ansible.builtin.k8s:
-    kubeconfig: "{{ KUBECONFIG }}" 
-    state: present
-    definition:
-      apiVersion: v1
-      kind: Namespace
-      metadata:
-        name: pihole
-
-# Step 5: Create ArgoCD Pihole Application
+# Step 2: Create ArgoCD Pihole Application
 - name: Create Pihole ArgoCD Application
   ansible.builtin.k8s:
     kubeconfig: "{{ KUBECONFIG }}"
@@ -68,7 +34,7 @@
           syncOptions:
             - CreateNamespace=true
 
-# Step 7: Wait for Pihole pods to be ready
+# Step 3: Wait for Pihole pods to be ready
 - name: Wait for Pihole pods to be ready
   community.kubernetes.k8s_info:
     kubeconfig: "{{ KUBECONFIG }}"

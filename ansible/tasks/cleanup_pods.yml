@@ -1,0 +1,63 @@
+---
+- name: Set KUBECONFIG global
+  ansible.builtin.set_fact:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+
+- name: "Clean up Application: {{ app.name }}"
+  block:
+    # Step 1: Delete the ArgoCD Application resource first. This is crucial.
+    # It tells ArgoCD to stop managing the resources, preventing it from fighting us.
+    - name: "Delete ArgoCD Application for {{ app.name }}"
+      community.kubernetes.k8s:
+        kubeconfig: "{{ KUBECONFIG }}"
+        state: absent
+        kind: Application
+        api_version: argoproj.io/v1alpha1
+        name: "{{ app.name }}"
+        namespace: argocd
+        wait: yes
+        timeout: 300
+      ignore_errors: true
+
+    # Step 2: Discover and delete all common namespaced resources matching the label.
+    - name: "Discover resources for {{ app.name }}"
+      community.kubernetes.k8s_info:
+        kubeconfig: "{{ KUBECONFIG }}"
+        namespace: "{{ app.namespace }}"
+        label_selectors:
+          - "{{ app.selector }}"
+        kind: "Deployment,StatefulSet,DaemonSet,Service,ConfigMap,Secret,Ingress,NetworkPolicy"
+      register: discovered_resources
+
+    - name: "Delete discovered resources for {{ app.name }}"
+      community.kubernetes.k8s:
+        kubeconfig: "{{ KUBECONFIG }}"
+        state: absent
+        definition: "{{ item }}"
+      loop: "{{ discovered_resources.resources }}"
+      ignore_errors: true
+
+    # Step 3 (Conditional): Delete PVCs if requested.
+    - name: "Delete PVCs for {{ app.name }}"
+      community.kubernetes.k8s:
+        kubeconfig: "{{ KUBECONFIG }}"
+        state: absent
+        kind: PersistentVolumeClaim
+        namespace: "{{ app.namespace }}"
+        label_selector: "{{ app.selector }}"
+      when: app.delete_pvc | default(false)
+      ignore_errors: true
+
+    # Step 4: Delete the namespace.
+    - name: "Delete namespace for {{ app.name }}"
+      community.kubernetes.k8s:
+        kubeconfig: "{{ KUBECONFIG }}"
+        state: absent
+        kind: Namespace
+        name: "{{ app.namespace }}"
+        wait: yes
+        timeout: 600
+      ignore_errors: true
+  loop: "{{ pod_cleanup_list }}"
+  loop_control:
+    loop_var: app

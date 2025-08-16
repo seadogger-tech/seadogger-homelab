@@ -4,43 +4,7 @@
   ansible.builtin.set_fact:
     KUBECONFIG: /etc/rancher/k3s/k3s.yaml
 
-# Step 2: Delete existing Plex namespace if it exists
-- name: Delete existing Plex namespace
-  ansible.builtin.k8s:
-    kubeconfig: "{{ KUBECONFIG }}"
-    state: absent
-    definition:
-      apiVersion: v1
-      kind: Namespace
-      metadata:
-        name: plex
-  ignore_errors: true
-
-# Step 3: Poll until Plex namespace is fully deleted
-- name: Poll until Plex namespace is fully deleted
-  community.kubernetes.k8s_info:
-    api_version: v1
-    kind: Namespace
-    name: plex
-    kubeconfig: "{{ KUBECONFIG }}"
-  register: ns_poll
-  until: ns_poll.resources is defined and ns_poll.resources | length == 0
-  retries: 30
-  delay: 10
-  ignore_errors: true
-
-# Step 4: Create new Plex namespace
-- name: Create Plex namespace
-  ansible.builtin.k8s:
-    kubeconfig: "{{ KUBECONFIG }}"
-    state: present
-    definition:
-      apiVersion: v1
-      kind: Namespace
-      metadata:
-        name: plex
-
-# Step 5: Create Plex claim secret
+# Step 2: Create Plex claim secret
 - name: Create Plex claim secret
   ansible.builtin.k8s:
     kubeconfig: "{{ KUBECONFIG }}"
@@ -55,7 +19,7 @@
       stringData:
         claim: "{{ plex_access_key }}"
 
-# Step 6: Create ArgoCD Plex Application
+# Step 3: Create ArgoCD Plex Application
 - name: Create Plex ArgoCD Application
   ansible.builtin.k8s:
     kubeconfig: "{{ KUBECONFIG }}"
@@ -85,7 +49,7 @@
           syncOptions:
             - CreateNamespace=true
 
-# Step 7: Wait for Plex application to be healthy
+# Step 4: Wait for Plex application to be healthy
 - name: Wait for Plex application to be healthy
   community.kubernetes.k8s_info:
     api_version: argoproj.io/v1alpha1

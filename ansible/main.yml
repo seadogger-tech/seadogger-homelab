@@ -1,14 +1,5 @@
 ---
 - hosts: cluster
-  gather_facts: false
-  become: true
-  vars_files:
-    - config.yml
-  tasks:
-    - name: Wipe K3s Cluster
-      import_tasks: tasks/wipe_k3s_cluster.yml
-      when: enable_wipe_k3s_cluster | default(false)
-- hosts: cluster
   gather_facts: true
   become: true
   handlers:

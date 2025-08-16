@@ -3,32 +3,6 @@
     - name: Set KUBECONFIG global
       ansible.builtin.set_fact:
         KUBECONFIG: /etc/rancher/k3s/k3s.yaml
-        argocd_force_clean_install: "{{ argocd_force_clean_install | default(false) }}"
-
-    # Clean install path
-    - name: Delete ArgoCD namespace if it exists
-      ansible.builtin.k8s:
-        kubeconfig: "{{ KUBECONFIG }}"
-        state: absent
-        definition:
-          apiVersion: v1
-          kind: Namespace
-          metadata:
-            name: argocd
-      become: true
-      when: argocd_force_clean_install | default(false)
-
-    - name: Wait for ArgoCD namespace to be deleted
-      ansible.builtin.k8s_info:
-        api_version: v1
-        kind: Namespace
-        name: argocd
-        kubeconfig: "{{ KUBECONFIG }}"
-      register: ns_status
-      retries: 20
-      delay: 3
-      until: ns_status.resources | length == 0
-      when: argocd_force_clean_install | default(false)
 
     # Common steps for both paths
     - name: Add ArgoCD Helm repository
@@ -63,12 +37,7 @@
     # Installation/Update step
     - name: Install or upgrade ArgoCD
       ansible.builtin.shell:
-        cmd: >
-          {% if argocd_force_clean_install | default(false) %}
-          helm install argocd argo/argo-cd --namespace argocd --create-namespace -f /tmp/argocd-values.yaml
-          {% else %}
-          helm upgrade --install argocd argo/argo-cd --namespace argocd --create-namespace -f /tmp/argocd-values.yaml
-          {% endif %}
+        cmd: helm upgrade --install argocd argo/argo-cd --namespace argocd --create-namespace -f /tmp/argocd-values.yaml
       environment:
         KUBECONFIG: "{{ KUBECONFIG }}"
       become: true
