@@ -36,7 +36,7 @@
 
 # Step 3: Wait for Pihole pods to be ready
 - name: Wait for Pihole pods to be ready
-  community.kubernetes.k8s_info:
+  kubernetes.core.k8s_info:
     kubeconfig: "{{ KUBECONFIG }}"
     kind: Pod
     namespace: pihole

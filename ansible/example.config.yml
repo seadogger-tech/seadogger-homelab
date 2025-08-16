@@ -22,9 +22,6 @@ cold_start_stage_3_install_applications: false
 
 # --- Manual Install Toggles ---
 # Use these flags to deploy services individually when the Stage 3 master switch is false.
-manual_install_argocd: false
-manual_install_metallb: false
-manual_install_argocd_svc: false
 manual_install_rook_ceph_part2: false
 manual_install_nfs_server: false
 manual_install_bedrock: false
@@ -54,7 +51,7 @@ plex_access_key: "YOUR_PLEX_CLAIM_TOKEN_HERE" # This key is only good for 5 minu
 #
 # 1. To Remove a SINGLE POD (e.g., plex):
 #    - Set `run_pod_cleanup: true`
-#    - In `pod_cleanup_list`, ensure only the `plex` entry is present or uncommented.
+#    - In `pod_cleanup_list`, comment out all pods except for the one you want to remove.
 #    - Set `delete_pvc: false` for plex to keep its data.
 #
 # 2. To Remove a SINGLE POD AND ITS DATA (e.g., pihole):
@@ -93,13 +90,11 @@ pod_cleanup_list:
   - { name: "n8n", namespace: "n8n", selector: "app.kubernetes.io/instance=n8n", delete_pvc: true }
   - { name: "plex", namespace: "plex", selector: "app=plex", delete_pvc: false }
 
-# --- HYBRID / PROMETHEUS CLEANUP ---
-run_prometheus_cleanup: false
-prometheus_delete_pvc: true # Explicit flag for Prometheus data
-
 # --- INFRASTRUCTURE CLEANUP ---
 run_infrastructure_cleanup: false
 infrastructure_cleanup_list:
+  - "prometheus"
+  - "argocd"
   - "metallb"
   - "rook-ceph" # Note: This does NOT wipe physical disks.
 
@@ -120,12 +115,11 @@ update_rpi_firmware: "{{ cold_start_stage_2_install_infrastructure | bool }}"
 enable_k3s_control_plane: "{{ cold_start_stage_2_install_infrastructure | bool }}"
 enable_k3s_workers: "{{ cold_start_stage_2_install_infrastructure | bool }}"
 enable_rook_ceph_part1: "{{ cold_start_stage_2_install_infrastructure | bool }}"
+enable_metallb_native: "{{ cold_start_stage_2_install_infrastructure | bool }}"
+enable_argocd_native: "{{ cold_start_stage_2_install_infrastructure | bool }}"
 
 # --- Stage 3: Application Deployment Variables ---
 # An application is enabled if the STAGE 3 master switch is ON, AND if its individual MANUAL switch is ON.
-enable_argocd: "{{ cold_start_stage_3_install_applications | bool and manual_install_argocd | bool }}"
-enable_metallb: "{{ cold_start_stage_3_install_applications | bool and manual_install_metallb | bool }}"
-enable_argocd_svc: "{{ cold_start_stage_3_install_applications | bool and manual_install_argocd_svc | bool }}"
 enable_rook_ceph_part2: "{{ cold_start_stage_3_install_applications | bool and manual_install_rook_ceph_part2 | bool }}"
 enable_nfs_server: "{{ cold_start_stage_3_install_applications | bool and manual_install_nfs_server | bool }}"
 enable_bedrock: "{{ cold_start_stage_3_install_applications | bool and manual_install_bedrock | bool }}"

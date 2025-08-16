@@ -47,9 +47,10 @@ For detailed, up-to-date information about the project's context, architecture, 
 ### Deployed Applications
 
 1. Core Services
+   - Rook-Ceph: Distributed storage solution
+   - MetalLB: Load balancer for bare metal
    - ArgoCD: GitOps deployment management
    - Traefik: Ingress controller
-   - MetalLB: Load balancer for bare metal
 
 2. User Services
    - PiHole: DNS and ad blocking
@@ -131,6 +132,33 @@ This entire process is now idempotent and fully automated via the Ansible playbo
 
 -   **Next Steps:**
     -   The NFS deployment is now fully functional.
+
+### ADR-006: Refactor Ansible Playbooks to Fix Circular Dependency
+
+- **Status:** Implemented & Verified
+- **Date:** 2025-08-16
+
+#### Context
+
+A circular dependency was identified in the Ansible playbooks where ArgoCD was responsible for deploying MetalLB, but ArgoCD itself required a LoadBalancer from MetalLB to be fully functional. This created a bootstrapping problem and made the deployment process fragile.
+
+#### Decision
+
+The deployment process was refactored to follow a logical, sequential deployment of infrastructure components *before* any applications are deployed.
+
+1.  **Refactored `main.yml` Deployment Order:** The `main.yml` playbook was restructured to deploy Rook-Ceph, then MetalLB, then ArgoCD, and finally the applications.
+2.  **Created New Native Helm Deployment Tasks:** New tasks were created to deploy MetalLB and ArgoCD directly using Helm, removing the dependency on ArgoCD for their installation.
+3.  **Refactored `cleanup.yml`:** The `cleanup.yml` playbook was updated to reflect the new deployment order, ensuring that applications are removed before the infrastructure they depend on.
+4.  **Updated `config.yml` and Documentation:** The `config.yml` and `example.config.yml` files were updated to include new flags for the native deployments, and the documentation was updated to reflect the new deployment and cleanup procedures.
+5.  **Cleaned Up Old Files:** The old, now-redundant deployment files were deleted.
+
+#### Consequences
+
+-   **Positive:**
+    -   The circular dependency between ArgoCD and MetalLB has been resolved.
+    -   The deployment process is now more logical, robust, and idempotent.
+-   **Negative:**
+    -   None. The change corrected a fundamental design flaw.
 
 ### ADR-005: Ansible Playbook Robustness and Logic Corrections
 
@@ -486,6 +514,11 @@ To perform cleanup operations, from targeted application removal to a full clust
 ```
 ansible-playbook cleanup.yml
 ```
+The `cleanup.yml` playbook is organized into three stages:
+1.  **Application and Service Cleanup:** This stage iterates through the `pod_cleanup_list` in `config.yml` and gracefully removes each application.
+2.  **Core Infrastructure Cleanup:** This stage removes the core infrastructure components (Prometheus, ArgoCD, MetalLB, and Rook-Ceph) in the correct order.
+3.  **Cluster Wipe:** This stage performs a full, destructive wipe of the k3s cluster.
+
 See the detailed instructions within `ansible/config.yml` for usage patterns.
 
    - Updates apt package cache

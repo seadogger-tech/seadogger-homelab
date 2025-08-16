@@ -1,0 +1,64 @@
+---
+# This file is called by cleanup_pods.yml in a loop.
+# The 'app' variable is passed from the loop.
+
+# Step 1: Delete the ArgoCD Application resource first.
+- name: "Delete ArgoCD Application for {{ app.name }}"
+  kubernetes.core.k8s:
+    kubeconfig: "{{ KUBECONFIG }}"
+    state: absent
+    kind: Application
+    api_version: argoproj.io/v1alpha1
+    name: "{{ app.name }}"
+    namespace: argocd
+    wait: yes
+    wait_timeout: 300
+  ignore_errors: true
+
+# Step 2: Delete all common namespaced resources by kind.
+- name: "Delete namespaced resources for {{ app.name }}"
+  kubernetes.core.k8s:
+    kubeconfig: "{{ KUBECONFIG }}"
+    state: absent
+    namespace: "{{ app.namespace }}"
+    label_selectors:
+      - "{{ app.selector }}"
+    kind: "{{ item }}"
+    delete_all: true
+  loop:
+    - Deployment
+    - StatefulSet
+    - DaemonSet
+    - Service
+    - ConfigMap
+    - Secret
+    - Ingress
+    - NetworkPolicy
+  loop_control:
+    loop_var: item
+  ignore_errors: true
+
+# Step 3 (Conditional): Delete PVCs if requested.
+- name: "Delete PVCs for {{ app.name }}"
+  kubernetes.core.k8s:
+    kubeconfig: "{{ KUBECONFIG }}"
+    state: absent
+    kind: PersistentVolumeClaim
+    namespace: "{{ app.namespace }}"
+    label_selectors:
+      - "{{ app.selector }}"
+    delete_all: true
+  when: app.delete_pvc | default(false)
+  ignore_errors: true
+
+# Step 4 (Conditional): Delete the namespace if PVCs are also being deleted.
+- name: "Delete namespace for {{ app.name }}"
+  kubernetes.core.k8s:
+    kubeconfig: "{{ KUBECONFIG }}"
+    state: absent
+    kind: Namespace
+    name: "{{ app.namespace }}"
+    wait: yes
+    wait_timeout: 600
+  when: app.delete_pvc | default(false)
+  ignore_errors: true

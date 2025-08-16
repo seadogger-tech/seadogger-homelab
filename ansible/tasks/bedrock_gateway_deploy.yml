@@ -4,9 +4,20 @@
       ansible.builtin.set_fact:
         KUBECONFIG: /etc/rancher/k3s/k3s.yaml
 
-    # Step 2: Create AWS Bedrock secrets
+    # Step 2: Create bedrock-gateway namespace
+    - name: Create bedrock-gateway namespace
+      kubernetes.core.k8s:
+        kubeconfig: "{{ KUBECONFIG }}"
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Namespace
+          metadata:
+            name: bedrock-gateway
+
+    # Step 3: Create AWS Bedrock secrets
     - name: Create AWS Bedrock secrets
-      ansible.builtin.k8s:
+      kubernetes.core.k8s:
         kubeconfig: "{{ KUBECONFIG }}"
         state: present
         definition:

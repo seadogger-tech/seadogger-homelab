@@ -36,7 +36,7 @@
 
 # Step 3: Wait for OpenWebUI pods to be ready using signal-based validation
 - name: Wait for OpenWebUI pods to be ready
-  community.kubernetes.k8s_info:
+  kubernetes.core.k8s_info:
     kubeconfig: "{{ KUBECONFIG }}"
     kind: Pod
     namespace: openwebui

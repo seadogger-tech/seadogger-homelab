@@ -17,7 +17,8 @@
     kubectl apply --server-side -f https://raw.githubusercontent.com/prometheus-operator/kube-prometheus/release-0.13/manifests/setup/0alertmanagerConfigCustomResourceDefinition.yaml
 
 # Step 3: Wait for Prometheus CRDs to be established
-  community.kubernetes.k8s_info:
+- name: Wait for Prometheus CRDs to be established
+  kubernetes.core.k8s_info:
     kubeconfig: "{{ KUBECONFIG }}"
     kind: CustomResourceDefinition
     name: "{{ item }}"
@@ -188,7 +189,7 @@
 
 # Step 7: Wait for Prometheus Stack to be healthy
 - name: Wait for prometheus-stack ArgoCD app to be healthy
-  community.kubernetes.k8s_info:
+  kubernetes.core.k8s_info:
     kubeconfig: "{{ KUBECONFIG }}"
     api_version: argoproj.io/v1alpha1
     kind: Application

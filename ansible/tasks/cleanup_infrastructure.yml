@@ -3,41 +3,113 @@
   ansible.builtin.set_fact:
     KUBECONFIG: /etc/rancher/k3s/k3s.yaml
 
-# === MetalLB Cleanup ===
-- name: "Clean up MetalLB Infrastructure"
+# === Prometheus Cleanup ===
+- name: "Clean up Prometheus"
   block:
-    - name: "Delete MetalLB ArgoCD Applications (config first)"
-      community.kubernetes.k8s:
+    - name: "Delete Prometheus ArgoCD Application"
+      kubernetes.core.k8s:
         kubeconfig: "{{ KUBECONFIG }}"
         state: absent
         kind: Application
         api_version: argoproj.io/v1alpha1
-        name: "{{ item }}"
+        name: prometheus-stack
         namespace: argocd
         wait: yes
-        timeout: 300
+        wait_timeout: 300
+      ignore_errors: true
+
+    - name: "Delete Prometheus CRDs"
+      kubernetes.core.k8s:
+        kubeconfig: "{{ KUBECONFIG }}"
+        state: absent
+        kind: CustomResourceDefinition
+        name: "{{ item }}"
       loop:
-        - metallb-config
-        - metallb
+        - "alertmanagerconfigs.monitoring.coreos.com"
+        - "alertmanagers.monitoring.coreos.com"
+        - "podmonitors.monitoring.coreos.com"
+        - "probes.monitoring.coreos.com"
+        - "prometheuses.monitoring.coreos.com"
+        - "prometheusrules.monitoring.coreos.com"
+        - "servicemonitors.monitoring.coreos.com"
+        - "thanosrulers.monitoring.coreos.com"
+      ignore_errors: true
+  when: "'prometheus' in infrastructure_cleanup_list"
+
+# === ArgoCD Cleanup ===
+- name: "Clean up ArgoCD"
+  block:
+    - name: "Delete all ArgoCD Applications"
+      kubernetes.core.k8s:
+        kubeconfig: "{{ KUBECONFIG }}"
+        state: absent
+        kind: Application
+        api_version: argoproj.io/v1alpha1
+        namespace: argocd
+        delete_options:
+          propagationPolicy: Foreground
+      ignore_errors: true
+
+    - name: "Delete ArgoCD Helm release"
+      kubernetes.core.helm:
+        kubeconfig: "{{ KUBECONFIG }}"
+        name: argocd
+        release_namespace: argocd
+        state: absent
+        wait: yes
+        wait_timeout: 300
+      ignore_errors: true
+
+    - name: "Delete ArgoCD Namespace"
+      kubernetes.core.k8s:
+        kubeconfig: "{{ KUBECONFIG }}"
+        state: absent
+        kind: Namespace
+        name: argocd
+        wait: yes
+        wait_timeout: 600
+      ignore_errors: true
+  when: "'argocd' in infrastructure_cleanup_list"
+
+# === MetalLB Cleanup ===
+- name: "Clean up MetalLB"
+  block:
+    - name: "Delete MetalLB Custom Resources"
+      kubernetes.core.k8s:
+        kubeconfig: "{{ KUBECONFIG }}"
+        src: "https://raw.githubusercontent.com/seadogger/seadogger-homelab/main/helm-deployments/metallb/metallb-values.yaml"
+        state: absent
+        wait: yes
+        wait_timeout: 300
+      ignore_errors: true
+
+    - name: "Delete MetalLB Helm release"
+      kubernetes.core.helm:
+        kubeconfig: "{{ KUBECONFIG }}"
+        name: metallb
+        release_namespace: metallb-system
+        state: absent
+        wait: yes
+        wait_timeout: 300
       ignore_errors: true
 
     - name: "Delete MetalLB Namespace"
-      community.kubernetes.k8s:
+      kubernetes.core.k8s:
         kubeconfig: "{{ KUBECONFIG }}"
         state: absent
         kind: Namespace
         name: metallb-system
         wait: yes
-        timeout: 600
+        wait_timeout: 600
       ignore_errors: true
   when: "'metallb' in infrastructure_cleanup_list"
 
 # === Rook-Ceph Cleanup (The Critical Path) ===
-- name: "Clean up Rook-Ceph Infrastructure"
+- name: "Clean up Rook-Ceph"
   block:
     # Step 1: Teardown NFS services from part2.yml
     - name: "Ceph Cleanup: Delete NFS LoadBalancer Service"
-      community.kubernetes.k8s:
+      kubernetes.core.k8s:
         kubeconfig: "{{ KUBECONFIG }}"
         state: absent
         kind: Service
@@ -46,7 +118,7 @@
       ignore_errors: true
 
     - name: "Ceph Cleanup: Delete CephNFS CRD"
-      community.kubernetes.k8s:
+      kubernetes.core.k8s:
         kubeconfig: "{{ KUBECONFIG }}"
         state: absent
         kind: CephNFS
@@ -54,12 +126,12 @@
         name: nfs-ec
         namespace: rook-ceph
         wait: yes
-        timeout: 300
+        wait_timeout: 300
       ignore_errors: true
 
     # Step 2: Delete Storage Classes and Filesystem
     - name: "Ceph Cleanup: Delete StorageClasses"
-      community.kubernetes.k8s:
+      kubernetes.core.k8s:
         kubeconfig: "{{ KUBECONFIG }}"
         state: absent
         kind: StorageClass
@@ -71,7 +143,7 @@
       ignore_errors: true
 
     - name: "Ceph Cleanup: Delete CephFilesystem CRD"
-      community.kubernetes.k8s:
+      kubernetes.core.k8s:
         kubeconfig: "{{ KUBECONFIG }}"
         state: absent
         kind: CephFilesystem
@@ -79,7 +151,7 @@
         name: ec-fs
         namespace: rook-ceph
         wait: yes
-        timeout: 300
+        wait_timeout: 300
       ignore_errors: true
 
     # Step 3: Uninstall Helm Charts (Cluster then Operator)
@@ -92,18 +164,18 @@
 
     # Step 4: Delete the namespace
     - name: "Ceph Cleanup: Delete rook-ceph namespace"
-      community.kubernetes.k8s:
+      kubernetes.core.k8s:
         kubeconfig: "{{ KUBECONFIG }}"
         state: absent
         kind: Namespace
         name: rook-ceph
         wait: yes
-        timeout: 900
+        wait_timeout: 900
       ignore_errors: true
 
     # Step 5: Delete Rook-Ceph CRDs (LAST STEP)
     - name: "Ceph Cleanup: Delete Rook-Ceph CRDs"
-      community.kubernetes.k8s:
+      kubernetes.core.k8s:
         kubeconfig: "{{ KUBECONFIG }}"
         state: absent
         kind: CustomResourceDefinition

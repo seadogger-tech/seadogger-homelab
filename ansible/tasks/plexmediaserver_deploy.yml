@@ -51,7 +51,7 @@
 
 # Step 4: Wait for Plex application to be healthy
 - name: Wait for Plex application to be healthy
-  community.kubernetes.k8s_info:
+  kubernetes.core.k8s_info:
     api_version: argoproj.io/v1alpha1
     kind: Application
     name: plex

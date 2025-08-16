@@ -1,0 +1,25 @@
+---
+- name: Add MetalLB Helm repository
+  kubernetes.core.helm_repository:
+    name: metallb
+    repo_url: "https://metallb.github.io/metallb"
+    state: present
+
+- name: Create MetalLB namespace
+  kubernetes.core.k8s:
+    name: metallb-system
+    api_version: v1
+    kind: Namespace
+    state: present
+
+- name: Deploy MetalLB with Helm
+  kubernetes.core.helm:
+    name: metallb
+    chart_ref: metallb/metallb
+    release_namespace: metallb-system
+    state: present
+
+- name: Apply MetalLB Custom Resources
+  kubernetes.core.k8s:
+    src: "https://raw.githubusercontent.com/seadogger/seadogger-homelab/main/helm-deployments/metallb/metallb-values.yaml"
+    state: present

@@ -46,17 +46,13 @@
       import_tasks: tasks/rook_ceph_deploy_part1.yml
       when: enable_rook_ceph_part1 | default(false)
 
-    - name: Deploy ArgoCD
-      import_tasks: tasks/argocd_deploy.yml
-      when: enable_argocd | default(true)
+    - name: Deploy MetalLB Natively
+      import_tasks: tasks/metallb_native_deploy.yml
+      when: enable_metallb_native | default(true)
 
-    - name: Deploy MetalLB
-      import_tasks: tasks/metallb_deploy.yml
-      when: enable_metallb | default(true)
-
-    - name: Deploy ArgoCD SVC
-      import_tasks: tasks/argocd_svc_metallb_deploy.yml
-      when: enable_argocd_svc | default(true)
+    - name: Deploy ArgoCD Natively
+      import_tasks: tasks/argocd_native_deploy.yml
+      when: enable_argocd_native | default(true)
 
     - name: Deploy Rook-Ceph - Part 2 (NFS Server)
       import_tasks: tasks/rook_ceph_deploy_part2.yml

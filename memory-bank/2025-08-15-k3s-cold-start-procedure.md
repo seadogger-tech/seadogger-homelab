@@ -30,6 +30,11 @@ The `cleanup.yml` playbook is the single entry point for all destructive operati
     ```
     This command will execute a graceful, ordered teardown of all applications and infrastructure *before* wiping the k3s installation from all nodes.
 
+The `cleanup.yml` playbook is organized into three stages:
+1.  **Application and Service Cleanup:** This stage iterates through the `pod_cleanup_list` in `config.yml` and gracefully removes each application.
+2.  **Core Infrastructure Cleanup:** This stage removes the core infrastructure components (Prometheus, ArgoCD, MetalLB, and Rook-Ceph) in the correct order.
+3.  **Cluster Wipe:** This stage performs a full, destructive wipe of the k3s cluster.
+
 ### Step 2: Cluster Installation (`main.yml`)
 
 The `main.yml` playbook is now solely responsible for installation and idempotent upgrades.
@@ -39,6 +44,7 @@ The `main.yml` playbook is now solely responsible for installation and idempoten
     cold_start_stage_2_install_infrastructure: true
     cold_start_stage_3_install_applications: true
     ```
+    This will enable the native deployment of MetalLB and ArgoCD as part of the infrastructure stage.
 2.  **Execute Installation:** Run the main playbook from the `ansible` directory.
     ```bash
     ansible-playbook main.yml
