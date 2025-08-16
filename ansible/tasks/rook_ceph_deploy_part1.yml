@@ -117,6 +117,19 @@
   until: wait_result.rc == 0
 
 # Step 6: Install cluster
+- name: Create Ceph Dashboard Password Secret
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: rook-ceph-dashboard-password
+        namespace: rook-ceph
+      type: Opaque
+      stringData:
+        password: "{{ dashboard_password }}"
+
 - name: Install Rook-Ceph Cluster (without filesystem)
   ansible.builtin.shell:
     cmd: >-
@@ -227,3 +240,27 @@
   ansible.builtin.shell: |
     kubectl patch storageclass ceph-block -p '{"metadata": {"annotations": {"storageclass.kubernetes.io/is-default-class": "true"}}}'
   environment: "{{ env_vars }}"
+
+- name: Expose Ceph Dashboard
+  ansible.builtin.k8s:
+    kubeconfig: "{{ KUBECONFIG }}"
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: rook-ceph-mgr-dashboard-loadbalancer
+        namespace: rook-ceph
+        annotations:
+          metallb.universe.tf/loadBalancerIPs: 192.168.1.248
+      spec:
+        ports:
+        - name: http-dashboard
+          port: 7000
+          protocol: TCP
+          targetPort: 7000
+        selector:
+          app: rook-ceph-mgr
+          rook_cluster: rook-ceph
+        sessionAffinity: None
+        type: LoadBalancer

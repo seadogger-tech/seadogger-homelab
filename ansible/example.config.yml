@@ -29,6 +29,7 @@ manual_install_n8n: false
 manual_install_plex: false
 
 # --- Secrets ---
+dashboard_password: "YourSecurePasswordHere"
 aws_bedrock_api_key_id: "YOUR_AWS_ACCESS_KEY_ID_HERE"
 aws_bedrock_api_access_key: "YOUR_AWS_SECRET_ACCESS_KEY_HERE"
 plex_access_key: "YOUR_PLEX_CLAIM_TOKEN_HERE" # This key is only good for 5 minutes. You get this from https://plex.tv/claim

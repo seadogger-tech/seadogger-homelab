@@ -25,9 +25,11 @@ cephClusterSpec:
   dashboard:
     enabled: true
     ssl: false
+    security:
+      adminPasswordSecretName: rook-ceph-dashboard-password
 
   network:
-    provider: host
+    provider: ""
 
   # Disable crash collector to save resources
   crashCollector:
