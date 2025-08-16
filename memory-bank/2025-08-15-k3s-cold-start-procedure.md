@@ -86,3 +86,50 @@ An application's deployment task (e.g., `enable_prometheus`) is only activated i
 2.  The specific application's manual switch, `manual_install_prometheus`, is also set to `true`.
 
 This allows you to use the `manual_install_*` flags as a checklist for which applications you want to include in a Stage 3 deployment, preventing accidental deployment of unwanted services. For example, to deploy everything except Plex, you would set `cold_start_stage_3_install_applications: true` and ensure all `manual_install_*` flags are `true` except for `manual_install_plex: false`.
+
+---
+
+## Known Issues: Stage 1 Instability
+
+**Date:** 2025-08-16
+
+### Current Status
+
+The `ansible-playbook main.yml` command, which handles the initial "Stage 1" deployment of the entire cluster, is currently unstable. The playbook frequently fails during the cleanup phase because of file locks and resources on the worker and control plane nodes that fail to release properly.
+
+### Current Workaround
+
+The deployment will eventually complete, but it may require two to four attempts. Because the playbook is designed to be idempotent, each subsequent run will skip the completed tasks and pick up where the last one failed.
+
+### Current Workaround
+
+The deployment can be successfully completed, but it is a messy process that requires manual intervention:
+
+1.  Run `ansible-playbook main.yml`.
+2.  Wait for it to fail with the `objc` / `dead state` error.
+3.  Immediately re-run `ansible-playbook main.yml`.
+4.  Repeat this process several times. Because the playbook is designed to be idempotent, each subsequent run will skip the completed tasks and pick up where the last one failed. Eventually, all tasks will complete successfully.
+
+While this works, it is not an acceptable long-term solution.
+
+### Next Steps: Stabilizing Stage 1
+
+The immediate priority is to refactor the deployment process to make it robust and eliminate the need for manual intervention.
+
+1.  **Refactor `main.yml` into Modular Playbooks:**
+    *   The monolithic `main.yml` is too large and complex, increasing the chances of hitting the fork issue. It should be broken down into smaller, purpose-built playbooks.
+    *   **Proposed Playbooks:**
+        *   `playbook-01-cluster-prep.yml`: Handles OS-level configuration, package installation, and prerequisites.
+        *   `playbook-02-k3s-install.yml`: Deploys the K3s cluster itself.
+        *   `playbook-03-core-services.yml`: Deploys essential services like storage (Rook-Ceph), networking (MetalLB), and GitOps (ArgoCD).
+        *   `playbook-04-applications.yml`: Deploys the user-facing applications (Prometheus, Grafana, Plex, etc.).
+    *   This modular approach will allow for more targeted deployments and make debugging significantly easier.
+
+2.  **Isolate the Ansible Environment:**
+    *   Investigate running the Ansible playbooks from within a Docker container. This would provide a consistent Linux-based environment for Ansible to execute in, completely bypassing the macOS-specific forking problems.
+
+3.  **Improve Task Idempotency and Error Handling:**
+    *   Review all tasks to ensure they are fully idempotent and can recover gracefully from interruptions.
+    *   Add more explicit `until` loops and checks to validate the state of the cluster before and after major changes, reducing reliance on long, monolithic plays.
+
+By implementing these changes, we can create a stable, reliable, and repeatable deployment process that aligns with IaC best practices.

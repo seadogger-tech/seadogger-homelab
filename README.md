@@ -534,6 +534,8 @@ See the README file within the `benchmarks` folder.  **Credit and Thanks to [Jef
 
 A full, destructive "cold start" of the cluster can be performed to validate the IaaC configuration. This process has been refactored into a safer, three-stage process: **Wipe**, **Install Infrastructure**, and **Install Applications**. This provides granular control over the cluster rebuild lifecycle. For a detailed guide, please refer to the [K3s Cluster Cold Start Procedure](memory-bank/2025-08-15-k3s-cold-start-procedure.md) in the memory bank.
 
+> **Warning:** The Stage 1 deployment process is currently unstable. The playbook may fail and require two to four re-runs to complete successfully. See the "Known Issues" section in the Cold Start Procedure for more details and planned fixes.
+
 ## Shutting down the cluster
 
 The safest way to shut down the cluster is to run the following command:

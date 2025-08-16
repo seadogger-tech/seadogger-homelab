@@ -6,6 +6,8 @@ active_internet_interface: "eth0"
 
 # --- Cold Start Master Switches ---
 # STAGE 1: Set to true to run all DESTRUCTIVE wipe tasks.
+# WARNING: This stage is currently unstable and may require multiple runs to complete successfully.
+# See the "Known Issues" section in the Cold Start Procedure for more details.
 cold_start_stage_1_wipe_cluster: false
 # STAGE 2: Set to true to install the core infrastructure (k3s, Ceph, etc.).
 cold_start_stage_2_install_infrastructure: false
