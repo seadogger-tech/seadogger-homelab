@@ -4,27 +4,6 @@
   ansible.builtin.set_fact:
     KUBECONFIG: /etc/rancher/k3s/k3s.yaml
 
-# Step 2: Delete existing Prometheus namespace if it exists
-- name: Delete existing Prometheus namespace
-  ansible.builtin.k8s:
-    kubeconfig: "{{ KUBECONFIG }}"
-    state: absent
-    definition:
-      apiVersion: v1
-      kind: Namespace
-      metadata:
-        name: monitoring
-  ignore_errors: true
-
-- name: Poll until Prometheus namespace is fully deleted
-  community.kubernetes.k8s_info:
-    kubeconfig: "{{ KUBECONFIG }}"
-    kind: Namespace
-  register: ns_poll
-  until: ns_poll is defined and 'resources' in ns_poll and (ns_poll.resources | selectattr('metadata.name', 'equalto', 'monitoring') | list | length == 0)
-  retries: 30
-  delay: 5
-  ignore_errors: true
 
 # Step 3: Create new Prometheus namespace
 - name: Create Prometheus namespace
@@ -37,7 +16,38 @@
       metadata:
         name: monitoring
 
-# Step 4: Create Prometheus Stack ArgoCD Application
+# Step 4: Apply Prometheus CRDs
+- name: Apply Prometheus CRDs
+  ansible.builtin.shell: >
+    kubectl apply --server-side -f https://raw.githubusercontent.com/prometheus-operator/kube-prometheus/release-0.13/manifests/setup/0alertmanagerCustomResourceDefinition.yaml &&
+    kubectl apply --server-side -f https://raw.githubusercontent.com/prometheus-operator/kube-prometheus/release-0.13/manifests/setup/0podmonitorCustomResourceDefinition.yaml &&
+    kubectl apply --server-side -f https://raw.githubusercontent.com/prometheus-operator/kube-prometheus/release-0.13/manifests/setup/0prometheusCustomResourceDefinition.yaml &&
+    kubectl apply --server-side -f https://raw.githubusercontent.com/prometheus-operator/kube-prometheus/release-0.13/manifests/setup/0prometheusruleCustomResourceDefinition.yaml &&
+    kubectl apply --server-side -f https://raw.githubusercontent.com/prometheus-operator/kube-prometheus/release-0.13/manifests/setup/0servicemonitorCustomResourceDefinition.yaml &&
+    kubectl apply --server-side -f https://raw.githubusercontent.com/prometheus-operator/kube-prometheus/release-0.13/manifests/setup/0thanosrulerCustomResourceDefinition.yaml &&
+    kubectl apply --server-side -f https://raw.githubusercontent.com/prometheus-operator/kube-prometheus/release-0.13/manifests/setup/0probeCustomResourceDefinition.yaml &&
+    kubectl apply --server-side -f https://raw.githubusercontent.com/prometheus-operator/kube-prometheus/release-0.13/manifests/setup/0alertmanagerConfigCustomResourceDefinition.yaml
+
+- name: Wait for Prometheus CRDs to be established
+  community.kubernetes.k8s_info:
+    kubeconfig: "{{ KUBECONFIG }}"
+    kind: CustomResourceDefinition
+    name: "{{ item }}"
+  register: crd_status
+  until: crd_status.resources | default([]) | length > 0 and (crd_status.resources[0].status.conditions | selectattr('type', 'equalto', 'Established') | first).status == 'True'
+  retries: 10
+  delay: 5
+  with_items:
+    - alertmanagers.monitoring.coreos.com
+    - podmonitors.monitoring.coreos.com
+    - prometheuses.monitoring.coreos.com
+    - prometheusrules.monitoring.coreos.com
+    - servicemonitors.monitoring.coreos.com
+    - thanosrulers.monitoring.coreos.com
+    - probes.monitoring.coreos.com
+    - alertmanagerconfigs.monitoring.coreos.com
+
+# Step 5: Create Prometheus Stack ArgoCD Application
 - name: Create Prometheus Stack ArgoCD Application
   ansible.builtin.k8s:
     kubeconfig: "{{ KUBECONFIG }}"
@@ -198,10 +208,7 @@
     name: prometheus-stack
   register: prometheus_status
   until: >
-    prometheus_status is defined and 
-    'resources' in prometheus_status and 
-    prometheus_status.resources[0].status is defined and
-    prometheus_status.resources[0].status.get('health', {}) is defined and
-    (prometheus_status.resources[0].status.health.get('status', '') == "Healthy")
+    prometheus_status.resources | default([]) | length > 0 and
+    (prometheus_status.resources[0].status | default({})).get('health', {}).get('status', '') == 'Healthy'
   retries: 60
   delay: 10

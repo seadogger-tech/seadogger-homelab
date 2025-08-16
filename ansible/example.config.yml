@@ -4,58 +4,59 @@ ipv4_gateway: "192.168.1.1"
 dns4_servers: "{{ ipv4_gateway }}"
 active_internet_interface: "eth0"
 
-# Task enable/disable configuration
-enable_raspberry_pi_config: false
-update_rpi_firmware: false  # Set to false to disable firmware updates
+# --- Cold Start Master Switches ---
+# STAGE 1: Set to true to run all DESTRUCTIVE wipe tasks.
+cold_start_stage_1_wipe_cluster: false
+# STAGE 2: Set to true to install the core infrastructure (k3s, Ceph, etc.).
+cold_start_stage_2_install_infrastructure: false
+# STAGE 3: Set to true to deploy all applications and services.
+cold_start_stage_3_install_applications: false
 
-#. Use this carefully as it destructive and will remove everything.  This was added to be able to verify the IaaC patterns are intact as part and make a clean install of k3s
-enable_wipe_k3s_cluster: false
+# --- Manual Install Toggles ---
+# Use these flags to deploy services individually when the Stage 3 master switch is false.
+manual_install_argocd: false
+manual_install_metallb: false
+manual_install_argocd_svc: false
+manual_install_rook_ceph_part2: false
+manual_install_nfs_server: false
+manual_install_bedrock: false
+manual_install_pihole: false
+manual_install_prometheus: false
+manual_install_openwebui: false
+manual_install_n8n: false
+manual_install_plex: false
 
-# Install k3s
-enable_k3s_control_plane: false
-enable_k3s_workers: false
-
-# Rook-Ceph Deployment Configuration
-#
-# IMPORTANT DEPLOYMENT ORDER:
-# 1. enable_rook_ceph_part1 MUST be true to deploy the core storage components.
-# 2. enable_argocd and enable_metallb MUST be true and run successfully after Part 1.
-# 3. enable_rook_ceph_part2 can then be run to deploy the NFS server, which depends on MetalLB.
-#
-# For a complete initial deployment, all three (part1, argocd/metallb, part2) must be run in order.
-enable_rook_ceph_part1: false
-enable_rook_ceph_part2: false
-wipe_ceph_disks_on_install: false # DANGER: Set to true ONLY for a cold start on new disks. This is DESTRUCTIVE.
-
-# ArgoCD deployment to k3s 
-argocd_force_clean_install: false  # When false (default), safely updates existing installation. When true, performs complete removal and fresh install.
-enable_argocd: false
-enable_metallb: false
-enable_argocd_svc: false
-
-# ArgoCD managed apps.  Setting these to true with perform a clean install of the app. 
-#  If you are trybing to change the configuration of one of these apps you should make the change in the 
-#  ../helm-deployments or ../kubectl-deployments values files and ArgoCD will automatigically update the application
-#  in the next app sync 
-enable_bedrock: false
-enable_pihole: false
-
-# ArgoCD managed apps with PVC.  Setting these to true with perform a clean install of the app. 
-#  If you are trybing to change the configuration of one of these apps you should make the change in the 
-#  ../helm-deployments or ../kubectl-deployments values files and ArgoCD will automatigically update the application
-#  in the next app sync 
-enable_prometheus: false
-enable_openwebui: false
-enable_plex: false
-
+# --- Secrets ---
 aws_bedrock_api_key_id: "YOUR_AWS_ACCESS_KEY_ID_HERE"
-aws_bedrock_api_access_key: "YOUR_AWS_ACCESS_KEY_HERE"
+aws_bedrock_api_access_key: "YOUR_AWS_SECRET_ACCESS_KEY_HERE"
+plex_access_key: "YOUR_PLEX_CLAIM_TOKEN_HERE" # This key is only good for 5 minutes. You get this from https://plex.tv/claim
 
-#This key is only good for 5 minutes so best to run this last and only enable the plex install above
-# You get this from https://plex.tv/claim
-plex_access_key: "YOUR_PLEX_VALIDATION_KEY"
+# ===================================================================================
+# --- Ansible Playbook Variables (GENERATED FROM THE SWITCHES ABOVE) ---
+# ===================================================================================
 
-enable_n8n: false
+# --- Stage 1: Wipe Cluster Variables (DESTRUCTIVE) ---
+enable_wipe_k3s_cluster: "{{ cold_start_stage_1_wipe_cluster | bool }}"
+wipe_ceph_disks_on_install: "{{ cold_start_stage_1_wipe_cluster | bool }}" # DANGER: DESTRUCTIVE.
+argocd_force_clean_install: "{{ cold_start_stage_1_wipe_cluster | bool }}"
 
-# Enable NFS server deployment
-enable_nfs_server: false
+# --- Stage 2: Infrastructure Installation Variables ---
+enable_raspberry_pi_config: "{{ cold_start_stage_2_install_infrastructure | bool }}"
+update_rpi_firmware: "{{ cold_start_stage_2_install_infrastructure | bool }}"
+enable_k3s_control_plane: "{{ cold_start_stage_2_install_infrastructure | bool }}"
+enable_k3s_workers: "{{ cold_start_stage_2_install_infrastructure | bool }}"
+enable_rook_ceph_part1: "{{ cold_start_stage_2_install_infrastructure | bool }}"
+
+# --- Stage 3: Application Deployment Variables ---
+# An application is enabled if the STAGE 3 master switch is ON, AND if its individual MANUAL switch is ON.
+enable_argocd: "{{ cold_start_stage_3_install_applications | bool and manual_install_argocd | bool }}"
+enable_metallb: "{{ cold_start_stage_3_install_applications | bool and manual_install_metallb | bool }}"
+enable_argocd_svc: "{{ cold_start_stage_3_install_applications | bool and manual_install_argocd_svc | bool }}"
+enable_rook_ceph_part2: "{{ cold_start_stage_3_install_applications | bool and manual_install_rook_ceph_part2 | bool }}"
+enable_nfs_server: "{{ cold_start_stage_3_install_applications | bool and manual_install_nfs_server | bool }}"
+enable_bedrock: "{{ cold_start_stage_3_install_applications | bool and manual_install_bedrock | bool }}"
+enable_pihole: "{{ cold_start_stage_3_install_applications | bool and manual_install_pihole | bool }}"
+enable_prometheus: "{{ cold_start_stage_3_install_applications | bool and manual_install_prometheus | bool }}"
+enable_openwebui: "{{ cold_start_stage_3_install_applications | bool and manual_install_openwebui | bool }}"
+enable_n8n: "{{ cold_start_stage_3_install_applications | bool and manual_install_n8n | bool }}"
+enable_plex: "{{ cold_start_stage_3_install_applications | bool and manual_install_plex | bool }}"

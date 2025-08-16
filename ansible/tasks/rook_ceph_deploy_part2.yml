@@ -18,7 +18,8 @@
 - name: Wait for CephNFS resource to be created
   ansible.builtin.shell: |
     kubectl -n rook-ceph get cephnfs nfs-ec
-  environment: "{{ env_vars }}"
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
   register: nfs_resource
   retries: 30
   delay: 10
@@ -28,7 +29,8 @@
 - name: Wait for NFS Ganesha deployment to be ready
   ansible.builtin.shell: |
     kubectl -n rook-ceph wait --for=condition=Available deployment/rook-ceph-nfs-nfs-ec-a --timeout=300s
-  environment: "{{ env_vars }}"
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
   register: nfs_deployment
   retries: 30
   delay: 10
@@ -177,7 +179,8 @@
       kubectl -n rook-ceph exec "$TOOLS_POD" -- \
         rados -p .nfs --namespace nfs-ec ls | sort
     executable: /bin/bash
-  environment: "{{ env_vars }}"
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
   register: rados_export
   retries: 5
   delay: 6
@@ -191,7 +194,8 @@
       kubectl -n rook-ceph exec "$(kubectl -n rook-ceph get pods -l app=rook-ceph-tools -o name | head -n1)" -- \
         sh -lc 'ceph auth get "{{ cephx_user_id }}"'
     executable: /bin/bash
-  environment: "{{ env_vars }}"
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
   register: cephx_user_caps
   changed_when: false
   failed_when: cephx_user_caps.rc != 0 or 'fsname=ec-fs' not in cephx_user_caps.stdout
@@ -245,7 +249,8 @@
 - name: Wait for NFS Ganesha deployment to be ready after restart
   ansible.builtin.shell: |
     kubectl -n rook-ceph wait --for=condition=Available deployment/rook-ceph-nfs-nfs-ec-a --timeout=300s
-  environment: "{{ env_vars }}"
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
   register: nfs_deployment_restart
   retries: 30
   delay: 10

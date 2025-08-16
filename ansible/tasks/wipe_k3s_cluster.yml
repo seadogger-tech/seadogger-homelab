@@ -3,6 +3,13 @@
     msg: "Wipe K3s cluster is disabled in config.yml. Set 'enable_wipe_k3s_cluster: true' to run."
   when: not enable_wipe_k3s_cluster | default(false)
 
+- name: Ensure iptables is installed
+  ansible.builtin.apt:
+    name: iptables
+    state: present
+    update_cache: yes
+  become: true
+
 - name: Stop k3s-agent on worker nodes
   ansible.builtin.systemd:
     name: k3s-agent
@@ -79,7 +86,6 @@
     iptables -P INPUT ACCEPT
     iptables -P FORWARD ACCEPT
     iptables -P OUTPUT ACCEPT
-  no_log: true
 
 - name: Wipe storage device partitions and zero beginning of partition
   block:
@@ -93,10 +99,10 @@
       no_log: true
       ignore_errors: true
 
-    - name: Zap all partition data
-      ansible.builtin.shell: sgdisk --zap-all /dev/nvme0n1p3
-      no_log: true
-      ignore_errors: true
+    # - name: Zap all partition data
+    #   ansible.builtin.shell: sgdisk --zap-all /dev/nvme0n1p3
+    #   no_log: true
+    #   ignore_errors: true
 
 - name: Remove all device mapper devices
   ansible.builtin.shell: dmsetup remove_all

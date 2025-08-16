@@ -113,3 +113,35 @@
     content: 'export KUBECONFIG=/etc/rancher/k3s/k3s.yaml'
     mode: '0755'
   become: true
+
+# --- Kubeconfig Setup for Local Machine ---
+- name: Fetch kubeconfig from control plane
+  ansible.builtin.fetch:
+    src: /etc/rancher/k3s/k3s.yaml
+    dest: "/tmp/k3s-kubeconfig-{{ inventory_hostname }}"
+    flat: yes
+  become: true
+
+- name: Replace localhost with control plane IP in fetched kubeconfig
+  ansible.builtin.replace:
+    path: "/tmp/k3s-kubeconfig-{{ inventory_hostname }}"
+    regexp: '127\.0\.0\.1'
+    replace: "{{ ipv4_subnet_prefix }}.95"
+  delegate_to: localhost
+  become: false
+
+- name: Ensure .kube directory exists
+  ansible.builtin.file:
+    path: "{{ lookup('env', 'HOME') }}/.kube"
+    state: directory
+    mode: '0755'
+  delegate_to: localhost
+  become: false
+
+- name: Copy and merge kubeconfig to local machine
+  ansible.builtin.copy:
+    src: "/tmp/k3s-kubeconfig-{{ inventory_hostname }}"
+    dest: "{{ lookup('env', 'HOME') }}/.kube/config"
+    mode: '0600'
+  delegate_to: localhost
+  become: false

@@ -132,6 +132,38 @@ This entire process is now idempotent and fully automated via the Ansible playbo
 -   **Next Steps:**
     -   The NFS deployment is now fully functional.
 
+### ADR-005: Ansible Playbook Robustness and Logic Corrections
+
+- **Status:** Implemented & Verified
+- **Date:** 2025-08-15
+
+#### Context
+During a deployment attempt on a freshly imaged cluster, a cascading series of failures occurred in the Ansible playbooks. The initial root cause was traced to unstable power from a faulty PoE network switch port, which led to filesystem corruption on one node. Resolving this uncovered several latent bugs in the playbooks that prevented them from running successfully in a clean environment.
+
+#### Decision
+A series of fixes were implemented to make the Ansible automation more robust, idempotent, and logically correct. For a full chronological detail of the debugging session, see the entry `memory-bank/2025-08-15-ansible-playbook-debugging-session.md`.
+
+The key decisions were:
+
+1.  **Add `iptables` Dependency:** The `wipe_k3s_cluster.yml` playbook failed with a "command not found" error because it assumed `iptables` was installed. A task was added to the beginning of the playbook to ensure the `iptables` package is present on all nodes.
+
+2.  **Correct `localhost` Delegation:** Multiple tasks delegated to `localhost` (the Ansible controller) were failing with `sudo: a password is required` or `Read-only file system: /root` errors. This was caused by tasks inheriting a play-level `become: true` and Ansible incorrectly resolving the user's home directory.
+    -   All delegated `localhost` tasks had `become: false` added to prevent unnecessary privilege escalation.
+    -   The `{{ ansible_env.HOME }}` variable was replaced with `{{ lookup('env', 'HOME') }}` to ensure the correct local user's home directory is always used.
+
+3.  **Fix Undefined `env_vars` Variable:** The `rook_ceph_deploy_part2.yml` playbook failed because it referenced an undefined variable `env_vars`. This was corrected by replacing the reference with the proper `environment: { KUBECONFIG: ... }` block for `kubectl` commands.
+
+4.  **Stricter `config.yml` Logic:** The logic for enabling application deployments in `config.yml` was changed from `or` to `and`. This provides more granular control, requiring both the global stage flag (e.g., `cold_start_stage_3_install_applications`) and the individual application's manual flag (e.g., `manual_install_prometheus`) to be `true` for a deployment to run.
+
+#### Consequences
+
+-   **Positive:**
+    -   The playbooks are now significantly more robust and can run successfully on freshly imaged nodes without manual intervention.
+    -   The logic for enabling/disabling deployment stages is stricter and less prone to accidental execution.
+    -   The fixes for `localhost` delegation follow Ansible best practices.
+-   **Negative:**
+    -   None. The changes corrected clear bugs and improved the automation's reliability.
+
 ### ADR-002: MetalLB Webhook and ArgoCD Configuration
 
 - **Status:** Implemented & Verified
@@ -497,6 +529,10 @@ See the README file within the `benchmarks` folder.  **Credit and Thanks to [Jef
 #### [SDCard Vs. NVMe IO Performance](https://forums.raspberrypi.com/viewtopic.php?t=362903)
 ![Benchmark Results](images/NVMe-Performance-Compare.png)
 
+
+## Cold Start Procedure
+
+A full, destructive "cold start" of the cluster can be performed to validate the IaaC configuration. This process has been refactored into a safer, three-stage process: **Wipe**, **Install Infrastructure**, and **Install Applications**. This provides granular control over the cluster rebuild lifecycle. For a detailed guide, please refer to the [K3s Cluster Cold Start Procedure](memory-bank/2025-08-15-k3s-cold-start-procedure.md) in the memory bank.
 
 ## Shutting down the cluster
 
