@@ -38,7 +38,7 @@ For detailed, up-to-date information about the project's context, architecture, 
      * Grafana: 192.168.1.245
      * Alertmanager: 192.168.1.246
      * ArgoCD: 192.168.1.247
-     * Ceph Dashboard: 192.168.1.248
+     * Ceph Dashboard: 192.168.1.248 (Password managed in `ansible/config.yml`)
      * PiHole Web: 192.168.1.249
      * PiHole DNS: 192.168.1.250
      * Plex: 192.168.1.251
