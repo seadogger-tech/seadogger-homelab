@@ -94,7 +94,7 @@
     cmd: >-
       helm upgrade --install rook-ceph-cluster rook-release/rook-ceph-cluster
       --namespace rook-ceph
-      -f tasks/rook-ceph-cluster-values.yaml
+      -f https://raw.githubusercontent.com/seadogger/seadogger-homelab/master/helm-deployments/rook-ceph/rook-ceph-cluster-values.yaml
       --wait
   environment: "{{ env_vars }}"
   register: helm_cluster_result
