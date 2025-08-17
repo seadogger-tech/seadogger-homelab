@@ -150,7 +150,7 @@ cephFileSystems:
       parameters:
         force_ec_overwrites: "true"
       dataPools:
-        - name: metadata
+        - name: ec-data
           failureDomain: host
           erasureCoded:
             dataChunks: 2
@@ -186,6 +186,7 @@ cephFileSystems:
       reclaimPolicy: Delete
       allowVolumeExpansion: true
       parameters:
+        pool: ec-data
         csi.storage.k8s.io/provisioner-secret-name: rook-csi-cephfs-provisioner
         csi.storage.k8s.io/provisioner-secret-namespace: rook-ceph
         csi.storage.k8s.io/controller-expand-secret-name: rook-csi-cephfs-provisioner
