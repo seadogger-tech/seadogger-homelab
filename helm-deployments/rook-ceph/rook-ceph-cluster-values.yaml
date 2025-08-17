@@ -7,23 +7,9 @@ cephClusterSpec:
 
   dataDirHostPath: /var/lib/rook
 
-mon:
-  count: 3
-  allowMultiplePerNode: false
-  tolerations:
-  - key: "CriticalAddonsOnly"
-    operator: "Exists"
-    placement:
-      nodeAffinity:
-        requiredDuringSchedulingIgnoredDuringExecution:
-          nodeSelectorTerms:
-          - matchExpressions:
-            - key: kubernetes.io/hostname
-              operator: In
-              values:
-              - anakin.local
-              - obiwan.local
-              - rey.local
+  mon:
+    count: 3
+    allowMultiplePerNode: false
 
   dashboard:
     enabled: true
@@ -34,14 +20,106 @@ mon:
   network:
     provider: ""
 
-  # Disable crash collector to save resources
   crashCollector:
     disable: true
 
-  # Disable monitoring
   monitoring:
     enabled: false
 
+  mgr:
+    modules:
+      - name: balancer
+        enabled: true
+
+  placement:
+    mon:
+      tolerations:
+        - key: "CriticalAddonsOnly"
+          operator: "Exists"
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+            - matchExpressions:
+                - key: kubernetes.io/hostname
+                  operator: In
+                  values:
+                    - anakin.local
+                    - obiwan.local
+                    - rey.local
+    mgr:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+            - matchExpressions:
+                - key: kubernetes.io/hostname
+                  operator: In
+                  values:
+                    - anakin.local
+                    - obiwan.local
+                    - rey.local
+
+  resources:
+    mgr:
+      limits:
+        cpu: "1000m"
+        memory: "1Gi"
+      requests:
+        cpu: "250m"
+        memory: "512Mi"
+    mon:
+      limits:
+        cpu: "1000m"
+        memory: "1Gi"
+      requests:
+        cpu: "250m"
+        memory: "512Mi"
+    osd:
+      limits:
+        cpu: "2000m"
+        memory: "2Gi"
+      requests:
+        cpu: "500m"
+        memory: "1Gi"
+    prepareosd:
+      limits:
+        cpu: "500m"
+        memory: "512Mi"
+      requests:
+        cpu: "250m"
+        memory: "256Mi"
+    mgr-sidecar:
+      limits:
+        cpu: "500m"
+        memory: "512Mi"
+      requests:
+        cpu: "100m"
+        memory: "256Mi"
+
+  storage:
+    useAllNodes: false
+    useAllDevices: false
+    config:
+      osdsPerDevice: "1"
+      storeType: "bluestore"
+      deviceClass: "nvme"
+    nodes:
+      - name: anakin.local
+        devices:
+          - name: /dev/nvme0n1p3
+            config:
+              deviceClass: "nvme"
+      - name: obiwan.local
+        devices:
+          - name: /dev/nvme0n1p3
+            config:
+              deviceClass: "nvme"
+      - name: rey.local
+        devices:
+          - name: /dev/nvme0n1p3
+            config:
+              deviceClass: "nvme"
+
+# RBD pool + default StorageClass
 cephBlockPools:
   - name: ceph-blockpool
     spec:
@@ -64,91 +142,7 @@ cephBlockPools:
         csi.storage.k8s.io/node-stage-secret-namespace: rook-ceph
         csi.storage.k8s.io/fstype: ext4
 
-  mgr:
-    count: 1
-    modules:
-    - name: balancer
-      enabled: true
-    placement:
-      nodeAffinity:
-        requiredDuringSchedulingIgnoredDuringExecution:
-          nodeSelectorTerms:
-          - matchExpressions:
-            - key: kubernetes.io/hostname
-              operator: In
-              values:
-              - anakin.local
-              - obiwan.local
-              - rey.local
-
-resources:
-  mgr:
-    limits:
-      cpu: "1000m"      # 1 core max
-      memory: "1Gi"     # Increased for better performance
-    requests:
-      cpu: "250m"
-      memory: "512Mi"   # Increased base allocation
-
-  mon:
-    limits:
-      cpu: "1000m"      # 1 core max
-      memory: "1Gi"     # Increased for stability
-    requests:
-      cpu: "250m"
-      memory: "512Mi"   # Increased base allocation
-
-  osd:
-    limits:
-      cpu: "2000m"      # 2 cores max - OSDs need more CPU
-      memory: "2Gi"     # Increased for better performance
-    requests:
-      cpu: "500m"
-      memory: "1Gi"     # OSDs need more memory
-
-  prepareosd:
-    limits:
-      cpu: "500m"
-      memory: "512Mi"   # Temporary operation, can be higher
-    requests:
-      cpu: "250m"
-      memory: "256Mi"
-
-  mgr-sidecar:
-    limits:
-      cpu: "500m"
-      memory: "512Mi"
-    requests:
-      cpu: "100m"
-      memory: "256Mi"
-
-  storage:
-    useAllNodes: false
-    useAllDevices: false
-    config:
-      osdsPerDevice: "1"
-      storeType: "bluestore"
-      deviceClass: "nvme"
-    nodes:
-    - name: anakin.local
-      devices:
-      - name: /dev/nvme0n1p3
-        config:
-          deviceClass: "nvme"
-    - name: obiwan.local
-      devices:
-      - name: /dev/nvme0n1p3
-        config:
-          deviceClass: "nvme"
-    - name: rey.local
-      devices:
-      - name: /dev/nvme0n1p3
-        config:
-          deviceClass: "nvme"
-
-# Explicitly disable Object Store
-cephObjectStores: []
-
+# CephFS (create here OR via your playbook, not both)
 cephFileSystems:
   - name: ec-fs
     spec:
@@ -179,24 +173,23 @@ cephFileSystems:
           nodeAffinity:
             requiredDuringSchedulingIgnoredDuringExecution:
               nodeSelectorTerms:
-              - matchExpressions:
-                - key: kubernetes.io/hostname
-                  operator: In
-                  values:
-                  - anakin.local
-                  - obiwan.local
-                  - rey.local
+                - matchExpressions:
+                    - key: kubernetes.io/hostname
+                      operator: In
+                      values:
+                        - anakin.local
+                        - obiwan.local
+                        - rey.local
     storageClass:
       enabled: false
 
-
 csi:
   enableCephfsDriver: true
-  enableRbdDriver: false
+  enableRbdDriver: true          # flipped to true so the ceph-block SC works
   enableCephfsSnapshotter: false
   enableRBDSnapshotter: true
   enableNFSDriver: true
-  
+
   provisionerResources:
     limits:
       cpu: "200m"
@@ -204,7 +197,7 @@ csi:
     requests:
       cpu: "50m"
       memory: "128Mi"
-  
+
   pluginResources:
     limits:
       cpu: "200m"
@@ -213,7 +206,6 @@ csi:
       cpu: "50m"
       memory: "128Mi"
 
-# Disable monitoring completely
 monitoring:
   enabled: false
 
