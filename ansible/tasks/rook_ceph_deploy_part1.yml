@@ -94,8 +94,7 @@
     cmd: >-
       helm upgrade --install rook-ceph-cluster rook-release/rook-ceph-cluster
       --namespace rook-ceph
-      -f https://raw.githubusercontent.com/seadogger/seadogger-homelab/master/helm-deployments/rook-ceph/rook-ceph-cluster-values.yaml
-      --set cephFileSystems[0].spec.parameters.force_ec_overwrites=true
+      -f tasks/rook-ceph-cluster-values.yaml
       --wait
   environment: "{{ env_vars }}"
   register: helm_cluster_result
@@ -120,7 +119,7 @@
   environment: "{{ env_vars }}"
   when: toolbox_count.stdout | int > 0
   register: toolbox_ready
-  retries: 10
+  retries: 30
   delay: 10
   until: toolbox_ready.rc == 0
 
@@ -129,7 +128,7 @@
     kubectl -n rook-ceph wait --for=condition=Ready pod -l app=rook-ceph-mgr --timeout=300s
   environment: "{{ env_vars }}"
   register: mgr_ready
-  retries: 10
+  retries: 60
   delay: 10
   until: mgr_ready.rc == 0
 

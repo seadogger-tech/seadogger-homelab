@@ -1,6 +1,6 @@
 - name: Create CephNFS server
   ansible.builtin.k8s:
-    kubeconfig: "{{ KUBECONFIG }}"
+    kubeconfig: "/etc/rancher/k3s/k3s.yaml"
     state: present
     definition:
       apiVersion: ceph.rook.io/v1
@@ -278,7 +278,7 @@
 
 - name: Create NFS StorageClass
   ansible.builtin.k8s:
-    kubeconfig: "{{ KUBECONFIG }}"
+    kubeconfig: "/etc/rancher/k3s/k3s.yaml"
     state: present
     definition:
       apiVersion: storage.k8s.io/v1
@@ -298,7 +298,7 @@
 
 - name: Create NFS LoadBalancer Service
   ansible.builtin.k8s:
-    kubeconfig: "{{ KUBECONFIG }}"
+    kubeconfig: "/etc/rancher/k3s/k3s.yaml"
     state: present
     definition:
       apiVersion: v1
