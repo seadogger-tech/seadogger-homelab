@@ -147,8 +147,6 @@ cephFileSystems:
       metadataPool:
         replicated:
           size: 3
-      parameters:
-        force_ec_overwrites: "true"
       dataPools:
         - name: ec-data
           failureDomain: host
@@ -156,8 +154,9 @@ cephFileSystems:
             dataChunks: 2
             codingChunks: 1
           parameters:
-            pg_num: "128"
+            pg_num: "64"
             allow_ec_overwrites: "true"
+            force_ec_overwrites: "true"
             bulk: "true"
       metadataServer:
         activeCount: 1
