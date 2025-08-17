@@ -10,6 +10,20 @@ cephClusterSpec:
   mon:
     count: 3
     allowMultiplePerNode: false
+    placement:
+      tolerations:
+        - key: "CriticalAddonsOnly"
+          operator: "Exists"
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+            - matchExpressions:
+                - key: kubernetes.io/hostname
+                  operator: In
+                  values:
+                    - anakin.local
+                    - obiwan.local
+                    - rey.local
 
   dashboard:
     enabled: true
@@ -30,23 +44,7 @@ cephClusterSpec:
     modules:
       - name: balancer
         enabled: true
-
-  placement:
-    mon:
-      tolerations:
-        - key: "CriticalAddonsOnly"
-          operator: "Exists"
-      nodeAffinity:
-        requiredDuringSchedulingIgnoredDuringExecution:
-          nodeSelectorTerms:
-            - matchExpressions:
-                - key: kubernetes.io/hostname
-                  operator: In
-                  values:
-                    - anakin.local
-                    - obiwan.local
-                    - rey.local
-    mgr:
+    placement:
       nodeAffinity:
         requiredDuringSchedulingIgnoredDuringExecution:
           nodeSelectorTerms:
@@ -147,7 +145,6 @@ cephFileSystems:
   - name: ec-fs
     spec:
       metadataPool:
-        name: replicated-metadata
         replicated:
           size: 3
       dataPools:
@@ -162,7 +159,7 @@ cephFileSystems:
             bulk: "true"
       metadataServer:
         activeCount: 1
-        activeStandby: true
+        activeStandby: false
         resources:
           limits:
             cpu: "500m"
