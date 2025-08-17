@@ -93,6 +93,16 @@
         wait_timeout: 300
       ignore_errors: true
 
+    - name: "Force remove finalizers from MetalLB namespace"
+      kubernetes.core.k8s_json_patch:
+        kubeconfig: "{{ KUBECONFIG }}"
+        kind: Namespace
+        name: metallb-system
+        patch:
+          - op: remove
+            path: /metadata/finalizers
+      ignore_errors: true
+
     - name: "Delete MetalLB Namespace"
       kubernetes.core.k8s:
         kubeconfig: "{{ KUBECONFIG }}"
@@ -140,6 +150,18 @@
         - rook-ceph-filesystem-ec
         - rook-ceph-nfs
         - ceph-block
+      ignore_errors: true
+
+    - name: "Force remove finalizers from CephFilesystem"
+      kubernetes.core.k8s_json_patch:
+        kubeconfig: "{{ KUBECONFIG }}"
+        kind: CephFilesystem
+        api_version: ceph.rook.io/v1
+        name: ec-fs
+        namespace: rook-ceph
+        patch:
+          - op: remove
+            path: /metadata/finalizers
       ignore_errors: true
 
     - name: "Ceph Cleanup: Delete CephFilesystem CRD"

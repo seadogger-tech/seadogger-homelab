@@ -3,24 +3,6 @@
     msg: "Wipe K3s cluster is disabled in config.yml. Set 'enable_wipe_k3s_cluster: true' to run."
   when: not enable_wipe_k3s_cluster | default(false)
 
-- name: "STAGE 0: Graceful Application and Infrastructure Teardown"
-  block:
-    - name: "Clean up all POD Design Pattern Applications"
-      import_tasks: tasks/cleanup_pods.yml
-      vars:
-        run_pod_cleanup: true
-
-    - name: "Clean up Prometheus Hybrid Application"
-      import_tasks: tasks/cleanup_prometheus.yml
-      vars:
-        run_prometheus_cleanup: true
-
-    - name: "Clean up all Infrastructure Services"
-      import_tasks: tasks/cleanup_infrastructure.yml
-      vars:
-        run_infrastructure_cleanup: true
-        infrastructure_cleanup_list: ["metallb", "rook-ceph"]
-
 - name: Ensure iptables is installed
   ansible.builtin.apt:
     name: iptables
@@ -28,36 +10,55 @@
     update_cache: yes
   become: true
 
-- name: Stop k3s-agent on worker nodes
+- name: "Check if k3s-agent service exists"
+  ansible.builtin.stat:
+    path: /etc/systemd/system/k3s-agent.service
+  register: k3s_agent_service
+
+- name: "Stop k3s-agent on worker nodes"
   ansible.builtin.systemd:
     name: k3s-agent
     state: stopped
-  when: inventory_hostname in groups['nodes']
-  ignore_errors: true
+  when: "inventory_hostname in groups['nodes'] and k3s_agent_service.stat.exists"
 
-- name: Stop k3s on control plane
+- name: "Check if k3s service exists"
+  ansible.builtin.stat:
+    path: /etc/systemd/system/k3s.service
+  register: k3s_service
+
+- name: "Stop k3s on control plane"
   ansible.builtin.systemd:
     name: k3s
     state: stopped
-  when: inventory_hostname in groups['control_plane']
-  ignore_errors: true
+  when: "inventory_hostname in groups['control_plane'] and k3s_service.stat.exists"
 
-- name: Kill Rook and Ceph processes
-  ansible.builtin.shell: |
-    pkill -9 -f rook || true
-    pkill -9 -f ceph || true
-  changed_when: false
-  ignore_errors: true
+- name: "Check if k3s-agent-uninstall.sh exists"
+  ansible.builtin.stat:
+    path: /usr/local/bin/k3s-agent-uninstall.sh
+  register: k3s_agent_uninstall_script
 
-- name: Uninstall k3s agent if present
+- name: "Uninstall k3s agent if present"
   ansible.builtin.command:
     cmd: /usr/local/bin/k3s-agent-uninstall.sh
-  ignore_errors: true
+  when: "inventory_hostname in groups['nodes'] and k3s_agent_uninstall_script.stat.exists"
 
-- name: Uninstall k3s if present
+- name: "Wait for all k3s-agent processes to terminate"
+  ansible.builtin.pause:
+    seconds: 10
+
+- name: "Check if k3s-uninstall.sh exists"
+  ansible.builtin.stat:
+    path: /usr/local/bin/k3s-uninstall.sh
+  register: k3s_uninstall_script
+
+- name: "Uninstall k3s if present"
   ansible.builtin.command:
     cmd: /usr/local/bin/k3s-uninstall.sh
-  ignore_errors: true
+  when: "inventory_hostname in groups['control_plane'] and k3s_uninstall_script.stat.exists"
+
+- name: "Wait for all k3s processes to terminate"
+  ansible.builtin.pause:
+    seconds: 10
 
 - name: Clean Kubernetes and storage directories
   ansible.builtin.file:
@@ -105,23 +106,25 @@
     iptables -P FORWARD ACCEPT
     iptables -P OUTPUT ACCEPT
 
-- name: "!!! DANGER ZONE: WIPE CEPH STORAGE PARTITION !!!"
-  block:
-    - name: "Wipe filesystem signatures from Ceph partition (nvme0n1p3)"
-      ansible.builtin.command: wipefs -af /dev/nvme0n1p3
-      changed_when: true
-      ignore_errors: true
+- name: Set defaults for partition and policy
+  ansible.builtin.set_fact:
+    partition_device: "{{ partition_device | default('/dev/nvme0n1p3') }}"
+    perform_physical_disk_wipe: "{{ perform_physical_disk_wipe | default(false) }}"
 
-    - name: "Verify Ceph partition is clean"
-      ansible.builtin.command: lsblk -f /dev/nvme0n1p3
-      register: partition_check
-      changed_when: false
+- name: Check if partition device exists
+  ansible.builtin.stat:
+    path: "{{ partition_device }}"
+  register: devstat
 
-    - name: "Fail if Ceph partition still has a filesystem"
-      ansible.builtin.fail:
-        msg: "Partition /dev/nvme0n1p3 is not clean. Filesystem or label found: {{ partition_check.stdout_lines }}"
-      when: partition_check.stdout | length > 0 and 'nvme0n1p3' in partition_check.stdout
-  when: perform_physical_disk_wipe | default(false)
+- name: Wipe filesystem signatures (only if device exists and wipe requested)
+  when:
+    - devstat.stat.exists
+    - perform_physical_disk_wipe | bool
+  ansible.builtin.command:
+    cmd: "wipefs -af {{ partition_device }}"
+  register: wipe_out
+  changed_when: "'nothing to do' not in (wipe_out.stderr | default(''))"
+  failed_when: false
 
 - name: Remove all device mapper devices
   ansible.builtin.shell: dmsetup remove_all
@@ -136,12 +139,6 @@
     - /dev/mapper/ceph-*
     - /dev/ceph-*
   ignore_errors: true
-
-- name: Unmount kubelet pods and rook directories
-  ansible.builtin.shell: |
-    umount -f /var/lib/kubelet/pods/* || true
-    umount -f /var/lib/rook/* || true
-  no_log: true
 
 - name: Remove systemd service override files for k3s and containerd
   ansible.builtin.file:
@@ -169,23 +166,33 @@
     state: restarted
   ignore_errors: true
 
-- name: Remove all container runtime pods
-  ansible.builtin.shell: crictl rm $(crictl ps -aq)
-  no_log: true
-  ignore_errors: true
+- name: Read filesystem type (no headers) if device exists
+  when: devstat.stat.exists
+  ansible.builtin.command:
+    cmd: "lsblk -n -o FSTYPE {{ partition_device }}"
+  register: fs_check
+  changed_when: false
+  failed_when: false
 
-- name: Remove all container runtime images
-  ansible.builtin.shell: crictl rmi $(crictl images -q)
-  no_log: true
-  ignore_errors: true
+- name: Normalize detected filesystem (MISSING if device absent)
+  ansible.builtin.set_fact:
+    detected_fstype: >-
+      {{ (fs_check.stdout | default('') | trim)
+         if devstat.stat.exists else 'MISSING' }}
 
-- name: Verify cleanup - storage device
-  block:
-    - name: Try to read storage device state
-      ansible.builtin.shell: lsblk -f /dev/nvme0n1p3
-      register: storage_output
-      ignore_errors: true
-
-    - name: Display storage device state
-      ansible.builtin.debug:
-        msg: "{{ storage_output.stdout_lines | default(['Device not found or inaccessible']) }}"
+- name: Assert partition state matches policy
+  ansible.builtin.assert:
+    that:
+      - >
+        (perform_physical_disk_wipe | bool)
+        | ternary(
+            detected_fstype in ['', 'MISSING'],
+            detected_fstype in ['', 'ceph_bluestore', 'MISSING']
+          )
+    fail_msg: >-
+      Policy violation for {{ partition_device }} on {{ inventory_hostname }}.
+      perform_physical_disk_wipe={{ perform_physical_disk_wipe | bool }} requires
+      {{ (perform_physical_disk_wipe | bool) | ternary("empty", "empty or 'ceph_bluestore'") }},
+      but found '{{ detected_fstype }}'.
+    success_msg: >-
+      {{ partition_device }} OK on {{ inventory_hostname }} (found '{{ detected_fstype or "empty" }}').

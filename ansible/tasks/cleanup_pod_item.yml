@@ -1,5 +1,5 @@
 ---
-# This file is called by cleanup_pods.yml in a loop.
+# This file is called by cleanup.yml in a loop.
 # The 'app' variable is passed from the loop.
 
 # Step 1: Delete the ArgoCD Application resource first.

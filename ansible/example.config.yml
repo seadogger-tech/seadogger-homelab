@@ -83,7 +83,6 @@ plex_access_key: "YOUR_PLEX_CLAIM_TOKEN_HERE" # This key is only good for 5 minu
 # --- POD / APPLICATION CLEANUP ---
 run_pod_cleanup: false
 pod_cleanup_list:
-  - { name: "argocd", namespace: "argocd", selector: "app.kubernetes.io/name=argocd", delete_pvc: false }
   - { name: "bedrock-access-gateway", namespace: "bedrock-gateway", selector: "app=bedrock-access-gateway", delete_pvc: false }
   - { name: "pihole", namespace: "pihole", selector: "app.kubernetes.io/name=pihole", delete_pvc: true }
   - { name: "openwebui", namespace: "openwebui", selector: "app.kubernetes.io/name=open-webui", delete_pvc: true }

@@ -1,6 +1,6 @@
 - name: Install K3s on control plane (takes a while) with etcd.
   ansible.builtin.shell: >-
-    curl -sfL https://get.k3s.io | sh -s - server --cluster-init --write-kubeconfig-mode 644
+    curl -sfL https://get.k3s.io | sh -s - server --cluster-init --write-kubeconfig-mode 644 --disable=servicelb
   args:
     chdir: "{{ ansible_env.HOME }}"
     creates: /var/lib/rancher/k3s/server/node-token

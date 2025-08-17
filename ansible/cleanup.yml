@@ -1,5 +1,6 @@
 ---
-- hosts: control_plane
+- name: "Graceful Cleanup (API-based)"
+  hosts: control_plane
   gather_facts: false
   become: true
   vars_files:
@@ -17,6 +18,13 @@
       import_tasks: tasks/cleanup_infrastructure.yml
       when: run_infrastructure_cleanup | default(false)
 
+- name: "Destructive Wipe (Node-based)"
+  hosts: all
+  gather_facts: false
+  become: true
+  vars_files:
+    - config.yml
+  tasks:
     - name: "STAGE 3: Wipe K3s Cluster (COLD START)"
       import_tasks: tasks/wipe_k3s_cluster.yml
       when: cold_start_stage_1_wipe_cluster | default(false)

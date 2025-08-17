@@ -4,6 +4,7 @@
     name: argo
     repo_url: "https://argoproj.github.io/argo-helm"
     state: present
+    kubeconfig: "{{ KUBECONFIG }}"
 
 - name: Create ArgoCD namespace
   kubernetes.core.k8s:
@@ -11,6 +12,7 @@
     api_version: v1
     kind: Namespace
     state: present
+    kubeconfig: "{{ KUBECONFIG }}"
 
 - name: Deploy ArgoCD with Helm
   kubernetes.core.helm:
@@ -18,10 +20,12 @@
     chart_ref: argo/argo-cd
     release_namespace: argocd
     state: present
+    kubeconfig: "{{ KUBECONFIG }}"
 
 - name: Expose ArgoCD as a LoadBalancer service
   kubernetes.core.k8s:
     state: present
+    kubeconfig: "{{ KUBECONFIG }}"
     definition:
       apiVersion: v1
       kind: Service

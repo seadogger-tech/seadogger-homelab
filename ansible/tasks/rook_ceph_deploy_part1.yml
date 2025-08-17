@@ -23,6 +23,27 @@
   ansible.builtin.set_fact:
     KUBECONFIG: /etc/rancher/k3s/k3s.yaml
 
+- name: Wait for all nodes to become Ready
+  ansible.builtin.shell:
+    cmd: |
+      set -euo pipefail
+      kubectl wait --for=condition=Ready --timeout=600s node --all
+    executable: /bin/bash
+  environment: "{{ env_vars }}"
+  register: node_wait
+  changed_when: false
+
+- name: Assert no nodes are cordoned (unschedulable)
+  ansible.builtin.shell:
+    cmd: |
+      set -euo pipefail
+      # returns nonzero if any line equals 'true'
+      ! kubectl get nodes -o jsonpath='{range .items[*]}{.spec.unschedulable}{"\n"}{end}' | grep -Fxq true
+    executable: /bin/bash
+  environment: "{{ env_vars }}"
+  register: schedulable_check
+  changed_when: false
+
 # Step 3: Add Helm repo using shell to avoid fork issues
 - name: Add Rook Helm repo
   ansible.builtin.shell:
@@ -41,7 +62,7 @@
       --wait
   environment: "{{ env_vars }}"
   register: helm_operator_result
-  changed_when: "'STATUS: deployed' in helm_operator_result.stdout"
+  changed_when: "'STATUS: deployed' in helm_operator_result.stdout or 'STATUS: upgraded' in helm_operator_result.stdout"
 
 # Step 5: Wait for operator to be ready
 - name: Wait for operator to be ready
@@ -56,6 +77,7 @@
 # Step 6: Install cluster
 - name: Create Ceph Dashboard Password Secret
   kubernetes.core.k8s:
+    kubeconfig: "{{ KUBECONFIG }}"
     state: present
     definition:
       apiVersion: v1
@@ -76,13 +98,30 @@
       --wait
   environment: "{{ env_vars }}"
   register: helm_cluster_result
-  changed_when: "'STATUS: deployed' in helm_cluster_result.stdout"
+  changed_when: "'STATUS: deployed' in helm_cluster_result.stdout or 'STATUS: upgraded' in helm_cluster_result.stdout"
 
 - name: Display message about Ceph cluster readiness time
   ansible.builtin.debug:
     msg: |
       Waiting for the Ceph cluster to become ready. This may take 15–20 minutes depending on your system performance.
       Do not proceed with any other deployments until this step completes successfully.
+
+- name: Check if toolbox is enabled (pod exists)
+  ansible.builtin.shell: |
+    kubectl -n rook-ceph get pods -l app=rook-ceph-tools --no-headers | wc -l
+  environment: "{{ env_vars }}"
+  register: toolbox_count
+  changed_when: false
+
+- name: Wait for rook-ceph-tools (toolbox) pod to be Ready
+  ansible.builtin.shell: |
+    kubectl -n rook-ceph wait --for=condition=Ready pod -l app=rook-ceph-tools --timeout=600s
+  environment: "{{ env_vars }}"
+  when: toolbox_count.stdout | int > 0
+  register: toolbox_ready
+  retries: 10
+  delay: 10
+  until: toolbox_ready.rc == 0
 
 - name: Wait for ceph-mgr to be available
   ansible.builtin.shell: |
@@ -92,17 +131,6 @@
   retries: 10
   delay: 10
   until: mgr_ready.rc == 0
-
-- name: Wait until required CephFS pools exist
-  ansible.builtin.shell: |
-    set -e
-    kubectl -n rook-ceph exec "$(kubectl -n rook-ceph get pods -l app=rook-ceph-tools -o name | head -n1)" -- \
-      sh -lc 'ceph osd pool ls | grep -qw ec-fs-metadata && ceph osd pool ls | grep -qw ec-fs-data'
-  register: pools_exist
-  retries: 60
-  delay: 10
-  until: pools_exist.rc == 0
-  changed_when: false
 
 - name: Wait for Ceph health to be OK or WARN
   ansible.builtin.shell: |
@@ -114,57 +142,20 @@
   until: health_ok_or_warn.rc == 0
   changed_when: false
 
-- name: Create CephFilesystem with Replicated and EC pools
-  ansible.builtin.k8s:
-    kubeconfig: "{{ KUBECONFIG }}"
-    state: present
-    definition:
-      apiVersion: ceph.rook.io/v1
-      kind: CephFilesystem
-      metadata:
-        name: ec-fs
-        namespace: rook-ceph
-      spec:
-        metadataPool:
-          replicated:
-            size: 3
-        dataPools:
-          # Use the default replicated block pool as the primary data pool
-          - name: ceph-blockpool
-            replicated:
-              size: 3
-          # Keep the erasure-coded pool as a secondary pool
-          - name: data
-            failureDomain: host
-            erasureCoded:
-              dataChunks: 2
-              codingChunks: 1
-        metadataServer:
-          activeCount: 1
-          activeStandby: true
-
-- name: Create CephFS Erasure Coded StorageClass
-  ansible.builtin.k8s:
-    kubeconfig: "{{ KUBECONFIG }}"
-    state: present
-    definition:
-      apiVersion: storage.k8s.io/v1
-      kind: StorageClass
-      metadata:
-        name: rook-ceph-filesystem-ec
-      provisioner: rook-ceph.cephfs.csi.ceph.com
-      reclaimPolicy: Delete
-      allowVolumeExpansion: true
-      parameters:
-        clusterID: rook-ceph
-        fsName: ec-fs
-        pool: data
-        csi.storage.k8s.io/provisioner-secret-name: rook-csi-cephfs-provisioner
-        csi.storage.k8s.io/provisioner-secret-namespace: rook-ceph
-        csi.storage.k8s.io/controller-expand-secret-name: rook-csi-cephfs-provisioner
-        csi.storage.k8s.io/controller-expand-secret-namespace: rook-ceph
-        csi.storage.k8s.io/node-stage-secret-name: rook-csi-cephfs-node
-        csi.storage.k8s.io/node-stage-secret-namespace: rook-ceph
+- name: Wait until CephFS pools exist
+  ansible.builtin.shell: |
+    set -e
+    POD="$(kubectl -n rook-ceph get pods -l app=rook-ceph-tools -o jsonpath='{.items[0].metadata.name}')"
+    kubectl -n rook-ceph exec "$POD" -- sh -lc '
+      ceph osd pool ls | grep -qw ec-fs-metadata &&
+      (ceph osd pool ls | grep -qw ec-fs-data || ceph osd pool ls | grep -qw ec-fs-data0)
+    '
+  environment: "{{ env_vars }}"
+  register: pools_exist
+  retries: 60
+  delay: 10
+  until: pools_exist.rc == 0
+  changed_when: false
 
 - name: Unset all default StorageClasses
   ansible.builtin.shell: |
@@ -179,7 +170,7 @@
   environment: "{{ env_vars }}"
 
 - name: Expose Ceph Dashboard
-  ansible.builtin.k8s:
+  kubernetes.core.k8s:
     kubeconfig: "{{ KUBECONFIG }}"
     state: present
     definition:
@@ -189,7 +180,7 @@
         name: rook-ceph-mgr-dashboard-loadbalancer
         namespace: rook-ceph
         annotations:
-          metallb.universe.tf/loadBalancerIPs: 192.168.1.248
+          metallb.io/loadBalancerIPs: 192.168.1.248
       spec:
         ports:
         - name: http-dashboard

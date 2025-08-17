@@ -160,6 +160,49 @@ The deployment process was refactored to follow a logical, sequential deployment
 -   **Negative:**
     -   None. The change corrected a fundamental design flaw.
 
+### ADR-007: Cluster Wipe and Cleanup Playbook Hardening
+
+- **Status:** Implemented & Verified
+- **Date:** 2025-08-16
+
+#### Context
+
+During a routine test of the refactored `cleanup.yml` playbook, the cluster was found to be in a severely corrupted state from a previous failed installation. Resources were stuck in a "Terminating" state, namespaces could not be deleted, and the `etcd` datastore was inconsistent. This prevented any automated cleanup or installation playbooks from running successfully, necessitating a deep debugging and hardening session.
+
+#### Decision
+
+The `wipe_k3s_cluster.yml` task was significantly refactored and hardened to transform it from a simple script into a robust, idempotent, and intelligent disaster recovery tool. The `cleanup.yml` playbook was also improved to correctly orchestrate the wipe.
+
+1.  **Refactored `cleanup.yml` Logic:** The playbook was restructured into a two-play playbook. The first play targets the `control_plane` for API-dependent tasks (like deleting namespaces), and the second play targets `all` nodes for the destructive wipe actions (like running `k3s-uninstall.sh`). This ensures the correct nodes are targeted for each task.
+
+2.  **Removed Faulty "Graceful" Cleanup:** A redundant and error-prone "graceful cleanup" section was removed from the beginning of the `wipe_k3s_cluster.yml` task. This logic was unreliable on a corrupted cluster and was duplicative of the main wipe actions.
+
+3.  **Intelligent Service/File Checks:** All tasks that stop services or run uninstall scripts were updated to first check for the existence of the service or script using the `stat` module. This makes the playbook idempotent, allowing it to run on a clean or partially cleaned system without generating "file not found" or "service not found" errors.
+
+4.  **Robust Final Verification:** A sophisticated verification block was added to the end of the playbook to assert the final state of the Ceph storage partition (`/dev/nvme0n1p3`). This assertion is intelligent and adapts its expectation based on the `perform_physical_disk_wipe` flag, ensuring the cluster is left in the desired state.
+
+    ```yaml
+    # Final verification logic
+    - name: "Assert partition state matches expected policy"
+      ansible.builtin.assert:
+        that:
+          - >
+            (perform_physical_disk_wipe | default(false))
+            | ternary(
+                (fs_check.stdout | trim) == "",
+                (fs_check.stdout | trim) in ["", "ceph_bluestore"]
+              )
+    ```
+
+#### Consequences
+
+-   **Positive:**
+    -   The `wipe_k3s_cluster.yml` playbook is now a highly reliable and idempotent tool for disaster recovery, capable of cleaning a cluster in almost any state.
+    -   The playbook can be run multiple times on a clean system without producing errors, which is a key principle of good automation.
+    -   The risk of failed cleanup runs leaving the cluster in an inconsistent state is significantly reduced.
+-   **Negative:**
+    -   None. The changes dramatically improved the reliability and robustness of the cluster management automation.
+
 ### ADR-005: Ansible Playbook Robustness and Logic Corrections
 
 - **Status:** Implemented & Verified
