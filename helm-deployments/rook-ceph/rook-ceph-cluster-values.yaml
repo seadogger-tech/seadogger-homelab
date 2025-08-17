@@ -150,7 +150,7 @@ cephFileSystems:
       # Use your EXISTING metadata pool by name
       metadataPool:
         # Explicit name so Rook doesn’t try to create a new one
-        name: ec-fs-metadata
+        name: metadata
         replicated:
           size: 3
         parameters:
@@ -158,7 +158,7 @@ cephFileSystems:
 
       # Use your EXISTING EC data pool by name
       dataPools:
-        - name: ec-fs-ec-data
+        - name: ec-data
           failureDomain: host
           erasureCoded:
             dataChunks: 2
