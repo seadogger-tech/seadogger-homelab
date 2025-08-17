@@ -147,8 +147,10 @@ cephFileSystems:
       metadataPool:
         replicated:
           size: 3
+      parameters:
+        force_ec_overwrites: "true"
       dataPools:
-        - name: data
+        - name: metadata
           failureDomain: host
           erasureCoded:
             dataChunks: 2
