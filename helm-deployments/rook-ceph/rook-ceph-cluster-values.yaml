@@ -147,6 +147,7 @@ cephFileSystems:
   - name: ec-fs
     spec:
       metadataPool:
+        name: replicated-metadata
         replicated:
           size: 3
       dataPools:
