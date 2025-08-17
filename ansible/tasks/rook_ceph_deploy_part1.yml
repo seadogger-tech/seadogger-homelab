@@ -95,6 +95,7 @@
       helm upgrade --install rook-ceph-cluster rook-release/rook-ceph-cluster
       --namespace rook-ceph
       -f https://raw.githubusercontent.com/seadogger/seadogger-homelab/master/helm-deployments/rook-ceph/rook-ceph-cluster-values.yaml
+      --set cephFileSystems[0].spec.parameters.force_ec_overwrites=true
       --wait
   environment: "{{ env_vars }}"
   register: helm_cluster_result
@@ -148,7 +149,7 @@
     POD="$(kubectl -n rook-ceph get pods -l app=rook-ceph-tools -o jsonpath='{.items[0].metadata.name}')"
     kubectl -n rook-ceph exec "$POD" -- sh -lc '
       ceph osd pool ls | grep -qw ec-fs-metadata &&
-      (ceph osd pool ls | grep -qw ec-fs-data || ceph osd pool ls | grep -qw ec-fs-data0)
+      ceph osd pool ls | grep -qw ec-fs-ec-data
     '
   environment: "{{ env_vars }}"
   register: pools_exist
