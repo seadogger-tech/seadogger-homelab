@@ -11,61 +11,28 @@ cephClusterSpec:
     count: 3
     allowMultiplePerNode: false
     placement:
-      tolerations:
-        - key: "CriticalAddonsOnly"
-          operator: "Exists"
       nodeAffinity:
         requiredDuringSchedulingIgnoredDuringExecution:
           nodeSelectorTerms:
             - matchExpressions:
                 - key: kubernetes.io/hostname
                   operator: In
-                  values: [anakin.local, obiwan.local, rey.local]
+                  values:
+                    - anakin.local
+                    - obiwan.local
+                    - rey.local
 
   dashboard:
     enabled: true
     ssl: false
-    security:
-      adminPasswordSecretName: rook-ceph-dashboard-password
-
-  network:
-    provider: ""
 
   crashCollector:
     disable: true
-
-  monitoring:
-    enabled: false
 
   mgr:
     modules:
       - name: balancer
         enabled: true
-    placement:
-      nodeAffinity:
-        requiredDuringSchedulingIgnoredDuringExecution:
-          nodeSelectorTerms:
-            - matchExpressions:
-                - key: kubernetes.io/hostname
-                  operator: In
-                  values: [anakin.local, obiwan.local, rey.local]
-
-  resources:
-    mgr:
-      limits:   { cpu: "1000m", memory: "1Gi" }
-      requests: { cpu: "250m",  memory: "512Mi" }
-    mon:
-      limits:   { cpu: "1000m", memory: "1Gi" }
-      requests: { cpu: "250m",  memory: "512Mi" }
-    osd:
-      limits:   { cpu: "2000m", memory: "2Gi" }
-      requests: { cpu: "500m",  memory: "1Gi" }
-    prepareosd:
-      limits:   { cpu: "500m",  memory: "512Mi" }
-      requests: { cpu: "250m",  memory: "256Mi" }
-    mgr-sidecar:
-      limits:   { cpu: "500m",  memory: "512Mi" }
-      requests: { cpu: "100m",  memory: "256Mi" }
 
   storage:
     useAllNodes: false
@@ -78,17 +45,14 @@ cephClusterSpec:
       - name: anakin.local
         devices:
           - name: /dev/nvme0n1p3
-            config: { deviceClass: "nvme" }
       - name: obiwan.local
         devices:
           - name: /dev/nvme0n1p3
-            config: { deviceClass: "nvme" }
       - name: rey.local
         devices:
           - name: /dev/nvme0n1p3
-            config: { deviceClass: "nvme" }
 
-# RBD pool + default StorageClass
+# Pools
 cephBlockPools:
   - name: ceph-blockpool
     spec:
@@ -111,23 +75,29 @@ cephBlockPools:
         csi.storage.k8s.io/node-stage-secret-namespace: rook-ceph
         csi.storage.k8s.io/fstype: ext4
 
-# CephFS
+# CephFS with both replicated + EC pool
 cephFileSystems:
   - name: ec-fs
     spec:
-      # use non-deprecated key and keep the FS/pools if the CR is deleted
-      preserveFilesystemOnDelete: true
+      preservePoolsOnDelete: true
 
-      # Rook will create pools named ec-fs-metadata and ec-fs-data
       metadataPool:
-        name: metadata
+        name: ec-fs-metadata
         replicated:
           size: 3
         parameters:
           pg_autoscale_mode: "on"
 
+      # Replicated pool for default data
       dataPools:
-        - name: data
+        - name: ec-fs-data-repl
+          replicated:
+            size: 3
+          parameters:
+            pg_autoscale_mode: "on"
+
+        # EC pool for bulk data
+        - name: ec-fs-data-ec
           failureDomain: host
           erasureCoded:
             dataChunks: 2
@@ -140,13 +110,6 @@ cephFileSystems:
       metadataServer:
         activeCount: 1
         activeStandby: true
-        resources:
-          limits:
-            cpu: "1000m"
-            memory: "4Gi"
-          requests:
-            cpu: "250m"
-            memory: "2Gi"
         placement:
           nodeAffinity:
             requiredDuringSchedulingIgnoredDuringExecution:
@@ -154,7 +117,10 @@ cephFileSystems:
                 - matchExpressions:
                     - key: kubernetes.io/hostname
                       operator: In
-                      values: [anakin.local, obiwan.local, rey.local]
+                      values:
+                        - anakin.local
+                        - obiwan.local
+                        - rey.local
 
     storageClass:
       enabled: true
@@ -164,8 +130,7 @@ cephFileSystems:
       parameters:
         clusterID: rook-ceph
         fsName: ec-fs
-        # must match the actual created data pool name (fsname + "-" + "data")
-        pool: ec-fs-data
+        pool: ec-fs-data-repl
         csi.storage.k8s.io/provisioner-secret-name: rook-csi-cephfs-provisioner
         csi.storage.k8s.io/provisioner-secret-namespace: rook-ceph
         csi.storage.k8s.io/controller-expand-secret-name: rook-csi-cephfs-provisioner
@@ -176,27 +141,8 @@ cephFileSystems:
 csi:
   enableCephfsDriver: true
   enableRbdDriver: true
-  enableCephfsSnapshotter: false
   enableRBDSnapshotter: true
   enableNFSDriver: true
-  provisionerResources:
-    limits:   { cpu: "200m", memory: "256Mi" }
-    requests: { cpu: "50m",  memory: "128Mi" }
-  pluginResources:
-    limits:   { cpu: "200m", memory: "256Mi" }
-    requests: { cpu: "50m",  memory: "128Mi" }
-
-monitoring:
-  enabled: false
-
-dashboard:
-  enabled: true
-  ssl: false
-  ingress:
-    enabled: false
 
 toolbox:
   enabled: true
-  resources:
-    limits:   { cpu: "200m", memory: "256Mi" }
-    requests: { cpu: "50m",  memory: "128Mi" }
