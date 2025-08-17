@@ -156,7 +156,6 @@ cephFileSystems:
           parameters:
             pg_num: "64"
             allow_ec_overwrites: "true"
-            force_ec_overwrites: "true"
             bulk: "true"
       metadataServer:
         activeCount: 1
