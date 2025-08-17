@@ -25,14 +25,70 @@ cephClusterSpec:
   dashboard:
     enabled: true
     ssl: false
+    security:
+      adminPasswordSecretName: rook-ceph-dashboard-password
+
+  network:
+    provider: ""
 
   crashCollector:
     disable: true
+
+  monitoring:
+    enabled: false
 
   mgr:
     modules:
       - name: balancer
         enabled: true
+    placement:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+            - matchExpressions:
+                - key: kubernetes.io/hostname
+                  operator: In
+                  values:
+                    - anakin.local
+                    - obiwan.local
+                    - rey.local
+
+  resources:
+    mgr:
+      limits:
+        cpu: "1000m"
+        memory: "1Gi"
+      requests:
+        cpu: "250m"
+        memory: "512Mi"
+    mon:
+      limits:
+        cpu: "1000m"
+        memory: "1Gi"
+      requests:
+        cpu: "250m"
+        memory: "512Mi"
+    osd:
+      limits:
+        cpu: "2000m"
+        memory: "2Gi"
+      requests:
+        cpu: "500m"
+        memory: "1Gi"
+    prepareosd:
+      limits:
+        cpu: "500m"
+        memory: "512Mi"
+      requests:
+        cpu: "250m"
+        memory: "256Mi"
+    mgr-sidecar:
+      limits:
+        cpu: "500m"
+        memory: "512Mi"
+      requests:
+        cpu: "100m"
+        memory: "256Mi"
 
   storage:
     useAllNodes: false
@@ -45,23 +101,33 @@ cephClusterSpec:
       - name: anakin.local
         devices:
           - name: /dev/nvme0n1p3
+            config:
+              deviceClass: "nvme"
       - name: obiwan.local
         devices:
           - name: /dev/nvme0n1p3
+            config:
+              deviceClass: "nvme"
       - name: rey.local
         devices:
           - name: /dev/nvme0n1p3
+            config:
+              deviceClass: "nvme"
 
-# Pools
+# ────────────────────────────────────────────────────────────────────────────────
+# CEPH BLOCK (RBD)
+# Pool: ceph-block-data
+# StorageClass: ceph-block-data  (default)
+# ────────────────────────────────────────────────────────────────────────────────
 cephBlockPools:
-  - name: ceph-blockpool
+  - name: ceph-block-data
     spec:
       replicated:
         size: 3
       enableRBDStats: true
     storageClass:
       enabled: true
-      name: ceph-block
+      name: ceph-block-data
       isDefault: true
       reclaimPolicy: Delete
       allowVolumeExpansion: true
@@ -75,29 +141,44 @@ cephBlockPools:
         csi.storage.k8s.io/node-stage-secret-namespace: rook-ceph
         csi.storage.k8s.io/fstype: ext4
 
-# CephFS with both replicated + EC pool
+# ────────────────────────────────────────────────────────────────────────────────
+# CEPH FILESYSTEMS
+# Filesystem: ceph-fs
+# Pools:
+#   - ceph-fs-metadata          (replicated)
+#   - ceph-fs-data-replicated   (replicated – default CephFS data pool)
+#   - ceph-fs-data-ec           (erasure-coded data pool)
+# StorageClasses:
+#   - ceph-fs-data-replicated   (primary SC created via values)
+#   - ceph-fs-data-ec           (additional SC; see 'additionalStorageClasses' below)
+# NOTE on names: we set short pool names (metadata, data-replicated, data-ec).
+# Rook prefixes them with the filesystem name, producing the exact final names.
+# ────────────────────────────────────────────────────────────────────────────────
 cephFileSystems:
-  - name: ec-fs
+  - name: ceph-fs
     spec:
+      # Keep pools if the CR is deleted (recommended during bring-up)
       preservePoolsOnDelete: true
 
+      # Replicated metadata pool -> final name: ceph-fs-metadata
       metadataPool:
-        name: ec-fs-metadata
+        name: metadata
         replicated:
           size: 3
         parameters:
           pg_autoscale_mode: "on"
 
-      # Replicated pool for default data
+      # Data pools
       dataPools:
-        - name: ec-fs-data-repl
+        # Replicated data pool -> final name: ceph-fs-data-replicated
+        - name: data-replicated
           replicated:
             size: 3
           parameters:
             pg_autoscale_mode: "on"
 
-        # EC pool for bulk data
-        - name: ec-fs-data-ec
+        # Erasure-coded data pool -> final name: ceph-fs-data-ec
+        - name: data-ec
           failureDomain: host
           erasureCoded:
             dataChunks: 2
@@ -110,6 +191,13 @@ cephFileSystems:
       metadataServer:
         activeCount: 1
         activeStandby: true
+        resources:
+          limits:
+            cpu: "500m"
+            memory: "512Mi"
+          requests:
+            cpu: "100m"
+            memory: "128Mi"
         placement:
           nodeAffinity:
             requiredDuringSchedulingIgnoredDuringExecution:
@@ -122,15 +210,16 @@ cephFileSystems:
                         - obiwan.local
                         - rey.local
 
+    # Primary CephFS StorageClass (replicated)
     storageClass:
       enabled: true
-      name: ceph-filesystem
+      name: ceph-fs-data-replicated
       reclaimPolicy: Delete
       allowVolumeExpansion: true
       parameters:
         clusterID: rook-ceph
-        fsName: ec-fs
-        pool: ec-fs-data-repl
+        fsName: ceph-fs
+        pool: ceph-fs-data-replicated
         csi.storage.k8s.io/provisioner-secret-name: rook-csi-cephfs-provisioner
         csi.storage.k8s.io/provisioner-secret-namespace: rook-ceph
         csi.storage.k8s.io/controller-expand-secret-name: rook-csi-cephfs-provisioner
@@ -138,11 +227,62 @@ cephFileSystems:
         csi.storage.k8s.io/node-stage-secret-name: rook-csi-cephfs-node
         csi.storage.k8s.io/node-stage-secret-namespace: rook-ceph
 
+    # Additional CephFS StorageClass (EC)
+    # If your chart version supports only one CephFS SC via values,
+    # you can still keep this here for alignment and generate a manifest from it.
+    additionalStorageClasses:
+      - name: ceph-fs-data-ec
+        reclaimPolicy: Delete
+        allowVolumeExpansion: true
+        parameters:
+          clusterID: rook-ceph
+          fsName: ceph-fs
+          pool: ceph-fs-data-ec
+          csi.storage.k8s.io/provisioner-secret-name: rook-csi-cephfs-provisioner
+          csi.storage.k8s.io/provisioner-secret-namespace: rook-ceph
+          csi.storage.k8s.io/controller-expand-secret-name: rook-csi-cephfs-provisioner
+          csi.storage.k8s.io/controller-expand-secret-namespace: rook-ceph
+          csi.storage.k8s.io/node-stage-secret-name: rook-csi-cephfs-node
+          csi.storage.k8s.io/node-stage-secret-namespace: rook-ceph
+
 csi:
   enableCephfsDriver: true
   enableRbdDriver: true
+  enableCephfsSnapshotter: false
   enableRBDSnapshotter: true
-  enableNFSDriver: true
+  enableNFSDriver: false
+
+  provisionerResources:
+    limits:
+      cpu: "200m"
+      memory: "256Mi"
+    requests:
+      cpu: "50m"
+      memory: "128Mi"
+
+  pluginResources:
+    limits:
+      cpu: "200m"
+      memory: "256Mi"
+    requests:
+      cpu: "50m"
+      memory: "128Mi"
+
+monitoring:
+  enabled: false
+
+dashboard:
+  enabled: true
+  ssl: false
+  ingress:
+    enabled: false
 
 toolbox:
   enabled: true
+  resources:
+    limits:
+      cpu: "200m"
+      memory: "256Mi"
+    requests:
+      cpu: "50m"
+      memory: "128Mi"
