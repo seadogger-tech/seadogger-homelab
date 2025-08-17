@@ -1,7 +1,7 @@
 server:
   persistentVolume:
     enabled: true
-    storageClass: "ceph-block"
+    storageClass: "ceph-block-data"
     size: 50Gi
   resources:
     limits:
@@ -21,7 +21,7 @@ grafana:
       metallb.universe.tf/allow-shared-ip: prometheus
   persistence:
     enabled: true
-    storageClass: "ceph-block"
+    storageClass: "ceph-block-data"
     size: 10Gi
   resources:
     limits:
@@ -64,7 +64,7 @@ alertmanager:
       kubernetes.io/arch: "arm64"
   persistentVolume:
     enabled: true
-    storageClass: "ceph-block"
+    storageClass: "ceph-block-data"
     size: 10Gi
   resources:
     limits:
@@ -100,7 +100,7 @@ kubeStateMetrics:
 storageSpec:
   volumeClaimTemplate:
     spec:
-      storageClassName: ceph-block
+      storageClassName: ceph-block-data
       accessModes: ["ReadWriteOnce"]
       resources:
         requests:
@@ -115,7 +115,7 @@ prometheus:
     storageSpec:
       volumeClaimTemplate:
         spec:
-          storageClassName: ceph-block
+          storageClassName: ceph-block-data
           accessModes: ["ReadWriteOnce"]
           resources:
             requests:

@@ -1,0 +1,30 @@
+nextcloud:
+  image:
+    tag: 28.0.1
+
+  persistence:
+    enabled: true
+    storageClass: ceph-block-data
+    size: 100Gi
+
+  ingress:
+    enabled: true
+    className: nginx
+    annotations:
+      cert-manager.io/cluster-issuer: letsencrypt-prod
+    hosts:
+      - host: nextcloud.yourdomain.com
+        paths:
+          - path: /
+            pathType: ImplementationSpecific
+    tls:
+     - secretName: nextcloud-tls
+       hosts:
+         - nextcloud.yourdomain.com
+
+  mariadb:
+    enabled: true
+    persistence:
+      enabled: true
+      storageClass: ceph-block-data
+      size: 20Gi

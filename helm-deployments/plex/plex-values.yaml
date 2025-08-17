@@ -38,7 +38,7 @@ ingress:
 pms:
   # -- The storage class to use when provisioning the pms config volume
   # this needs to be created manually, null will use the default
-  storageClassName: ceph-block
+  storageClassName: ceph-block-data
 
   # -- The volume size to provision for the PMS database
   configStorage: 50Gi

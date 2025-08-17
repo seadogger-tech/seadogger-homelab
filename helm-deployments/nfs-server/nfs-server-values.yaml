@@ -8,7 +8,7 @@ image:
 
 persistence:
   enabled: true
-  storageClass: rook-ceph-filesystem-ec
+  storageClass: ceph-fs-data-ec
   size: 6000Gi
 
 service:
