@@ -27,6 +27,7 @@ For detailed, up-to-date information about the project's context, architecture, 
      * 1 active MDS with 1 hot standby
      * Erasure-coded data pool (2+1)
      * Replicated metadata pool (size 3)
+   - See `memory-bank/rook-ceph-ec-filesystem-lessons.md` for detailed configuration lessons and troubleshooting
 
 3. Network Configuration
    - MetalLB IP Range: 192.168.1.241-254
