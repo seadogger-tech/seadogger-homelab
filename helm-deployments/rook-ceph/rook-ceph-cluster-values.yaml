@@ -161,7 +161,7 @@ cephFileSystems:
             bulk: "true"
       metadataServer:
         activeCount: 1
-        activeStandby: false
+        activeStandby: true
         resources:
           limits:
             cpu: "500m"
