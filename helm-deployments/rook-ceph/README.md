@@ -10,19 +10,22 @@ The cluster is configured with:
 
 ### Important Notes
 
-1. Node Names
-   - The configuration uses specific node names (anakin.local, obiwan.local, rey.local)
-   - Update these in the values file if node names change
+- STORAGE DIRECTIONS
+    - CEPH Block Storage (Note: The filesystem name is added as a prefix of the pool names by helm automatically).
+        - filesytem name
+            - ceph-block
+        - pools 
+            - Called ceph-block-data
+        - storage classes 
+            - Called ceph-block-data (Note: This should default storage class for all PVCs, this storage class is tied to ceph-block-data pool)
 
-2. Storage Pool Naming
-   - Data pool is named "data" in the configuration
-   - Ceph automatically prefixes this with the filesystem name (e.g., "ec-fs-data")
-   - This is important when referencing pools in storage class configurations
-
-3. Resource Requirements
-   - MDS requires at least 512MB memory (4GB recommended)
-   - Adjust resource limits based on workload
-
-4. Storage Classes
-   - rook-ceph-filesystem-ec: For CephFS with erasure coding
-   - ceph-block: For RBD (default)
+    - CEPH FileSystems Storage (Note: The filesystem name is added as a prefix of the pool names by helm automatically).
+        - filesytem name
+            - ceph-fs
+        - pools 
+            - ceph-fs-metadata (Replicated)
+            - ceph-fs-data-replicated (Replicated data storage class.  IMPORTANT:  Helm deployment will fail if there is not at least one replicated storage class)
+            - ceph-fs-data-ec (Erasure encoded data storage class) 
+        - storage classes
+            - ceph-fs-data-replicated (Storage class is tied to the ceph-fs-data-replicated data pool)
+            - ceph-fs-data-ec (Storage class is tied to the ceph-fs-data-ec data pool)

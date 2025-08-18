@@ -170,26 +170,19 @@
     kubectl patch storageclass ceph-block-data -p '{"metadata": {"annotations": {"storageclass.kubernetes.io/is-default-class": "true"}}}'
   environment: "{{ env_vars }}"
 
-- name: Expose Ceph Dashboard
+- name: Create CephFS Erasure Coded StorageClass
   kubernetes.core.k8s:
     kubeconfig: "{{ KUBECONFIG }}"
     state: present
-    definition:
-      apiVersion: v1
-      kind: Service
-      metadata:
-        name: rook-ceph-mgr-dashboard-loadbalancer
-        namespace: rook-ceph
-        annotations:
-          metallb.io/loadBalancerIPs: 192.168.1.248
-      spec:
-        ports:
-        - name: http-dashboard
-          port: 7000
-          protocol: TCP
-          targetPort: 7000
-        selector:
-          app: rook-ceph-mgr
-          rook_cluster: rook-ceph
-        sessionAffinity: None
-        type: LoadBalancer
+    src: "{{ playbook_dir }}/../../helm-deployments/rook-ceph/rook-ceph-ec-storage-class.yaml"
+
+- name: Wait for ceph-fs-data-ec StorageClass to exist
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ KUBECONFIG }}"
+    kind: StorageClass
+    name: ceph-fs-data-ec
+  register: sc_ec_status
+  until: sc_ec_status.resources | length > 0
+  retries: 10
+  delay: 5
+
