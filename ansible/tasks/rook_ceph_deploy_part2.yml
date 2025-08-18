@@ -298,7 +298,7 @@
 
 - name: Expose Ceph Dashboard
   kubernetes.core.k8s:
-    kubeconfig: "{{ KUBECONFIG }}"
+    kubeconfig: "/etc/rancher/k3s/k3s.yaml"
     state: present
     definition:
       apiVersion: v1

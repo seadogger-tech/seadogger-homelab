@@ -174,7 +174,7 @@
   kubernetes.core.k8s:
     kubeconfig: "{{ KUBECONFIG }}"
     state: present
-    src: "{{ playbook_dir }}/../../helm-deployments/rook-ceph/rook-ceph-ec-storage-class.yaml"
+    src: "https://raw.githubusercontent.com/seadogger/seadogger-homelab/refs/heads/master/helm-deployments/rook-ceph/rook-ceph-ec-storage-class.yaml"
 
 - name: Wait for ceph-fs-data-ec StorageClass to exist
   kubernetes.core.k8s_info:
@@ -185,4 +185,3 @@
   until: sc_ec_status.resources | length > 0
   retries: 10
   delay: 5
-

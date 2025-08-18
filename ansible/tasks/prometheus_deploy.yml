@@ -63,7 +63,18 @@
           syncOptions:
             - CreateNamespace=true
 
-# Step 5: Create LoadBalancer Services
+# Step 5: Wait for the 'monitoring' namespace to be created by ArgoCD
+- name: Wait for monitoring namespace to exist
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ KUBECONFIG }}"
+    kind: Namespace
+    name: monitoring
+  register: monitoring_ns
+  until: monitoring_ns.resources | length > 0
+  retries: 30
+  delay: 10
+
+# Step 6: Create LoadBalancer Services
 - name: Create Prometheus LoadBalancer Service
   ansible.builtin.k8s:
     kubeconfig: "{{ KUBECONFIG }}"

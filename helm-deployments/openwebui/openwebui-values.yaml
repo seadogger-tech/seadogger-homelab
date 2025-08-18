@@ -7,7 +7,7 @@ pipelines:
 persistence:
   enabled: true
   size: 250Gi
-  storageClass: "ceph-block"
+  storageClass: "ceph-block-data"
   accessMode: ReadWriteMany
 
 # Service configuration
