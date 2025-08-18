@@ -4,7 +4,7 @@ service:
 main:
   persistence:
     enabled: true
-    storageClass: "ceph-block"
+    storageClass: "ceph-block-data"
     size: 50Gi
 
 postgresql:
@@ -12,7 +12,7 @@ postgresql:
   primary:
     persistence:
       enabled: true
-      storageClass: "ceph-block"
+      storageClass: "ceph-block-data"
       size: 50Gi
   auth:
     username: n8n
