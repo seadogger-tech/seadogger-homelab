@@ -38,10 +38,6 @@ dashboard:
   service:
     type: LoadBalancer
     loadBalancerIP: 192.168.1.248
-    annotations:
-      metallb.universe.tf/loadBalancerIPs: "192.168.1.248"
-      # If you use named pools, uncomment the next line:
-      # metallb.universe.tf/address-pool: "default"
 
   network:
     provider: ""

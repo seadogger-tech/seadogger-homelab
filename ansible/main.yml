@@ -54,6 +54,10 @@
       import_tasks: tasks/argocd_native_deploy.yml
       when: enable_argocd_native | default(true)
 
+    - name: Deploy Prometheus
+      import_tasks: tasks/prometheus_deploy.yml
+      when: enable_prometheus | default(true)
+
     - name: Deploy Rook-Ceph - Part 2 (NFS Server)
       import_tasks: tasks/rook_ceph_deploy_part2.yml
       when: enable_rook_ceph_part2 | default(false)
@@ -65,10 +69,6 @@
     - name: Deploy PiHole
       import_tasks: tasks/pihole_deploy.yml
       when: enable_pihole | default(true)
-
-    - name: Deploy Prometheus
-      import_tasks: tasks/prometheus_deploy.yml
-      when: enable_prometheus | default(true)
 
     - name: Deploy OpenWebUI
       import_tasks: tasks/openwebui_deploy.yml
