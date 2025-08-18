@@ -22,11 +22,26 @@ cephClusterSpec:
                     - obiwan.local
                     - rey.local
 
-  dashboard:
-    enabled: true
-    ssl: false
-    security:
-      adminPasswordSecretName: rook-ceph-dashboard-password
+dashboard:
+  enabled: true
+  ssl: false
+
+  # Keep admin password in your own Secret
+  security:
+    adminPasswordSecretName: rook-ceph-dashboard-password
+
+  # We don’t want ingress here since we’re exposing via MetalLB
+  ingress:
+    enabled: false
+
+  # Expose dashboard directly with a LoadBalancer Service
+  service:
+    type: LoadBalancer
+    loadBalancerIP: 192.168.1.248
+    annotations:
+      metallb.universe.tf/loadBalancerIPs: "192.168.1.248"
+      # If you use named pools, uncomment the next line:
+      # metallb.universe.tf/address-pool: "default"
 
   network:
     provider: ""
