@@ -22,22 +22,11 @@ cephClusterSpec:
                     - obiwan.local
                     - rey.local
 
-dashboard:
-  enabled: true
-  ssl: false
-
-  # Keep admin password in your own Secret
-  security:
-    adminPasswordSecretName: rook-ceph-dashboard-password
-
-  # We don’t want ingress here since we’re exposing via MetalLB
-  ingress:
-    enabled: false
-
-  # Expose dashboard directly with a LoadBalancer Service
-  service:
-    type: LoadBalancer
-    loadBalancerIP: 192.168.1.248
+  dashboard:
+    enabled: true
+    ssl: false
+    security:
+      adminPasswordSecretName: rook-ceph-dashboard-password
 
   network:
     provider: ""
@@ -81,25 +70,25 @@ dashboard:
         memory: "256Mi"
     osd:
       limits:
+        cpu: "2000m"
+        memory: "2Gi"
+      requests:
+        cpu: "500m"
+        memory: "1Gi"
+    prepareosd:
+      limits:
         cpu: "500m"
         memory: "512Mi"
       requests:
         cpu: "250m"
         memory: "256Mi"
-    prepareosd:
+    mgr-sidecar:
       limits:
-        cpu: "200m"
+        cpu: "500m"
         memory: "512Mi"
       requests:
         cpu: "100m"
         memory: "256Mi"
-    mgr-sidecar:
-      limits:
-        cpu: "200m"
-        memory: "256Mi"
-      requests:
-        cpu: "100m"
-        memory: "128Mi"
 
   storage:
     useAllNodes: false
@@ -281,12 +270,6 @@ csi:
 
 monitoring:
   enabled: false
-
-dashboard:
-  enabled: true
-  ssl: false
-  ingress:
-    enabled: false
 
 toolbox:
   enabled: true
