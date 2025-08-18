@@ -10,7 +10,7 @@ active_internet_interface: "eth0"
 # --- STAGE 1: WIPE (cleanup.yml) ---
 # Set to true to authorize the `cleanup.yml` playbook to run its final, destructive stage of wiping k3s.
 # This has NO EFFECT on `main.yml`.
-cold_start_stage_1_wipe_cluster: false
+cold_start_stage_1_wipe_cluster: true
 
 # --- STAGE 2: INSTALL INFRASTRUCTURE (main.yml) ---
 # Set to true to run the infrastructure installation tasks in `main.yml`.
@@ -22,13 +22,13 @@ cold_start_stage_3_install_applications: false
 
 # --- Manual Install Toggles ---
 # Use these flags to deploy services individually when the Stage 3 master switch is false.
-manual_install_rook_ceph_part2: false
-manual_install_nfs_server: false
-manual_install_bedrock: false
-manual_install_pihole: false
-manual_install_prometheus: false
-manual_install_openwebui: false
-manual_install_n8n: false
+manual_install_rook_ceph_part2: true
+manual_install_nfs_server: true
+manual_install_bedrock: true
+manual_install_pihole: true
+manual_install_prometheus: true
+manual_install_openwebui: true
+manual_install_n8n: true
 manual_install_plex: false
 
 # --- Secrets ---
@@ -51,7 +51,7 @@ plex_access_key: "YOUR_PLEX_CLAIM_TOKEN_HERE" # This key is only good for 5 minu
 #
 # 1. To Remove a SINGLE POD (e.g., plex):
 #    - Set `run_pod_cleanup: true`
-#    - In `pod_cleanup_list`, comment out all pods except for the one you want to remove.
+#    - In `pod_cleanup_list`, ensure only the `plex` entry is present or uncommented.
 #    - Set `delete_pvc: false` for plex to keep its data.
 #
 # 2. To Remove a SINGLE POD AND ITS DATA (e.g., pihole):
@@ -83,11 +83,11 @@ plex_access_key: "YOUR_PLEX_CLAIM_TOKEN_HERE" # This key is only good for 5 minu
 # --- POD / APPLICATION CLEANUP ---
 run_pod_cleanup: false
 pod_cleanup_list:
-  - { name: "bedrock-access-gateway", namespace: "bedrock-gateway", selector: "app=bedrock-access-gateway", delete_pvc: false }
+  - { name: "bedrock-access-gateway", namespace: "bedrock-gateway", selector: "app=bedrock-access-gateway", delete_pvc: true }
   - { name: "pihole", namespace: "pihole", selector: "app.kubernetes.io/name=pihole", delete_pvc: true }
-  - { name: "openwebui", namespace: "openwebui", selector: "app.kubernetes.io/name=open-webui", delete_pvc: true }
+  - { name: "openwebui", namespace: "openwebui", selector: "app.kubernetes.io/instance=openwebui", delete_pvc: true }
   - { name: "n8n", namespace: "n8n", selector: "app.kubernetes.io/instance=n8n", delete_pvc: true }
-  - { name: "plex", namespace: "plex", selector: "app=plex", delete_pvc: false }
+  - { name: "plex", namespace: "plex", selector: "app=plex", delete_pvc: true }
 
 # --- INFRASTRUCTURE CLEANUP ---
 run_infrastructure_cleanup: false
@@ -106,7 +106,7 @@ infrastructure_cleanup_list:
 enable_wipe_k3s_cluster: "{{ cold_start_stage_1_wipe_cluster | bool }}"
 # DANGER: This flag enables the wiping of physical storage devices on the nodes.
 # It should ONLY be used during a full, intentional cold start of the cluster.
-perform_physical_disk_wipe: false
+perform_physical_disk_wipe: true
 
 # --- Stage 2: Infrastructure Installation Variables ---
 enable_raspberry_pi_config: "{{ cold_start_stage_2_install_infrastructure | bool }}"

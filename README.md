@@ -59,10 +59,24 @@ For detailed, up-to-date information about the project's context, architecture, 
    - Bedrock Access Gateway: AWS Bedrock integration
    - N8N: Workflow automation
 
-### Storage Classes
-   - rook-ceph-filesystem-ec: Erasure-coded filesystem (default for shared storage)
-   - ceph-block: RBD block storage (default for block storage)
-   - local-path: Local storage provisioner
+### Storage Architecture
+
+The cluster's storage is managed by Rook-Ceph, providing both block and filesystem storage. The architecture is designed for a balance of performance, data redundancy, and storage efficiency.
+
+#### CEPH Block Storage
+-   **Pool:** `ceph-block-data` (Replicated, size 3)
+-   **Storage Class:** `ceph-block-data`
+-   **Default:** Yes. This is the default storage class for all general-purpose block storage needs (e.g., application databases).
+
+#### CEPH FileSystem Storage
+-   **Filesystem Name:** `ceph-fs`
+-   **Pools:**
+    1.  `ceph-fs-metadata` (Replicated, size 3): Stores filesystem metadata.
+    2.  `ceph-fs-data-replicated` (Replicated, size 3): The required default data pool for the filesystem.
+    3.  `ceph-fs-data-ec` (Erasure Coded, 2+1): For high-efficiency bulk data storage.
+-   **Storage Classes:**
+    1.  `ceph-fs-data-replicated`: Provides replicated, resilient filesystem storage.
+    2.  `ceph-fs-data-ec`: Provides erasure-coded, high-efficiency filesystem storage for large datasets.
 
 All components are managed through ArgoCD, ensuring GitOps practices and consistent deployment states.
 
@@ -469,32 +483,6 @@ I am using a 64GB sdCard and transitioning the `/boot` and `/` mounts to a `4TB 
 
 > **Note**: Rook and Ceph are more enterprise ready and enables future growth into LakeFS
 
-## Rook-Ceph Storage Configuration
-
-The cluster uses Rook-Ceph for distributed storage with:
-- 3 OSDs using NVMe devices
-- 1 active MDS with 1 standby
-- Erasure-coded data pool (2+1)
-- Replicated metadata pool (size 3)
-
-### Important Notes
-
-1. Node Names
-   - The configuration uses specific node names (anakin.local, obiwan.local, rey.local)
-   - Update these in the values file if node names change
-
-2. Storage Pool Naming
-   - Data pool is named "data" in the configuration
-   - Ceph automatically prefixes this with the filesystem name (e.g., "ec-fs-data")
-   - This is important when referencing pools in storage class configurations
-
-3. Resource Requirements
-   - MDS requires at least 512MB memory (4GB recommended)
-   - Adjust resource limits based on workload
-
-4. Storage Classes
-   - rook-ceph-filesystem-ec: For CephFS with erasure coding
-   - ceph-block: For RBD (default)
 
 
 ## Script Summary
