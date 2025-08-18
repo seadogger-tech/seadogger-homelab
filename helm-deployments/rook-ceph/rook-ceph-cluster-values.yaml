@@ -67,25 +67,25 @@ dashboard:
   resources:
     mgr:
       limits:
-        cpu: "1000m"
+        cpu: "500m"
         memory: "1Gi"
       requests:
         cpu: "250m"
         memory: "512Mi"
     mon:
       limits:
-        cpu: "1000m"
+        cpu: "500m"
         memory: "1Gi"
       requests:
         cpu: "250m"
         memory: "512Mi"
     osd:
       limits:
-        cpu: "2000m"
-        memory: "2Gi"
+        cpu: "1000m"
+        memory: "1Gi"
       requests:
         cpu: "500m"
-        memory: "1Gi"
+        memory: "512Mi"
     prepareosd:
       limits:
         cpu: "500m"

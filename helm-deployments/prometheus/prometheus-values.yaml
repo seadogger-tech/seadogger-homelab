@@ -5,11 +5,11 @@ server:
     size: 50Gi
   resources:
     limits:
-      cpu: 500m
-      memory: 512Mi
-    requests:
       cpu: 200m
       memory: 256Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
 
 grafana:
   nodeSelector:
@@ -122,10 +122,10 @@ prometheus:
               storage: 50Gi
     resources:
       limits:
-        cpu: 500m
-        memory: 512Mi
+        cpu: 200m
+        memory: 256Mi
       requests:
         cpu: 100m
-        memory: 200Mi
+        memory: 128Mi
     web:
       port: 8080
