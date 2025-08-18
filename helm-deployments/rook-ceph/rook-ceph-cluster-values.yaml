@@ -68,38 +68,38 @@ dashboard:
     mgr:
       limits:
         cpu: "500m"
-        memory: "1Gi"
+        memory: "512Mi"
       requests:
         cpu: "250m"
-        memory: "512Mi"
+        memory: "256Mi"
     mon:
-      limits:
-        cpu: "500m"
-        memory: "1Gi"
-      requests:
-        cpu: "250m"
-        memory: "512Mi"
-    osd:
-      limits:
-        cpu: "1000m"
-        memory: "1Gi"
-      requests:
-        cpu: "500m"
-        memory: "512Mi"
-    prepareosd:
       limits:
         cpu: "500m"
         memory: "512Mi"
       requests:
         cpu: "250m"
         memory: "256Mi"
-    mgr-sidecar:
+    osd:
       limits:
         cpu: "500m"
+        memory: "512Mi"
+      requests:
+        cpu: "250m"
+        memory: "256Mi"
+    prepareosd:
+      limits:
+        cpu: "200m"
         memory: "512Mi"
       requests:
         cpu: "100m"
         memory: "256Mi"
+    mgr-sidecar:
+      limits:
+        cpu: "200m"
+        memory: "256Mi"
+      requests:
+        cpu: "100m"
+        memory: "128Mi"
 
   storage:
     useAllNodes: false
@@ -204,8 +204,8 @@ cephFileSystems:
         activeStandby: true
         resources:
           limits:
-            cpu: "500m"
-            memory: "512Mi"
+            cpu: "200m"
+            memory: "256Mi"
           requests:
             cpu: "100m"
             memory: "128Mi"
@@ -296,4 +296,4 @@ toolbox:
       memory: "256Mi"
     requests:
       cpu: "50m"
-      memory: "128Mi"
+      memory: "64Mi"
