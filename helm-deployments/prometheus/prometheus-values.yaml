@@ -122,10 +122,10 @@ prometheus:
               storage: 50Gi
     resources:
       limits:
-        cpu: 1000m
-        memory: 1Gi
-      requests:
         cpu: 500m
         memory: 512Mi
+      requests:
+        cpu: 100m
+        memory: 200Mi
     web:
       port: 8080

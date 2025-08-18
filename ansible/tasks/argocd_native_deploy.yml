@@ -1,4 +1,9 @@
 ---
+# Step 1: Set KUBECONFIG globally
+- name: Set KUBECONFIG global
+  ansible.builtin.set_fact:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+
 - name: Add ArgoCD Helm repository
   kubernetes.core.helm_repository:
     name: argo

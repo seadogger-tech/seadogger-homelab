@@ -6,6 +6,10 @@
   vars_files:
     - config.yml
   tasks:
+    - name: Set KUBECONFIG global
+      ansible.builtin.set_fact:
+        KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+
     - name: "STAGE 1: Clean up all Applications and Services"
       ansible.builtin.include_tasks:
         file: tasks/cleanup_pod_item.yml
