@@ -56,21 +56,21 @@ cephClusterSpec:
   resources:
     mgr:
       limits:
-        cpu: "500m"
-        memory: "512Mi"
+        cpu: "1"
+        memory: "1536Mi"
       requests:
-        cpu: "250m"
-        memory: "256Mi"
+        cpu: "500m"
+        memory: "768Mi"
     mon:
       limits:
+        cpu: "1"
+        memory: "1Gi"
+      requests:
         cpu: "500m"
         memory: "512Mi"
-      requests:
-        cpu: "250m"
-        memory: "256Mi"
     osd:
       limits:
-        cpu: "2000m"
+        cpu: "1"
         memory: "2Gi"
       requests:
         cpu: "500m"
@@ -124,6 +124,11 @@ cephBlockPools:
     spec:
       replicated:
         size: 3
+      parameters:
+        pg_autoscale_mode: "on"
+        target_size_ratio: 0.005
+        pg_num: 16
+        pg_num_min: 8
       enableRBDStats: true
     storageClass:
       enabled: true
@@ -167,6 +172,8 @@ cephFileSystems:
           size: 3
         parameters:
           pg_autoscale_mode: "on"
+          pg_num: 8
+          pg_num_min: 4
 
       # Data pools
       dataPools:
@@ -176,6 +183,9 @@ cephFileSystems:
             size: 3
           parameters:
             pg_autoscale_mode: "on"
+            target_size_ratio: 0.005
+            pg_num: 16
+            pg_num_min: 8
 
         # Erasure-coded data pool -> final name: ceph-fs-data-ec
         - name: data-ec
@@ -185,6 +195,9 @@ cephFileSystems:
             codingChunks: 1
           parameters:
             pg_autoscale_mode: "on"
+            target_size_ratio: 0.005
+            pg_num: 32
+            pg_num_min: 16
             allow_ec_overwrites: "true"
             bulk: "true"
 
