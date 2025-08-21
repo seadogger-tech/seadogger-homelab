@@ -24,7 +24,7 @@ cephClusterSpec:
 
   dashboard:
     enabled: true
-    ssl: false
+    ssl: true
     security:
       adminPasswordSecretName: rook-ceph-dashboard-password
 

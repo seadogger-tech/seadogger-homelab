@@ -54,6 +54,35 @@
       import_tasks: tasks/argocd_native_deploy.yml
       when: enable_argocd_native | default(true)
 
+# -------------------------------
+# Internal PKI deployment (fixed)
+# -------------------------------
+- hosts: control_plane
+  gather_facts: true         # ensure facts available for any conditionals your tasks use
+  become: true
+  vars:
+    # Store CA material under /root/pki to avoid /tmp issues
+    root_ca_key_path: "/root/pki/internal-root-ca.key"
+    root_ca_cert_path: "/root/pki/internal-root-ca.crt"
+    intermediate_ca_key_path: "/root/pki/internal-intermediate-ca.key"
+    intermediate_ca_csr_path: "/root/pki/internal-intermediate-ca.csr"
+    intermediate_ca_cert_path: "/root/pki/internal-intermediate-ca.crt"
+
+    # Validities & key sizes
+    ca_validity_root: "3650"          # 10 years
+    ca_validity_intermediate: "730"   # 2 years
+    key_size_root: "4096"
+    key_size_intermediate: "2048"
+  tasks:
+    - name: Deploy Internal PKI Infrastructure
+      import_tasks: tasks/internal_pki_deploy.yml
+      when: enable_internal_pki | default(true)
+
+- hosts: control_plane
+  become: true
+  vars_files:
+    - config.yml
+  tasks:
     - name: Deploy Prometheus
       import_tasks: tasks/prometheus_deploy.yml
       when: enable_prometheus | default(true)
@@ -77,7 +106,7 @@
     - name: Deploy n8n
       import_tasks: tasks/n8n-deploy.yml
       when: enable_n8n | default(true)
-      
+
     - name: Deploy PlexMediaServer
       import_tasks: tasks/plexmediaserver_deploy.yml
       when: enable_plex | default(true)

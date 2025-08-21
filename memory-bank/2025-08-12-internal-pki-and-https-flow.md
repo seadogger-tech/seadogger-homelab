@@ -28,6 +28,43 @@ graph TD
 
 This is a one-time setup process performed on `yoda.local` (192.168.1.95).
 
+#### Certificate Generation and Secret Management
+
+**Secret Names:**
+- Root CA Secret: `internal-root-ca-secret`
+- Intermediate CA Secret: `internal-intermediate-ca-secret`
+- ClusterIssuer Name: `internal-local-issuer`
+
+**Certificate Generation Parameters**
+
+To ensure broad compatibility and security, the following certificate generation parameters have been standardized:
+
+1. **Root CA**
+   - Key Type: RSA
+   - Key Length: 4096 bits
+   - Validity Period: 10 years
+   - Signature Algorithm: SHA-256
+   - Secret Name: `internal-root-ca-secret`
+
+2. **Intermediate CA**
+   - Key Type: RSA
+   - Key Length: 2048 bits
+   - Validity Period: 2 years
+   - Signature Algorithm: SHA-256
+   - Secret Name: `internal-intermediate-ca-secret`
+
+3. **Leaf Certificates**
+   - Key Type: RSA
+   - Key Length: 2048 bits
+   - Validity Period: 1 year
+   - Signature Algorithm: SHA-256
+   - Secret Name Pattern: `{service-name}-local-tls`
+
+These parameters ensure:
+- Compatibility with modern browsers (Safari, Chrome)
+- Strong cryptographic security
+- Manageable certificate rotation cycles
+
 ```mermaid
 sequenceDiagram
     autonumber
@@ -44,8 +81,8 @@ sequenceDiagram
     Admin->>RootCA: Sign Intermediate CSR with Root Key
     RootCA-->>Admin: Return signed Intermediate Certificate (intermediate-ca.crt)
 
-    Admin->>CM: Create k8s Secret 'internal-ca-secret'<br>with Intermediate CA keypair in cert-manager ns
-    Admin->>CI: Apply ClusterIssuer 'internal-local-issuer'<br>pointing to 'internal-ca-secret'
+    Admin->>CM: Create k8s Secret 'internal-intermediate-ca-secret'<br>with Intermediate CA keypair in cert-manager ns
+    Admin->>CI: Apply ClusterIssuer 'internal-local-issuer'<br>pointing to 'internal-intermediate-ca-secret'
     Admin->>Admin: Install root-ca.crt into all client devices' trust stores
 ```
 

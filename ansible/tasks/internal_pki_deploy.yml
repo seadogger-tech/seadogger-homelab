@@ -1,0 +1,438 @@
+---
+# ─────────────────────────────
+# CA generation (once, on yoda)
+# ─────────────────────────────
+- block:
+    - name: Ensure OpenSSL is installed
+      package:
+        name: openssl
+        state: present
+
+    - name: Ensure CA workspace exists
+      file:
+        path: /root/pki
+        state: directory
+        mode: "0700"
+
+    - name: Write OpenSSL config for ROOT CA extensions
+      copy:
+        dest: /root/pki/openssl-ca.cnf
+        mode: "0644"
+        content: |
+          [ req ]
+          distinguished_name = dn
+          x509_extensions = v3_ca
+          prompt = no
+          [ dn ]
+          CN = SeaDogger Internal Root CA
+          O  = SeaDogger Homelab
+          OU = Internal Infrastructure
+          [ v3_ca ]
+          basicConstraints = critical, CA:true, pathlen:1
+          keyUsage = critical, keyCertSign, cRLSign
+          subjectKeyIdentifier = hash
+          authorityKeyIdentifier = keyid:always,issuer
+
+    - name: Generate Root CA Private Key
+      command: openssl genrsa -out {{ root_ca_key_path }} {{ key_size_root }}
+      args:
+        creates: "{{ root_ca_key_path }}"
+
+    - name: Generate Root CA Certificate (with CA extensions)
+      command: >
+        openssl req -x509 -new -nodes
+        -key {{ root_ca_key_path }}
+        -sha256
+        -days {{ ca_validity_root }}
+        -out {{ root_ca_cert_path }}
+        -config /root/pki/openssl-ca.cnf
+      args:
+        creates: "{{ root_ca_cert_path }}"
+
+    - name: Write OpenSSL config for INTERMEDIATE CA extensions
+      copy:
+        dest: /root/pki/openssl-intermediate.cnf
+        mode: "0644"
+        content: |
+          [ req ]
+          distinguished_name = dn
+          req_extensions = v3_req
+          prompt = no
+          [ dn ]
+          CN = SeaDogger Internal Intermediate CA
+          O  = SeaDogger Homelab
+          OU = Internal Infrastructure
+          [ v3_req ]
+          basicConstraints = critical, CA:true, pathlen:0
+          keyUsage = critical, keyCertSign, cRLSign
+          subjectKeyIdentifier = hash
+
+    - name: Generate Intermediate CA Private Key
+      command: openssl genrsa -out {{ intermediate_ca_key_path }} {{ key_size_intermediate }}
+      args:
+        creates: "{{ intermediate_ca_key_path }}"
+
+    - name: Generate Intermediate CA CSR (with req ext)
+      command: >
+        openssl req -new
+        -key {{ intermediate_ca_key_path }}
+        -out {{ intermediate_ca_csr_path }}
+        -config /root/pki/openssl-intermediate.cnf
+      args:
+        creates: "{{ intermediate_ca_csr_path }}"
+
+    - name: Sign Intermediate with Root (mark as CA)
+      command: >
+        openssl x509 -req
+        -in {{ intermediate_ca_csr_path }}
+        -CA {{ root_ca_cert_path }}
+        -CAkey {{ root_ca_key_path }}
+        -CAcreateserial
+        -out {{ intermediate_ca_cert_path }}
+        -days {{ ca_validity_intermediate }}
+        -sha256
+        -extfile /root/pki/openssl-intermediate.cnf
+        -extensions v3_req
+      args:
+        creates: "{{ intermediate_ca_cert_path }}"
+
+    - name: Read Root CA cert and key
+      shell: |
+        printf "__CRT__\n"; cat "{{ root_ca_cert_path }}"
+        printf "\n__KEY__\n"; cat "{{ root_ca_key_path }}"
+      register: root_bundle
+      changed_when: false
+
+    - name: Read Intermediate CA cert and key
+      shell: |
+        printf "__CRT__\n"; cat "{{ intermediate_ca_cert_path }}"
+        printf "\n__KEY__\n"; cat "{{ intermediate_ca_key_path }}"
+      register: inter_bundle
+      changed_when: false
+  run_once: true
+  delegate_to: yoda.local
+  become: true
+
+# ─────────────────────────────
+# Ensure intermediate is a v3 CA (CA:TRUE); re-issue if not
+# ─────────────────────────────
+- name: Inspect existing intermediate cert (if present)
+  ansible.builtin.shell: |
+    test -s "{{ intermediate_ca_cert_path }}" && \
+    openssl x509 -in "{{ intermediate_ca_cert_path }}" -noout -text | awk '/Basic Constraints/{f=1} f&&/CA:/{print; exit}'
+  register: inter_is_ca
+  changed_when: false
+  failed_when: false
+  delegate_to: yoda.local
+  run_once: true
+  become: true
+
+- name: Recreate intermediate CA with CA:TRUE if missing
+  block:
+    - name: Ensure INTERMEDIATE CA config present
+      copy:
+        dest: /root/pki/openssl-intermediate.cnf
+        mode: "0644"
+        content: |
+          [ req ]
+          distinguished_name = dn
+          req_extensions = v3_req
+          prompt = no
+          [ dn ]
+          CN = SeaDogger Internal Intermediate CA
+          O  = SeaDogger Homelab
+          OU = Internal Infrastructure
+          [ v3_req ]
+          basicConstraints = critical, CA:true, pathlen:0
+          keyUsage = critical, keyCertSign, cRLSign
+          subjectKeyIdentifier = hash
+
+    - name: Generate Intermediate CA Private Key (force if needed)
+      command: openssl genrsa -out {{ intermediate_ca_key_path }} {{ key_size_intermediate }}
+
+    - name: Generate Intermediate CA CSR
+      command: >
+        openssl req -new -key {{ intermediate_ca_key_path }}
+        -out {{ intermediate_ca_csr_path }}
+        -config /root/pki/openssl-intermediate.cnf
+
+    - name: Sign Intermediate with Root (CA:TRUE)
+      command: >
+        openssl x509 -req
+        -in {{ intermediate_ca_csr_path }}
+        -CA {{ root_ca_cert_path }}
+        -CAkey {{ root_ca_key_path }}
+        -CAcreateserial
+        -out {{ intermediate_ca_cert_path }}
+        -days {{ ca_validity_intermediate }}
+        -sha256
+        -extfile /root/pki/openssl-intermediate.cnf
+        -extensions v3_req
+  when: inter_is_ca.stdout is not search("CA:TRUE")
+  delegate_to: yoda.local
+  run_once: true
+  become: true
+
+# ─────────────────────────────
+# Kubernetes resources (once)
+# ─────────────────────────────
+- name: Set KUBECONFIG global
+  ansible.builtin.set_fact:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+  run_once: true
+
+- name: Create cert-manager Namespace
+  kubernetes.core.k8s:
+    api_version: v1
+    kind: Namespace
+    name: cert-manager
+    state: present
+    kubeconfig: "{{ KUBECONFIG }}"
+  run_once: true
+
+# --- Ensure cert-manager CRDs exist BEFORE creating ClusterIssuer ---
+- name: Check if ClusterIssuer CRD is installed
+  kubernetes.core.k8s_info:
+    api_version: apiextensions.k8s.io/v1
+    kind: CustomResourceDefinition
+    name: clusterissuers.cert-manager.io
+    kubeconfig: "{{ KUBECONFIG }}"
+  register: clusterissuer_crd
+  run_once: true
+
+- block:
+    - name: Copy cert-manager application manifest to yoda (for CRDs)
+      copy:
+        src: "{{ playbook_dir }}/../kubectl-deployments/cert-manager-application.yml"
+        dest: "/tmp/cert-manager-application.yml"
+      run_once: true
+      delegate_to: yoda.local
+      become: false
+
+    - name: Apply cert-manager application (installs CRDs/controllers)
+      kubernetes.core.k8s:
+        src: "/tmp/cert-manager-application.yml"
+        state: present
+        kubeconfig: "{{ KUBECONFIG }}"
+        wait: true
+      run_once: true
+      delegate_to: yoda.local
+      become: false
+
+    - name: Wait for ClusterIssuer CRD to be present
+      kubernetes.core.k8s_info:
+        api_version: apiextensions.k8s.io/v1
+        kind: CustomResourceDefinition
+        name: clusterissuers.cert-manager.io
+        kubeconfig: "{{ KUBECONFIG }}"
+      register: clusterissuer_crd_wait
+      until: clusterissuer_crd_wait.resources | length > 0
+      retries: 30
+      delay: 6
+      run_once: true
+  when: clusterissuer_crd.resources | length == 0
+
+# ─────────────────────────────
+# Secrets and ClusterIssuer
+# ─────────────────────────────
+# Secret type & content guard (handle immutability)
+- name: Get existing intermediate CA secret
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Secret
+    name: internal-intermediate-ca-secret
+    namespace: cert-manager
+    kubeconfig: "{{ KUBECONFIG }}"
+  register: inter_secret_info
+  run_once: true
+
+- name: Delete intermediate secret if type is not kubernetes.io/tls
+  kubernetes.core.k8s:
+    api_version: v1
+    kind: Secret
+    name: internal-intermediate-ca-secret
+    namespace: cert-manager
+    state: absent
+    kubeconfig: "{{ KUBECONFIG }}"
+  when: >
+    inter_secret_info.resources | length > 0 and
+    (inter_secret_info.resources[0].type | default('')) != 'kubernetes.io/tls'
+  run_once: true
+
+- name: Create Kubernetes Secret for Intermediate CA (kubernetes.io/tls with tls.crt/tls.key)
+  kubernetes.core.k8s:
+    definition:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: internal-intermediate-ca-secret
+        namespace: cert-manager
+      type: kubernetes.io/tls
+      stringData:
+        tls.crt: "{{ (inter_bundle.stdout.split('__KEY__')[0]).replace('__CRT__','') | trim }}"
+        tls.key: "{{ (inter_bundle.stdout.split('__KEY__')[1]) | trim }}"
+    kubeconfig: "{{ KUBECONFIG }}"
+  run_once: true
+
+- name: Create Kubernetes Secret for Root CA (optional archival)
+  kubernetes.core.k8s:
+    definition:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: internal-root-ca-secret
+        namespace: cert-manager
+      type: Opaque
+      stringData:
+        root-ca.crt: "{{ (root_bundle.stdout.split('__KEY__')[0]).replace('__CRT__','') | trim }}"
+        root-ca.key: "{{ (root_bundle.stdout.split('__KEY__')[1]) | trim }}"
+    kubeconfig: "{{ KUBECONFIG }}"
+  run_once: true
+
+- name: Patch cert-manager webhook to ensure correct port configuration
+  kubernetes.core.k8s_json_patch:
+    api_version: apps/v1
+    kind: Deployment
+    name: cert-manager-webhook
+    namespace: cert-manager
+    patch:
+      - op: replace
+        path: /spec/template/spec/containers/0/args
+        value:
+          - --v=2
+          - --secure-port=443
+          - --dynamic-serving-ca-secret-namespace=$(POD_NAMESPACE)
+          - --dynamic-serving-ca-secret-name=cert-manager-webhook-ca
+          - --dynamic-serving-dns-names=cert-manager-webhook
+          - --dynamic-serving-dns-names=cert-manager-webhook.$(POD_NAMESPACE)
+          - --dynamic-serving-dns-names=cert-manager-webhook.$(POD_NAMESPACE).svc
+    kubeconfig: "{{ KUBECONFIG }}"
+  run_once: true
+  ignore_errors: yes
+
+- name: Create ClusterIssuer for Internal Certificates
+  kubernetes.core.k8s:
+    definition:
+      apiVersion: cert-manager.io/v1
+      kind: ClusterIssuer
+      metadata:
+        name: internal-local-issuer
+      spec:
+        ca:
+          secretName: internal-intermediate-ca-secret
+    kubeconfig: "{{ KUBECONFIG }}"
+  register: clusterissuer_result
+  retries: 3
+  delay: 10
+  until: 
+    - clusterissuer_result is success
+    - clusterissuer_result.result.status is defined
+    - "'Ready' in clusterissuer_result.result.status.conditions | map(attribute='type') | list"
+  run_once: true
+  ignore_errors: yes
+
+- name: Debug ClusterIssuer Creation Failure
+  ansible.builtin.debug:
+    msg: 
+      - "ClusterIssuer creation failed"
+      - "Result: {{ clusterissuer_result }}"
+  when: clusterissuer_result is failed
+  run_once: true
+
+# ─────────────────────────────
+# Apply other app certificates from yoda (optional)
+# ─────────────────────────────
+- name: Copy Certificate Manifests to yoda
+  copy:
+    src: "{{ playbook_dir }}/../kubectl-deployments/{{ item }}"
+    dest: "/tmp/{{ item }}"
+  loop:
+    - "ceph-dashboard-certificate.yml"
+    - "argocd-certificate.yml"
+  run_once: true
+  delegate_to: yoda.local
+  become: false
+
+- name: Apply Certificate Manifests from yoda
+  kubernetes.core.k8s:
+    src: "/tmp/{{ item }}"
+    state: present
+    kubeconfig: "/etc/rancher/k3s/k3s.yaml"
+  loop:
+    - "ceph-dashboard-certificate.yml"
+    - "argocd-certificate.yml"
+  run_once: true
+  delegate_to: yoda.local
+  become: false
+
+- name: Clean up temporary manifest files on yoda
+  file:
+    path: "/tmp/{{ item }}"
+    state: absent
+  loop:
+    - "ceph-dashboard-certificate.yml"
+    - "argocd-certificate.yml"
+  run_once: true
+  delegate_to: yoda.local
+  become: false
+
+# ─────────────────────────────
+# Trust distribution to all nodes
+# ─────────────────────────────
+- name: Ensure root CA PEM is present on yoda (for fan-out)
+  copy:
+    content: "{{ (root_bundle.stdout.split('__KEY__')[0]).replace('__CRT__','') | trim }}"
+    dest: "/root/pki/internal-root-ca.crt"
+    mode: "0644"
+  run_once: true
+  delegate_to: yoda.local
+  become: true
+
+- name: Read root CA from source host
+  ansible.builtin.slurp:
+    src: "/root/pki/internal-root-ca.crt"
+  register: ca_slurp
+  delegate_to: yoda.local
+  run_once: true
+  become: true
+
+- name: Distribute Root CA to all nodes' trust store
+  ansible.builtin.copy:
+    content: "{{ ca_slurp.content | b64decode }}"
+    dest: "/usr/local/share/ca-certificates/internal-root-ca.crt"
+    mode: "0644"
+  become: true
+  delegate_to: "{{ item }}"
+  loop: "{{ groups['all'] }}"
+
+- name: Update CA certificates on all nodes (Debian/Ubuntu)
+  ansible.builtin.command: update-ca-certificates
+  become: true
+  delegate_to: "{{ item }}"
+  loop: "{{ groups['all'] }}"
+
+- name: Enable CA trust on RHEL-family
+  ansible.builtin.shell: |
+    update-ca-trust force-enable || true
+    cp /usr/local/share/ca-certificates/internal-root-ca.crt /etc/pki/ca-trust/source/anchors/internal-root-ca.crt
+    update-ca-trust extract
+  args:
+    warn: false
+  become: true
+  delegate_to: "{{ item }}"
+  loop: "{{ groups['all'] }}"
+  when: ansible_facts['os_family'] == 'RedHat'
+
+# ─────────────────────────────
+# Optional cleanup (on yoda)
+# ─────────────────────────────
+- name: Clean up temporary CA config files on yoda (keep keys/certs!)
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "/root/pki/openssl-ca.cnf"
+    - "/root/pki/openssl-intermediate.cnf"
+  run_once: true
+  delegate_to: yoda.local
+  become: true

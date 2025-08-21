@@ -81,6 +81,8 @@
     - /etc/cni
     - /run/containerd
     - /var/lib/containerd
+    - /root/pki
+    - /tmp/*
 
 - name: Remove sysctl config for Kubernetes CRI
   ansible.builtin.file:
