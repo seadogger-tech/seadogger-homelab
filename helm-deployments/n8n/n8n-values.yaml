@@ -1,4 +1,3 @@
-
 service:
   enabled: false  # Disable helm chart's service creation
 
@@ -40,13 +39,14 @@ main:
   livenessProbe:
     httpGet:
       path: /healthz
-      port: https
+      port: 5678
+      scheme: HTTPS
 
-  # -- This is to setup the readiness probe for the main pod more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
   readinessProbe:
     httpGet:
       path: /healthz/readiness
-      port: https
+      port: 5678
+      scheme: HTTPS
 
 # -- n8n database configurations
 db:
