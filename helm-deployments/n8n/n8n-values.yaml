@@ -1,42 +1,17 @@
-# n8n values for community-charts/n8n v1.13.5
-
-image:
-  repository: n8nio/n8n
-  pullPolicy: IfNotPresent
-
-
-# Use Postgres (bundled subchart) instead of sqlite
-db:
-  type: postgresdb
-
-postgresql:
-  enabled: true
-  auth:
-    username: n8n
-    password: n8npass
-    database: n8n
-  primary:
-    persistence:
-      enabled: true
-      # existingClaim: ""   # (optional) bind to an existing PVC
-      # NOTE: this wrapper schema exposes only 'enabled' and 'existingClaim'.
-      # If you want to tune storage size/class, prefer setting a StorageClass default
-      # or create a PVC and set existingClaim above.
-
 main:
   count: 1
 
-  # Persist ~/.n8n on Ceph
+  # Persist ~/.n8n
   persistence:
     enabled: true
     storageClass: "ceph-block-data"
-    accessMode: ReadWriteOnce
     size: 50Gi
     mountPath: "/home/node/.n8n"
     annotations:
       helm.sh/resource-policy: keep
+    # NOTE: no accessModes here; chart fixes RWO for this PVC
 
-  # Mount TLS cert from a secret in the SAME namespace as the release (n8n)
+  # Mount TLS cert from secret in *n8n* namespace
   volumes:
     - name: n8n-ssl
       secret:
@@ -51,7 +26,7 @@ main:
       subPath: tls.key
       readOnly: true
 
-  # App-level HTTPS config
+  # HTTPS in-app
   extraEnvVars:
     N8N_PROTOCOL: "https"
     N8N_PORT: "5678"
@@ -63,15 +38,10 @@ main:
     GENERIC_TIMEZONE: "America/New_York"
     N8N_DEFAULT_LOCALE: "en"
 
-# If you prefer TLS at the edge, you can enable an ingress instead of app-level TLS:
-# ingress:
-#   enabled: true
-#   className: "traefik"   # or your ingress class
-#   hosts:
-#     - host: n8n.local
-#       paths:
-#         - path: /
-#           pathType: Prefix
-#   tls:
-#     - secretName: n8n-local-tls
-#       hosts: [ "n8n.local" ]
+postgresql:
+  enabled: true
+  primary:
+    persistence:
+      enabled: true
+      storageClass: "ceph-block-data"
+      size: 8Gi
