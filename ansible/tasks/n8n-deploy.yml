@@ -47,23 +47,7 @@
   delegate_to: "{{ inventory_hostname }}"
   tags: n8n
 
-# Add this new task to set the environment variable correctly
-#.TODO:  this is a hack as the ENV setup in the values file is broken.   
-- name: Set N8N SSL and HTTPS configuration
-  ansible.builtin.shell:
-    cmd: >-
-      kubectl patch deployment n8n -n n8n --type=json 
-      -p '[
-        {"op":"add","path":"/spec/template/spec/containers/0/env/-","value":{"name":"N8N_SECURE_COOKIE","value":"false"}},
-        {"op":"add","path":"/spec/template/spec/containers/0/env/-","value":{"name":"N8N_PROTOCOL","value":"https"}},
-        {"op":"add","path":"/spec/template/spec/containers/0/env/-","value":{"name":"N8N_SSL_KEY","value":"/etc/n8n/tls.key"}},
-        {"op":"add","path":"/spec/template/spec/containers/0/env/-","value":{"name":"N8N_SSL_CERT","value":"/etc/n8n/tls.crt"}},
-        {"op":"add","path":"/spec/template/spec/volumes/-","value":{"name":"n8n-ssl","secret":{"secretName":"n8n-local-tls"}}},
-        {"op":"add","path":"/spec/template/spec/containers/0/volumeMounts/-","value":{"name":"n8n-ssl","mountPath":"/etc/n8n/tls.crt","subPath":"tls.crt"}},
-        {"op":"add","path":"/spec/template/spec/containers/0/volumeMounts/-","value":{"name":"n8n-ssl","mountPath":"/etc/n8n/tls.key","subPath":"tls.key"}}
-      ]'
-  become: true
-  tags: n8n
+# Removed manual patching task
 
 
 - name: Create n8n LoadBalancer Service
