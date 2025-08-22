@@ -29,7 +29,6 @@ main:
     - name: n8n-ssl
       secret:
         secretName: n8n-local-tls
-        secretNamespace: cert-manager
 
   volumeMounts:
     - name: n8n-ssl
