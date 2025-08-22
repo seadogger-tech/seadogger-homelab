@@ -37,6 +37,11 @@ main:
       mountPath: /etc/n8n/tls.key
       subPath: tls.key
 
+# -- n8n database configurations
+db:
+  # -- Type of database to use. Valid values 'sqlite' | 'postgresdb'
+  type: postgresdb
+
 postgresql:
   enabled: true
   primary:

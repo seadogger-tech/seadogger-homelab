@@ -1,4 +1,8 @@
 ---
+- name: Set KUBECONFIG global
+  ansible.builtin.set_fact:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+    
 - name: Pre-cook Namespaces
   kubernetes.core.k8s:
     name: "{{ item.name }}"
