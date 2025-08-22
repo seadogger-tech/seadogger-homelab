@@ -55,6 +55,17 @@
       when: enable_argocd_native | default(true)
 
 # -------------------------------
+# Namespace Pre-cooking
+# -------------------------------
+- hosts: control_plane
+  become: true
+  vars_files:
+    - config.yml
+  tasks:
+    - name: Pre-cook Namespaces
+      import_tasks: tasks/namespaces_precook.yml
+
+# -------------------------------
 # Internal PKI deployment (fixed)
 # -------------------------------
 - hosts: control_plane

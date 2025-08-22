@@ -1,42 +1,50 @@
-service:
-  enabled: false  # Disable helm chart's service creation
+replicaCount: 1
 
-main:
-  replicaCount: 1  # Explicitly set the number of replicas
-  persistence:
-    enabled: true
-    storageClass: "ceph-block-data"
-    size: 50Gi
-    accessMode: ReadWriteOnce  # Ensure single node access
+env:
+  # Consolidated SSL and HTTPS configuration
+  N8N_PROTOCOL: "https"
+  N8N_SECURE_COOKIE: "false"
+  N8N_SSL_KEY: "/etc/n8n/tls.key"
+  N8N_SSL_CERT: "/etc/n8n/tls.crt"
   
-  env:
-    # Consolidated SSL and HTTPS configuration
-    N8N_PROTOCOL: "https"
-    N8N_SECURE_COOKIE: "false"
-    N8N_SSL_KEY: "/etc/n8n/tls.key"
-    N8N_SSL_CERT: "/etc/n8n/tls.crt"
-    
-    # Other existing environment variables
-    N8N_HIRING_BANNER_ENABLED: "false"
-    NODE_ENV: "production"
-    N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS: "true"
-    N8N_PORT: "5678"
-    N8N_DEFAULT_LOCALE: "en"
-    GENERIC_TIMEZONE: "America/New_York"
-    N8N_GRACEFUL_SHUTDOWN_TIMEOUT: "30"
+  # Other existing environment variables
+  N8N_HIRING_BANNER_ENABLED: "false"
+  NODE_ENV: "production"
+  N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS: "true"
+  N8N_PORT: "5678"
+  N8N_DEFAULT_LOCALE: "en"
+  GENERIC_TIMEZONE: "America/New_York"
+  N8N_GRACEFUL_SHUTDOWN_TIMEOUT: "30"
 
-  volumes:
-    - name: n8n-ssl
-      secret:
-        secretName: n8n-local-tls
+persistence:
+  enabled: true
+  storageClass: "ceph-block-data"
+  size: 50Gi
+  accessMode: ReadWriteOnce
 
-  volumeMounts:
-    - name: n8n-ssl
-      mountPath: /etc/n8n/tls.crt
-      subPath: tls.crt
-    - name: n8n-ssl
-      mountPath: /etc/n8n/tls.key
-      subPath: tls.key
+volumes:
+  - name: n8n-ssl
+    secret:
+      secretName: n8n-local-tls
+
+volumeMounts:
+  - name: n8n-ssl
+    mountPath: /etc/n8n/tls.crt
+    subPath: tls.crt
+  - name: n8n-ssl
+    mountPath: /etc/n8n/tls.key
+    subPath: tls.key
+
+service:
+  type: LoadBalancer
+  loadBalancerIP: "192.168.1.252"
+  ports:
+    - name: http
+      port: 80
+      targetPort: 5678
+    - name: https
+      port: 443
+      targetPort: 5678
 
 postgresql:
   enabled: true
