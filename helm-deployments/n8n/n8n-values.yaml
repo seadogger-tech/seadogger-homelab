@@ -9,9 +9,34 @@ main:
     size: 50Gi
     accessMode: ReadWriteOnce  # Ensure single node access
   
-  # Add strategy to ensure smooth rolling updates
-  strategy:
-    type: Recreate  # Ensures old pod is fully terminated before new one starts
+  env:
+    # Consolidated SSL and HTTPS configuration
+    N8N_PROTOCOL: "https"
+    N8N_SECURE_COOKIE: "false"
+    N8N_SSL_KEY: "/etc/n8n/tls.key"
+    N8N_SSL_CERT: "/etc/n8n/tls.crt"
+    
+    # Other existing environment variables
+    N8N_HIRING_BANNER_ENABLED: "false"
+    NODE_ENV: "production"
+    N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS: "true"
+    N8N_PORT: "5678"
+    N8N_DEFAULT_LOCALE: "en"
+    GENERIC_TIMEZONE: "America/New_York"
+    N8N_GRACEFUL_SHUTDOWN_TIMEOUT: "30"
+
+  volumes:
+    - name: n8n-ssl
+      secret:
+        secretName: n8n-local-tls
+
+  volumeMounts:
+    - name: n8n-ssl
+      mountPath: /etc/n8n/tls.crt
+      subPath: tls.crt
+    - name: n8n-ssl
+      mountPath: /etc/n8n/tls.key
+      subPath: tls.key
 
 postgresql:
   enabled: true
