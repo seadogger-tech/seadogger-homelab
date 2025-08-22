@@ -1,42 +1,41 @@
-main:
-  count: 1
 
-  # Persist ~/.n8n
+service:
+  enabled: false  # Disable helm chart's service creation
+
+main:
   persistence:
     enabled: true
     storageClass: "ceph-block-data"
     size: 50Gi
-    mountPath: "/home/node/.n8n"
-    annotations:
-      helm.sh/resource-policy: keep
-    # NOTE: no accessModes here; chart fixes RWO for this PVC
+  
+  env:
+    # Consolidated SSL and HTTPS configuration
+    N8N_PROTOCOL: "https"
+    N8N_SECURE_COOKIE: "false"
+    N8N_SSL_KEY: "/etc/n8n/tls.key"
+    N8N_SSL_CERT: "/etc/n8n/tls.crt"
+    
+    # Other existing environment variables
+    N8N_HIRING_BANNER_ENABLED: "false"
+    NODE_ENV: "production"
+    N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS: "true"
+    N8N_PORT: "5678"
+    N8N_DEFAULT_LOCALE: "en"
+    GENERIC_TIMEZONE: "America/New_York"
+    N8N_GRACEFUL_SHUTDOWN_TIMEOUT: "30"
 
-  # Mount TLS cert from secret in *n8n* namespace
   volumes:
     - name: n8n-ssl
       secret:
         secretName: n8n-local-tls
+
   volumeMounts:
     - name: n8n-ssl
       mountPath: /etc/n8n/tls.crt
       subPath: tls.crt
-      readOnly: true
     - name: n8n-ssl
       mountPath: /etc/n8n/tls.key
       subPath: tls.key
-      readOnly: true
-
-  # HTTPS in-app
-  extraEnvVars:
-    N8N_PROTOCOL: "https"
-    N8N_PORT: "5678"
-    N8N_SSL_CERT: "/etc/n8n/tls.crt"
-    N8N_SSL_KEY: "/etc/n8n/tls.key"
-    N8N_SECURE_COOKIE: "false"
-    NODE_ENV: "production"
-    N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS: "true"
-    GENERIC_TIMEZONE: "America/New_York"
-    N8N_DEFAULT_LOCALE: "en"
 
 postgresql:
   enabled: true
@@ -44,4 +43,9 @@ postgresql:
     persistence:
       enabled: true
       storageClass: "ceph-block-data"
-      size: 8Gi
+      size: 50Gi
+      accessMode: ReadWriteOnce
+  auth:
+    username: n8n
+    password: n8npass
+    database: n8n
