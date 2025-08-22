@@ -39,13 +39,13 @@ main:
   livenessProbe:
     httpGet:
       path: /healthz
-      port: 5678
+      port: "5678"
       scheme: HTTPS
 
   readinessProbe:
     httpGet:
       path: /healthz/readiness
-      port: 5678
+      port: "5678"
       scheme: HTTPS
 
 # -- n8n database configurations
