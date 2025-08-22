@@ -8,7 +8,7 @@ main:
     storageClass: "ceph-block-data"
     size: 50Gi
   
-  env:
+  extraEnvVars:
     # Consolidated SSL and HTTPS configuration
     N8N_PROTOCOL: "https"
     N8N_SECURE_COOKIE: "false"
