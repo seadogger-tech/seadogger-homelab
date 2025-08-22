@@ -349,6 +349,7 @@
   loop:
     - "ceph-dashboard-certificate.yml"
     - "argocd-certificate.yml"
+    - "n8n-certificate.yml"
   run_once: true
   delegate_to: yoda.local
   become: false
@@ -361,6 +362,7 @@
   loop:
     - "ceph-dashboard-certificate.yml"
     - "argocd-certificate.yml"
+    - "n8n-certificate.yml"
   run_once: true
   delegate_to: yoda.local
   become: false
@@ -372,6 +374,7 @@
   loop:
     - "ceph-dashboard-certificate.yml"
     - "argocd-certificate.yml"
+    - "n8n-certificate.yml"
   run_once: true
   delegate_to: yoda.local
   become: false

@@ -2,10 +2,16 @@ service:
   enabled: false  # Disable helm chart's service creation
 
 main:
+  replicaCount: 1  # Explicitly set the number of replicas
   persistence:
     enabled: true
     storageClass: "ceph-block-data"
     size: 50Gi
+    accessMode: ReadWriteOnce  # Ensure single node access
+  
+  # Add strategy to ensure smooth rolling updates
+  strategy:
+    type: Recreate  # Ensures old pod is fully terminated before new one starts
 
 postgresql:
   enabled: true
@@ -14,6 +20,7 @@ postgresql:
       enabled: true
       storageClass: "ceph-block-data"
       size: 50Gi
+      accessMode: ReadWriteOnce
   auth:
     username: n8n
     password: n8npass
