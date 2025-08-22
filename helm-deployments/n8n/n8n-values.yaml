@@ -36,18 +36,6 @@ main:
       mountPath: /etc/n8n/tls.key
       subPath: tls.key
 
-  livenessProbe:
-    httpGet:
-      path: /healthz
-      port: http
-      scheme: https
-
-  readinessProbe:
-    httpGet:
-      path: /healthz/readiness
-      port: http
-      scheme: https
-
 # -- n8n database configurations
 db:
   # -- Type of database to use. Valid values 'sqlite' | 'postgresdb'
