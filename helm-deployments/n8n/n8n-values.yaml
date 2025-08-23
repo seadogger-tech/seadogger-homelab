@@ -1,5 +1,14 @@
+# -- This is for setting up a service more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/
 service:
-  enabled: false  # Disable helm chart's service creation
+  # -- Whether to enable the service
+  enabled: true
+  # -- This sets the service type more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/#publishing-services-service-types
+  type: LoadBalancer
+  # -- This sets the ports more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/#field-spec-ports
+  port: 5678
+  # -- Default Service name
+  name: http
+  # -- Additional service annotations
 
 main:
   persistence:
