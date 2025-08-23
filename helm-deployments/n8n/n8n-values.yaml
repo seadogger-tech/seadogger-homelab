@@ -41,17 +41,10 @@ main:
       subPath: tls.key
       readOnly: true
 
-  # Probes must use the named port "http" and SCHEME=HTTPS (UPPERCASE)
   livenessProbe:
-    httpGet:
-      path: /healthz
-      port: "http"
-      scheme: HTTPS
+    enabled: false
   readinessProbe:
-    httpGet:
-      path: /healthz/readiness
-      port: "http"
-      scheme: HTTPS
+    enabled: false
 
 db:
   type: postgresdb
