@@ -36,6 +36,23 @@ main:
     N8N_HIRING_BANNER_ENABLED: "false"
     N8N_GRACEFUL_SHUTDOWN_TIMEOUT: "30"
 
+  livenessProbe:
+    tcpSocket:
+      port: 5678
+    initialDelaySeconds: 20
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 6
+
+  readinessProbe:
+    tcpSocket:
+      port: 5678
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 6
+
+
 db:
   type: postgresdb
 
