@@ -45,6 +45,20 @@ main:
       mountPath: /etc/n8n/tls.key
       subPath: tls.key
 
+  # -- This is to setup the liveness probe for the main pod more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
+  livenessProbe:
+    httpGet:
+      path: /healthz
+      port: http
+      scheme: HTTP
+
+  # -- This is to setup the readiness probe for the main pod more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
+  readinessProbe:
+    httpGet:
+      path: /healthz/readiness
+      port: http
+      scheme: HTTP
+      
 # -- n8n database configurations
 db:
   # -- Type of database to use. Valid values 'sqlite' | 'postgresdb'
