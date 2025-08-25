@@ -1,55 +1,55 @@
+# --- Service stays internal; Traefik will front it via Ingress
 service:
   enabled: true
-  type: LoadBalancer
+  type: ClusterIP
   port: 5678
   name: http
-  annotations:
-    metallb.universe.tf/address-pool: default
-    metallb.universe.tf/allow-shared-ip: n8n
-    metallb.universe.tf/loadBalancerIPs: "192.168.1.252"
-  labels:
-    app: n8n
+  annotations: {}
+  labels: {}
 
 main:
+  # Persist ~/.n8n on your Ceph SC
   persistence:
     enabled: true
     storageClass: ceph-block-data
     size: 50Gi
 
-  volumes:
-    - name: n8n-ssl
-      secret:
-        secretName: n8n-local-tls
-  volumeMounts:
-    - name: n8n-ssl
-      mountPath: /etc/n8n/tls.crt
-      subPath: tls.crt
-      readOnly: true
-    - name: n8n-ssl
-      mountPath: /etc/n8n/tls.key
-      subPath: tls.key
-      readOnly: true
-
+  # n8n listens in HTTP; Traefik does TLS
   extraEnvVars:
-    N8N_SSL_CERT: "/etc/n8n/tls.crt"
-    N8N_SSL_KEY: "/etc/n8n/tls.key"
-    N8N_PROTOCOL: "https"
+    N8N_PROTOCOL: "http"
+    N8N_PORT: "5678"
 
 timezone: "America/New_York"
 
-# -- This block is for setting up the ingress for more information can be found here: https://kubernetes.io/docs/concepts/services-networking/ingress/
+# --- Traefik Ingress (TLS terminated by Traefik using your cert-manager secret)
 ingress:
   enabled: true
-  className: "n8n"
-  annotations: 
-     kubernetes.io/ingress.class: traefik
-     kubernetes.io/tls-acme: "true"
+  className: "traefik"   # k3s default IngressClass
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
   hosts:
     - host: n8n.local
       paths:
         - path: /
           pathType: Prefix
-  tls: 
-    - secretName: n8n-local-tls
+  tls:
+    - secretName: n8n-local-tls   # cert-manager Secret in the n8n namespace
       hosts:
         - n8n.local
+
+# --- OPTIONAL: Built-in PostgreSQL (uncomment if you want chart-managed DB)
+# db:
+#   type: postgresdb
+#
+# postgresql:
+#   enabled: true
+#   primary:
+#     persistence:
+#       enabled: true
+#       storageClass: ceph-block-data
+#       size: 50Gi
+#   auth:
+#     username: n8n
+#     password: n8npass
+#     database: n8n
