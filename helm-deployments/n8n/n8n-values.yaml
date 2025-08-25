@@ -49,11 +49,6 @@ ingress:
       paths:
         - path: /
           pathType: Prefix
-          backend:
-            service:
-              name: n8n
-              port:
-                number: 5678
   tls: 
     - secretName: n8n-local-tls
       hosts:
