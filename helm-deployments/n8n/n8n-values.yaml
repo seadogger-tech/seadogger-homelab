@@ -36,3 +36,25 @@ main:
     N8N_PROTOCOL: "https"
 
 timezone: "America/New_York"
+
+# -- This block is for setting up the ingress for more information can be found here: https://kubernetes.io/docs/concepts/services-networking/ingress/
+ingress:
+  enabled: true
+  className: "n8n"
+  annotations: 
+     kubernetes.io/ingress.class: traefik
+     kubernetes.io/tls-acme: "true"
+  hosts:
+    - host: n8n.local
+      paths:
+        - path: /
+          pathType: Prefix
+          backend:
+            service:
+              name: n8n
+              port:
+                number: 5678
+  tls: 
+    - secretName: n8n-local-tls
+      hosts:
+        - n8n.local
