@@ -31,8 +31,6 @@ main:
       readOnly: true
 
   extraEnvVars:
-    N8N_PROTOCOL: "https"
-    N8N_PORT: "5678"
     N8N_SSL_CERT: "/etc/n8n/tls.crt"
     N8N_SSL_KEY: "/etc/n8n/tls.key"
     N8N_SECURE_COOKIE: "false"
@@ -42,48 +40,3 @@ main:
     N8N_DEFAULT_LOCALE: "en"
     N8N_HIRING_BANNER_ENABLED: "false"
     N8N_GRACEFUL_SHUTDOWN_TIMEOUT: "30"
-
-  # -- This is to setup the liveness probe for the main pod more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
-  livenessProbe:
-    httpGet:
-      path: /healthz
-      port: http
-
-  # -- This is to setup the readiness probe for the main pod more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
-  readinessProbe:
-    httpGet:
-      path: /healthz/readiness
-      port: http
-
-# -- Worker node configurations
-worker:
-  # -- This is to setup the liveness probe for the worker pod more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
-  livenessProbe:
-    httpGet:
-      path: /healthz
-      port: http
-
-  # -- This is to setup the readiness probe for the worker pod more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
-  readinessProbe:
-    httpGet:
-      path: /healthz/readiness
-      port: http
-
-# -- Webhook node configurations
-webhook:
-  # -- MCP webhook configuration. This is only used when the webhook mode is set to `queue` and the database type is set to `postgresdb`.
-  mcp:
-    # -- Whether to enable MCP webhook
-    enabled: false
-  # -- This block is for setting up the resource management for the webhook pod more information can be found here: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
-  # -- This is to setup the liveness probe for the webhook pod more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
-  livenessProbe:
-    httpGet:
-      path: /healthz
-      port: http
-
-  # -- This is to setup the readiness probe for the webhook pod more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
-  readinessProbe:
-    httpGet:
-      path: /healthz/readiness
-      port: http
