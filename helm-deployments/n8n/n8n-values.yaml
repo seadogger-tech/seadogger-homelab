@@ -33,5 +33,6 @@ main:
   extraEnvVars:
     N8N_SSL_CERT: "/etc/n8n/tls.crt"
     N8N_SSL_KEY: "/etc/n8n/tls.key"
+    N8N_PROTOCOL: "https"
 
 timezone: "America/New_York"
