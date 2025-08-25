@@ -30,13 +30,13 @@ main:
       subPath: tls.key
       readOnly: true
 
-  extraEnvVars:
-    N8N_SSL_CERT: "/etc/n8n/tls.crt"
-    N8N_SSL_KEY: "/etc/n8n/tls.key"
-    N8N_SECURE_COOKIE: "false"
-    NODE_ENV: "production"
-    N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS: "true"
-    GENERIC_TIMEZONE: "America/New_York"
-    N8N_DEFAULT_LOCALE: "en"
-    N8N_HIRING_BANNER_ENABLED: "false"
-    N8N_GRACEFUL_SHUTDOWN_TIMEOUT: "30"
+#  extraEnvVars:
+#    N8N_SSL_CERT: "/etc/n8n/tls.crt"
+#    N8N_SSL_KEY: "/etc/n8n/tls.key"
+#    N8N_SECURE_COOKIE: "false"
+#    NODE_ENV: "production"
+#    N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS: "true"
+#    GENERIC_TIMEZONE: "America/New_York"
+#    N8N_DEFAULT_LOCALE: "en"
+#    N8N_HIRING_BANNER_ENABLED: "false"
+#    N8N_GRACEFUL_SHUTDOWN_TIMEOUT: "30"
