@@ -1,42 +1,36 @@
-# --- Service stays internal; Traefik will front it via Ingress
 service:
   enabled: true
   type: ClusterIP
   port: 5678
   name: http
-  annotations: {}
-  labels: {}
 
 main:
-  # Persist ~/.n8n on your Ceph SC
   persistence:
     enabled: true
     storageClass: ceph-block-data
     size: 50Gi
 
-  # n8n listens in HTTP; Traefik does TLS
+  # App should speak plain HTTP behind Traefik
   extraEnvVars:
     N8N_PROTOCOL: "http"
     N8N_PORT: "5678"
 
-timezone: "America/New_York"
-
-# --- Traefik Ingress (TLS terminated by Traefik using your cert-manager secret)
+# Traefik ingress
 ingress:
   enabled: true
-  className: "traefik"   # k3s default IngressClass
+  className: "traefik"
   annotations:
     traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
-    traefik.ingress.kubernetes.io/router.tls: "true"
   hosts:
     - host: n8n.local
       paths:
         - path: /
           pathType: Prefix
   tls:
-    - secretName: n8n-local-tls   # cert-manager Secret in the n8n namespace
+    - secretName: n8n-local-tls
       hosts:
         - n8n.local
+
 
 # --- OPTIONAL: Built-in PostgreSQL (uncomment if you want chart-managed DB)
 # db:
