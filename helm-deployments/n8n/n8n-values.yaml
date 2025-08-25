@@ -2,6 +2,13 @@ service:
   enabled: true
   type: LoadBalancer
   port: 5678
+  name: https
+  annotations:
+    metallb.universe.tf/address-pool: default
+    metallb.universe.tf/allow-shared-ip: n8n
+  labels:
+    app: n8n
+  loadBalancerIP: 192.168.1.252
 
 main:
   persistence:
@@ -36,35 +43,47 @@ main:
     N8N_HIRING_BANNER_ENABLED: "false"
     N8N_GRACEFUL_SHUTDOWN_TIMEOUT: "30"
 
+  # -- This is to setup the liveness probe for the main pod more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
   livenessProbe:
-    tcpSocket:
-      port: 5678
-    initialDelaySeconds: 20
-    periodSeconds: 10
-    timeoutSeconds: 5
-    failureThreshold: 6
+    httpGet:
+      path: /healthz
+      port: https
 
+  # -- This is to setup the readiness probe for the main pod more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
   readinessProbe:
-    tcpSocket:
-      port: 5678
-    initialDelaySeconds: 5
-    periodSeconds: 10
-    timeoutSeconds: 5
-    failureThreshold: 6
+    httpGet:
+      path: /healthz/readiness
+      port: https
 
+# -- Worker node configurations
+worker:
+  # -- This is to setup the liveness probe for the worker pod more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
+  livenessProbe:
+    httpGet:
+      path: /healthz
+      port: https
 
-db:
-  type: postgresdb
+  # -- This is to setup the readiness probe for the worker pod more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
+  readinessProbe:
+    httpGet:
+      path: /healthz/readiness
+      port: https
 
-postgresql:
-  enabled: true
-  primary:
-    persistence:
-      enabled: true
-      storageClass: ceph-block-data
-      size: 50Gi
-      accessMode: ReadWriteOnce
-  auth:
-    username: n8n
-    password: n8npass
-    database: n8n
+# -- Webhook node configurations
+webhook:
+  # -- MCP webhook configuration. This is only used when the webhook mode is set to `queue` and the database type is set to `postgresdb`.
+  mcp:
+    # -- Whether to enable MCP webhook
+    enabled: false
+  # -- This block is for setting up the resource management for the webhook pod more information can be found here: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+  # -- This is to setup the liveness probe for the webhook pod more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
+  livenessProbe:
+    httpGet:
+      path: /healthz
+      port: https
+
+  # -- This is to setup the readiness probe for the webhook pod more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
+  readinessProbe:
+    httpGet:
+      path: /healthz/readiness
+      port: https
