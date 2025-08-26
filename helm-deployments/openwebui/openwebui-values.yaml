@@ -27,4 +27,4 @@ ingress:
 # Optional: make the app self-aware of its public URL
 extraEnvVars:
   - name: WEBUI_URL
-    value: "https://seadogger-homelab.local/openwebui"
+    value: "https://seadogger-homelab.local"
