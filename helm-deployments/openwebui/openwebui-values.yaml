@@ -8,15 +8,18 @@ persistence:
   enabled: true
   size: 250Gi
   storageClass: "ceph-block-data"
-  accessMode: ReadWriteMany
+  # RBD is RWO; if you truly need RWX, use a CephFS storageClass instead.
+  accessModes:
+    - ReadWriteOnce
 
-# Service configuration
 service:
   type: ClusterIP
   port: 80
-  targetPort: 80
+  # chart exposes containerPort as a named port "http" (8080)
+  # omit targetPort or set to "http" to follow the container's 8080
+  targetPort: http
+  containerPort: 8080
 
-# Traefik ingress
 ingress:
   enabled: true
   className: "traefik"

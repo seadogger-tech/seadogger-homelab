@@ -20,7 +20,7 @@
         source:
           repoURL: https://open-webui.github.io/helm-charts
           chart: open-webui
-          targetRevision: "*"
+          targetRevision: "7.6.0"
           helm:
             valueFiles:
               - https://raw.githubusercontent.com/seadogger/seadogger-homelab/master/helm-deployments/openwebui/openwebui-values.yaml
