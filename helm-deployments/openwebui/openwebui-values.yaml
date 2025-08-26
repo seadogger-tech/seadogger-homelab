@@ -12,10 +12,9 @@ persistence:
 
 # Service configuration
 service:
-  type: LoadBalancer
-  loadBalancerIP: 192.168.1.243
+  type: ClusterIP
   port: 80
-  targetPort: 80
+  targetPort: http  
 
 ingress:
   enabled: true
