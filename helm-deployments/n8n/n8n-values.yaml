@@ -22,14 +22,14 @@ ingress:
   annotations:
     traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
   hosts:
-    - host: n8n.local
+    - host: seadogger-homelab.local
       paths:
-        - path: /
+        - path: /n8n
           pathType: Prefix
   tls:
     - secretName: n8n-local-tls
       hosts:
-        - n8n.local
+        - seadogger-homelab.local
 
 
 # --- OPTIONAL: Built-in PostgreSQL (uncomment if you want chart-managed DB)

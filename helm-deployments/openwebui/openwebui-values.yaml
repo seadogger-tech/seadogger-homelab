@@ -12,7 +12,22 @@ persistence:
 
 # Service configuration
 service:
-  type: LoadBalancer
-  loadBalancerIP: 192.168.1.243
+  type: ClusterIP
   port: 80
   targetPort: 80
+
+# Traefik ingress
+ingress:
+  enabled: true
+  className: "traefik"
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
+  hosts:
+    - host: seadogger-homelab.local
+      paths:
+        - path: /openwebui
+          pathType: Prefix
+  tls:
+    - secretName: openwebui-local-tls
+      hosts:
+        - seadogger-homelab.local

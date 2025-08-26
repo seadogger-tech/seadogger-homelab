@@ -388,6 +388,7 @@
     - "ceph-dashboard-certificate.yml"
     - "argocd-certificate.yml"
     - "n8n-certificate.yml"
+    - "openwebui-certificate.yml"
   run_once: true
   delegate_to: yoda.local
   become: false
@@ -401,6 +402,7 @@
     - "ceph-dashboard-certificate.yml"
     - "argocd-certificate.yml"
     - "n8n-certificate.yml"
+    - "openwebui-certificate.yml"
   run_once: true
   delegate_to: yoda.local
   become: false
@@ -413,6 +415,7 @@
     - "ceph-dashboard-certificate.yml"
     - "argocd-certificate.yml"
     - "n8n-certificate.yml"
+    - "openwebui-certificate.yml"
   run_once: true
   delegate_to: yoda.local
   become: false
