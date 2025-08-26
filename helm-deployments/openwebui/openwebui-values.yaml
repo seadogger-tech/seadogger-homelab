@@ -29,3 +29,6 @@ ingress:
 extraEnvVars:
   - name: WEBUI_URL
     value: "https://openwebui.local"
+
+# Explicitly set the fullnameOverride to match our desired service name
+fullnameOverride: open-webui
