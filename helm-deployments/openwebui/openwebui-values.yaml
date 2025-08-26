@@ -7,24 +7,26 @@ pipelines:
 persistence:
   enabled: true
   size: 250Gi
-  storageClass: ceph-block-data
-  accessModes:
-    - ReadWriteOnce   # chart default & works with 1 replica
+  storageClass: "ceph-block-data"
+  accessMode: ReadWriteMany
 
+# Service configuration
 service:
-  type: ClusterIP
+  type: LoadBalancer
+  loadBalancerIP: 192.168.1.243
   port: 80
+  targetPort: 80
 
 ingress:
   enabled: true
   class: traefik
   annotations:
     traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
-  host: seadogger-homelab.local
+  host: openwebui.local
   tls: true
   existingSecret: openwebui-local-tls
 
 # Optional: make the app self-aware of its public URL
 extraEnvVars:
   - name: WEBUI_URL
-    value: "https://seadogger-homelab.local"
+    value: "https://openwebui.local"
