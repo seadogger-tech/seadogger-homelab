@@ -7,30 +7,24 @@ pipelines:
 persistence:
   enabled: true
   size: 250Gi
-  storageClass: "ceph-block-data"
-  # RBD is RWO; if you truly need RWX, use a CephFS storageClass instead.
+  storageClass: ceph-block-data
   accessModes:
-    - ReadWriteOnce
+    - ReadWriteOnce   # chart default & works with 1 replica
 
 service:
   type: ClusterIP
   port: 80
-  # chart exposes containerPort as a named port "http" (8080)
-  # omit targetPort or set to "http" to follow the container's 8080
-  targetPort: http
-  containerPort: 8080
 
 ingress:
   enabled: true
-  className: "traefik"
+  class: traefik
   annotations:
     traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
-  hosts:
-    - host: seadogger-homelab.local
-      paths:
-        - path: /openwebui
-          pathType: Prefix
-  tls:
-    - secretName: openwebui-local-tls
-      hosts:
-        - seadogger-homelab.local
+  host: seadogger-homelab.local
+  tls: true
+  existingSecret: openwebui-local-tls
+
+# Optional: make the app self-aware of its public URL
+extraEnvVars:
+  - name: WEBUI_URL
+    value: "https://seadogger-homelab.local/openwebui"
