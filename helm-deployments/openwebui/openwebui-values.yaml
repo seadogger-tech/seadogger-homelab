@@ -18,10 +18,12 @@ service:
 
 ingress:
   enabled: true
-  class: traefik-openwebui
+  className: traefik-openwebui
   annotations:
     traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
-    traefik.ingress.kubernetes.io/router.service: traefik-openwebui@kubernetes
+    traefik.ingress.kubernetes.io/router.middlewares: ""
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    traefik.ingress.kubernetes.io/service.serversTransport: ""
   host: openwebui.local
   tls: true
   existingSecret: openwebui-local-tls
