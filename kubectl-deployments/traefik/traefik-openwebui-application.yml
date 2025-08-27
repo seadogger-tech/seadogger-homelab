@@ -10,7 +10,7 @@ spec:
     targetRevision: HEAD
     path: kubectl-deployments/traefik
     directory:
-      include: "traefik-openwebui-service.yml|openwebui-ingressroute.yml|openwebui-middleware.yml"
+      include: "traefik-openwebui-service.yml"
   destination:
     server: https://kubernetes.default.svc
     namespace: kube-system
