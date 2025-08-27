@@ -19,7 +19,9 @@ service:
 ingress:
   enabled: true
   className: traefik-openwebui
-  annotations: {}
+  annotations:
+    traefik.ingress.kubernetes.io/service.name: traefik-openwebui
+    traefik.ingress.kubernetes.io/service.namespace: kube-system
   host: openwebui.local
   tls: true
   existingSecret: openwebui-local-tls
