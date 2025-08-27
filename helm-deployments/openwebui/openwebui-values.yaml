@@ -18,7 +18,7 @@ service:
 
 ingress:
   enabled: true
-  class: traefik
+  class: traefik-openwebui
   annotations:
     traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
     traefik.ingress.kubernetes.io/router.service: traefik-openwebui@kubernetes
