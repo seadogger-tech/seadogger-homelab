@@ -17,7 +17,12 @@ service:
   targetPort: http  
 
 ingress:
-  enabled: false
+  enabled: true
+  className: traefik-openwebui
+  annotations: {}
+  host: openwebui.local
+  tls: true
+  existingSecret: openwebui-local-tls
 
 # Optional: make the app self-aware of its public URL
 extraEnvVars:
