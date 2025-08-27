@@ -17,17 +17,7 @@ service:
   targetPort: http  
 
 ingress:
-  enabled: true
-  className: traefik-openwebui
-  annotations:
-    traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
-    traefik.ingress.kubernetes.io/router.tls: "true"
-    traefik.ingress.kubernetes.io/service.loadbalancer.server.port: "80"
-    traefik.ingress.kubernetes.io/service.loadbalancer.serverstransport: "@kubernetescrd"
-    traefik.ingress.kubernetes.io/service.loadbalancer.class: traefik-openwebui
-  host: openwebui.local
-  tls: true
-  existingSecret: openwebui-local-tls
+  enabled: false
 
 # Optional: make the app self-aware of its public URL
 extraEnvVars:
