@@ -17,7 +17,7 @@ main:
     N8N_PATH: "/n8n"                          # base path for n8n
     N8N_EDITOR_BASE_URL: "https://n8n.local/n8n"  # external URL with base path
     NODE_ENV: "production"                     # ensure production mode
-    N8N_COMMAND: "start"                      # command to run n8n
+    DB_SQLITE_POOL_SIZE: "10"                 # fix deprecation warning
 
 ingress:
   enabled: false
