@@ -7,7 +7,7 @@ metadata:
 spec:
   entryPoints: ["web"]
   routes:
-    - match: Host(`n8n.local`)
+    - match: Host(`n8n.local`) && PathPrefix(`/n8n`)
       kind: Rule
       middlewares:
         - name: redirect-https
@@ -26,7 +26,7 @@ metadata:
 spec:
   entryPoints: ["websecure"]
   routes:
-    - match: Host(`n8n.local`)
+    - match: Host(`n8n.local`) && PathPrefix(`/n8n`)
       kind: Rule
       middlewares:
         - name: n8n-security-headers
