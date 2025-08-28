@@ -1,7 +1,7 @@
 service:
   enabled: true
   type: ClusterIP
-  port: 80
+  port: 5678
   name: http
 
 main:
