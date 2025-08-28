@@ -12,7 +12,6 @@ main:
 
   # n8n served from /n8n (NO Traefik rewriting)
   extraEnvVars:
-    N8N_PATH: "/n8n/"                          # base path (note the trailing slash)
     N8N_PROTOCOL: "http"                       # in-cluster protocol
     N8N_PORT: "5678"
 
