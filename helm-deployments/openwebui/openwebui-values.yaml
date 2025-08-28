@@ -17,14 +17,7 @@ service:
   targetPort: http  
 
 ingress:
-  enabled: true
-  className: traefik-openwebui
-  annotations:
-    traefik.ingress.kubernetes.io/service.name: traefik-openwebui
-    traefik.ingress.kubernetes.io/service.namespace: kube-system
-  host: openwebui.local
-  tls: true
-  existingSecret: openwebui-local-tls
+  enabled: false
 
 # Optional: make the app self-aware of its public URL
 extraEnvVars:

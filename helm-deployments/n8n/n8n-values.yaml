@@ -17,22 +17,7 @@ main:
     N8N_PORT: "5678"
 
 ingress:
-  enabled: true
-  className: "traefik"
-  annotations:
-    traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
-    traefik.ingress.kubernetes.io/router.tls: "true"
-    traefik.ingress.kubernetes.io/service.serversTransport: ""
-  hosts:
-    - host: n8n.local
-      paths:
-        - path: /
-          pathType: Prefix
-  tls:
-    - secretName: n8n-local-tls
-      hosts:
-        - n8n.local
-
+  enabled: false
 
 # --- OPTIONAL: Built-in PostgreSQL (uncomment if you want chart-managed DB)
 # db:

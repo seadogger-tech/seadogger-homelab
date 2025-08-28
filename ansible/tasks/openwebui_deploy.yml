@@ -4,33 +4,6 @@
   ansible.builtin.set_fact:
     KUBECONFIG: /etc/rancher/k3s/k3s.yaml
 
-# Step 1.5: Create Traefik OpenWebUI Service ArgoCD Application
-- name: Create Traefik OpenWebUI Service ArgoCD Application
-  ansible.builtin.k8s:
-    kubeconfig: "{{ KUBECONFIG }}"
-    state: present
-    definition:
-      apiVersion: argoproj.io/v1alpha1
-      kind: Application
-      metadata:
-        name: traefik-openwebui-service
-        namespace: argocd
-      spec:
-        project: default
-        source:
-          repoURL: https://github.com/seadogger/seadogger-homelab.git
-          targetRevision: HEAD
-          path: kubectl-deployments/traefik
-          directory:
-            include: traefik-openwebui-application.yml
-        destination:
-          server: https://kubernetes.default.svc
-          namespace: kube-system
-        syncPolicy:
-          automated:
-            prune: true
-            selfHeal: true
-
 # Step 2: Create ArgoCD OpenWebUI Application
 - name: Create OpenWebUI ArgoCD Application
   ansible.builtin.k8s:
@@ -72,3 +45,30 @@
   delay: 10
   until: openwebui_pods.resources | selectattr('status.phase', 'equalto', 'Running') | list | length > 0
   changed_when: false
+
+# Step 1.5: Create Traefik OpenWebUI Service ArgoCD Application
+- name: Create Traefik OpenWebUI Ingress
+  ansible.builtin.k8s:
+    kubeconfig: "{{ KUBECONFIG }}"
+    state: present
+    definition:
+      apiVersion: argoproj.io/v1alpha1
+      kind: Application
+      metadata:
+        name: traefik-openwebui-ingress
+        namespace: argocd
+      spec:
+        project: default
+        source:
+          repoURL: https://github.com/seadogger/seadogger-homelab.git
+          targetRevision: HEAD
+          path: kubectl-deployments/traefik
+          directory:
+            include: traefik-openwebui-ingress.yml
+        destination:
+          server: https://kubernetes.default.svc
+          namespace: kube-system
+        syncPolicy:
+          automated:
+            prune: true
+            selfHeal: true

@@ -1,0 +1,38 @@
+# HTTP: catch and redirect to HTTPS
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: openwebui-http
+  namespace: openwebui
+spec:
+  entryPoints: ["web"]
+  routes:
+    - match: Host(`openwebui.local`)
+      kind: Rule
+      middlewares:
+        - name: redirect-https
+          namespace: kube-system
+      services:
+        - name: openwebui
+          port: 80
+
+---
+# HTTPS: real route with TLS + headers middleware
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: openwebui-https
+  namespace: openwebui
+spec:
+  entryPoints: ["websecure"]
+  routes:
+    - match: Host(`openwebui.local`)
+      kind: Rule
+      middlewares:
+        - name: security-headers
+          namespace: kube-system
+      services:
+        - name: openwebui
+          port: 80
+  tls:
+    secretName: openwebui-local-tls   # secret lives in namespace openwebui
