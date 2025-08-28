@@ -29,7 +29,7 @@ spec:
     - match: Host(`n8n.local`)
       kind: Rule
       middlewares:
-        - name: n8n-security-headers
+        - name: security-headers
           namespace: kube-system
       services:
         - name: n8n
