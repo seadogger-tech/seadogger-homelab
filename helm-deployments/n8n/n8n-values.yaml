@@ -13,9 +13,11 @@ main:
   # n8n served from /n8n (NO Traefik rewriting)
   extraEnvVars:
     N8N_PROTOCOL: "http"                       # in-cluster protocol
-    N8N_PORT: "5678"
+    N8N_PORT: "5678"                          # port for n8n to listen on
     N8N_PATH: "/n8n"                          # base path for n8n
     N8N_EDITOR_BASE_URL: "https://n8n.local/n8n"  # external URL with base path
+    NODE_ENV: "production"                     # ensure production mode
+    N8N_COMMAND: "start"                      # command to run n8n
 
 ingress:
   enabled: false
