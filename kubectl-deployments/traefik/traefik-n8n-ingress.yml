@@ -1,4 +1,4 @@
-# HTTP: catch and redirect to HTTPS (uses kube-system middleware)
+# HTTP: catch and redirect to HTTPS
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
@@ -9,15 +9,12 @@ spec:
   routes:
     - match: Host(`n8n.local`)
       kind: Rule
-      middlewares:
-        - name: redirect-https
-          namespace: kube-system
       services:
         - name: n8n
           port: 5678
 
 ---
-# HTTPS: real route with TLS + headers middleware
+# HTTPS: real route with TLS
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
@@ -28,38 +25,8 @@ spec:
   routes:
     - match: Host(`n8n.local`)
       kind: Rule
-      middlewares:
-        - name: security-headers
-          namespace: kube-system
       services:
         - name: n8n
           port: 5678
   tls:
-    secretName: n8n-local-tls   # secret lives in namespace n8n
-
----
-apiVersion: traefik.io/v1alpha1
-kind: Middleware
-metadata:
-  name: redirect-https
-  namespace: n8n
-spec:
-  redirectScheme:
-    scheme: https
-    permanent: true
-
----
-apiVersion: traefik.io/v1alpha1
-kind: Middleware
-metadata:
-  name: security-headers
-  namespace: n8n
-spec:
-  headers:
-    stsSeconds: 31536000
-    stsIncludeSubdomains: true
-    stsPreload: true
-    frameDeny: true
-    contentTypeNosniff: true
-    browserXssFilter: true
-    forceSTSHeader: true
+    secretName: n8n-local-tls
