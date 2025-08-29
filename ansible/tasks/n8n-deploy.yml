@@ -48,27 +48,14 @@
   tags: n8n
 
 
-# Step 1.5: Create Traefik OpenWebUI Service ArgoCD Application
-- name: Create Traefik n8n Ingress
-  ansible.builtin.k8s:
+- name: Download n8n IngressRoutes manifest from GitHub
+  ansible.builtin.get_url:
+    url: "https://raw.githubusercontent.com/seadogger/seadogger-homelab/master/kubectl-deployments/traefik/traefik-n8n-ingress.yml"
+    dest: "/tmp/traefik-n8n-ingress.yml"
+    mode: "0644"
+
+- name: Apply n8n IngressRoutes (no Helm/Argo)
+  kubernetes.core.k8s:
     kubeconfig: "{{ KUBECONFIG }}"
     state: present
-    definition:
-      apiVersion: argoproj.io/v1alpha1
-      kind: Application
-      metadata:
-        name: traefik-n8n-ingress
-        namespace: argocd
-      spec:
-        project: default
-        source:
-          helm:
-            valueFiles:
-              - https://raw.githubusercontent.com/seadogger/seadogger-homelab/master/kubectl-deployments/traefik/traefik-n8n-ingress.yml          
-        destination:
-          server: https://kubernetes.default.svc
-          namespace: n8n
-        syncPolicy:
-          automated:
-            prune: true
-            selfHeal: true
+    src: "/tmp/traefik-n8n-ingress.yml"

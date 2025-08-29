@@ -46,27 +46,15 @@
   until: openwebui_pods.resources | selectattr('status.phase', 'equalto', 'Running') | list | length > 0
   changed_when: false
 
-# Step 1.5: Create Traefik OpenWebUI Service ArgoCD Application
-- name: Create Traefik OpenWebUI Ingress
-  ansible.builtin.k8s:
+- name: Download OpenWebUI IngressRoutes manifest from GitHub
+  ansible.builtin.get_url:
+    url: "https://raw.githubusercontent.com/seadogger/seadogger-homelab/master/kubectl-deployments/traefik/traefik-openwebui-ingress.yml"
+    dest: "/tmp/traefik-openwebui-ingress.yml"
+    mode: "0644"
+
+- name: Apply OpenWebUI IngressRoutes (no Helm/Argo)
+  kubernetes.core.k8s:
     kubeconfig: "{{ KUBECONFIG }}"
     state: present
-    definition:
-      apiVersion: argoproj.io/v1alpha1
-      kind: Application
-      metadata:
-        name: traefik-openwebui-ingress
-        namespace: argocd
-      spec:
-        project: default
-        source:
-          helm:
-            valueFiles:
-              - https://raw.githubusercontent.com/seadogger/seadogger-homelab/master/kubectl-deployments/traefik/traefik-openwebui-ingress.yml    
-        destination:
-          server: https://kubernetes.default.svc
-          namespace: kube-system
-        syncPolicy:
-          automated:
-            prune: true
-            selfHeal: true
+    src: "/tmp/traefik-openwebui-ingress.yml"
+
