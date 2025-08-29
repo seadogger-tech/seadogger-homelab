@@ -14,7 +14,7 @@ spec:
           namespace: kube-system
       services:
         - name: openwebui
-          port: 80
+          port: 8080
 
 ---
 # HTTPS: real route with TLS + headers middleware
@@ -33,7 +33,7 @@ spec:
           namespace: kube-system
       services:
         - name: openwebui
-          port: 80
+          port: 8080
   tls:
     secretName: openwebui-local-tls   # secret lives in namespace openwebui
 
