@@ -19,10 +19,3 @@ service:
 ingress:
   enabled: false
 
-# Optional: make the app self-aware of its public URL
-extraEnvVars:
-  - name: WEBUI_URL
-    value: "https://openwebui.local"
-
-# Explicitly set the fullnameOverride to match our desired service name
-fullnameOverride: open-webui
