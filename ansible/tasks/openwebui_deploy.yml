@@ -60,11 +60,9 @@
       spec:
         project: default
         source:
-          repoURL: https://github.com/seadogger/seadogger-homelab.git
-          targetRevision: HEAD
-          path: kubectl-deployments/traefik
-          directory:
-            include: traefik-openwebui-ingress.yml
+          helm:
+            valueFiles:
+              - https://raw.githubusercontent.com/seadogger/seadogger-homelab/master/kubectl-deployments/traefik/traefik-openwebui-ingress.yml    
         destination:
           server: https://kubernetes.default.svc
           namespace: kube-system

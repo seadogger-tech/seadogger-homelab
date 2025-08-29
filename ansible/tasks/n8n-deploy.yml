@@ -62,11 +62,9 @@
       spec:
         project: default
         source:
-          repoURL: https://github.com/seadogger/seadogger-homelab.git
-          targetRevision: HEAD
-          path: kubectl-deployments/traefik
-          directory:
-            include: traefik-n8n-ingress.yml
+          helm:
+            valueFiles:
+              - https://raw.githubusercontent.com/seadogger/seadogger-homelab/master/kubectl-deployments/traefik/traefik-n8n-ingress.yml          
         destination:
           server: https://kubernetes.default.svc
           namespace: n8n
