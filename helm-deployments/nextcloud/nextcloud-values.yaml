@@ -446,7 +446,7 @@ mariadb:
       enabled: true
       # Use an existing Persistent Volume Claim (must be created ahead of time)
       existingClaim: ""
-      storageClass: "eph-block-data"
+      storageClass: "ceph-block-data"
       accessMode: ReadWriteOnce
       size: 20Gi
 
@@ -903,4 +903,3 @@ rbac:
 
 ## @param securityContext for nextcloud pod @deprecated Use `nextcloud.podSecurityContext` instead
 securityContext: {}
-
