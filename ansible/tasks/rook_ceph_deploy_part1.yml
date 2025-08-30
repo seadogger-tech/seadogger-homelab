@@ -185,3 +185,15 @@
   until: sc_ec_status.resources | length > 0
   retries: 10
   delay: 5
+
+- name: Download CEPH IngressRoutes manifest from GitHub
+  ansible.builtin.get_url:
+    url: "https://raw.githubusercontent.com/seadogger/seadogger-homelab/master/kubectl-deployments/traefik/traefik-ceph-dashboard-ingress.yml"
+    dest: "/tmp/traefik-ceph-dashboard-ingress.yml"
+    mode: "0644"
+
+- name: Apply CEPH IngressRoutes (no Helm/Argo)
+  kubernetes.core.k8s:
+    kubeconfig: "{{ KUBECONFIG }}"
+    state: present
+    src: "/tmp/traefik-ceph-dashboard-ingress.yml"  

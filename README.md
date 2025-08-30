@@ -278,6 +278,60 @@ The fix involved removing the incorrect `valueFiles` override from the `metallb`
 - **Status:** Known Limitation
 - **Date:** 2025-08-11
 
+### ADR-008: Ceph Dashboard Ingress Configuration
+
+- **Status:** Implemented & Verified
+- **Date:** 2025-08-29
+
+#### Context
+The Ceph dashboard was initially exposed via a LoadBalancer service with SSL disabled, which presented several security and accessibility challenges:
+- Direct LoadBalancer exposure increased the attack surface
+- Lack of SSL encryption for dashboard access
+- Inconsistent with other services in the cluster that use Traefik Ingress
+
+#### Decision
+Migrate the Ceph dashboard to use Traefik Ingress with the following key changes:
+1. Create a Traefik IngressRoute with both HTTP and HTTPS routes
+2. Utilize the existing cert-manager certificate for TLS
+3. Enable SSL in the Ceph dashboard configuration
+4. Set the dashboard port to 7000
+5. Configure a URL prefix for the dashboard
+
+Implementation details:
+```yaml
+# HTTP route for redirection
+IngressRoute:
+  entryPoints: ["web"]
+  routes:
+    - match: Host(`ceph.local`)
+      services:
+        - name: rook-ceph-mgr-dashboard
+          port: 7000
+
+# HTTPS route with TLS
+IngressRoute:
+  entryPoints: ["websecure"]
+  routes:
+    - match: Host(`ceph.local`)
+      services:
+        - name: rook-ceph-mgr-dashboard
+          port: 7000
+  tls:
+    secretName: ceph-local-tls
+```
+
+#### Consequences
+- **Positive:**
+  - Improved security through Traefik Ingress
+  - Consistent with other services in the cluster
+  - SSL encryption enabled
+  - Reuses existing TLS certificate
+- **Negative:**
+  - Slight increase in complexity compared to direct LoadBalancer
+- **Next Steps:**
+  - Monitor dashboard accessibility
+  - Ensure proper authentication mechanisms are in place
+
 ### ADR-004: Prometheus Stack Network Policy Configuration
 
 - **Status:** Implemented & Verified

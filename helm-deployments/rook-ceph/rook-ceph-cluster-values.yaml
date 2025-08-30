@@ -25,6 +25,8 @@ cephClusterSpec:
   dashboard:
     enabled: true
     ssl: true
+    port: 7000
+    urlPrefix: /
     security:
       adminPasswordSecretName: rook-ceph-dashboard-password
 
