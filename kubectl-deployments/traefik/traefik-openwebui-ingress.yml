@@ -7,7 +7,7 @@ metadata:
 spec:
   entryPoints: ["web"]
   routes:
-    - match: Host(`openwebui.local`)
+    - match: Host(`openwebui.seadogger-homelab`)
       kind: Rule
       services:
         - name: open-webui
@@ -23,7 +23,7 @@ metadata:
 spec:
   entryPoints: ["websecure"]
   routes:
-    - match: Host(`openwebui.local`)
+    - match: Host(`openwebui.seadogger-homelab`)
       kind: Rule
       services:
         - name: open-webui
