@@ -16,7 +16,7 @@ spec:
     encoding: PKCS1
     size: 2048
   dnsNames:
-    - openwebui.local
+    - openwebui.seadogger-homelab
   issuerRef:
     name: internal-local-issuer
     kind: ClusterIssuer

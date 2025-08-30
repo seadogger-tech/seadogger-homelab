@@ -121,3 +121,7 @@
     - name: Deploy PlexMediaServer
       import_tasks: tasks/plexmediaserver_deploy.yml
       when: enable_plex | default(true)
+
+    - name: Deploy Nextcloud
+      import_tasks: tasks/nextcloud_deploy.yml
+      when: enable_nextcloud | default(true)

@@ -16,7 +16,7 @@ spec:
     encoding: PKCS1
     size: 2048
   dnsNames:
-    - ceph.local
+    - ceph.seadogger-homelab
   issuerRef:
     name: internal-local-issuer
     kind: ClusterIssuer

@@ -412,7 +412,6 @@ externalDatabase:
     # hostKey: db-hostname-or-ip
     # databaseKey: db-name
 
-
 ##
 ## MariaDB chart configuration
 ## ref: https://github.com/bitnami/charts/tree/main/bitnami/mariadb
@@ -421,7 +420,7 @@ mariadb:
   ## Whether to deploy a mariadb server from the bitnami mariab db helm chart
   # to satisfy the applications database requirements. if you want to deploy this bitnami mariadb, set this and externalDatabase to true
   # To use an ALREADY DEPLOYED mariadb database, set this to false and configure the externalDatabase parameters
-  enabled: true
+  enabled: false
 
   # see: https://github.com/bitnami/charts/tree/main/bitnami/mariadb#global-parameters
   global:
@@ -443,12 +442,12 @@ mariadb:
   ##
   primary:
     persistence:
-      enabled: true
+      enabled: false
       # Use an existing Persistent Volume Claim (must be created ahead of time)
       existingClaim: ""
-      storageClass: "eph-block-data"
+      storageClass: ""
       accessMode: ReadWriteOnce
-      size: 20Gi
+      size: 8Gi
 
 ##
 ## PostgreSQL chart configuration
@@ -603,7 +602,7 @@ service:
 ##
 persistence:
   # Nextcloud Data (/var/www/html)
-  enabled: true
+  enabled: false
   annotations: {}
   ## nextcloud data Persistent Volume Storage Class
   ## If defined, storageClassName: <storageClass>
@@ -618,9 +617,9 @@ persistence:
   ## Requires persistence.enabled: true
   ## If defined, PVC must be created manually before volume will be bound
   # existingClaim:
-  storageClass: ceph-block-data
+
   accessMode: ReadWriteOnce
-  size: 100Gi
+  size: 8Gi
 
   ## Use an additional pvc for the data directory rather than a subpath of the default PVC
   ## Useful to store data on a different storageClass (e.g. on slower disks)

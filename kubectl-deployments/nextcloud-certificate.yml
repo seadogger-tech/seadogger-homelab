@@ -1,10 +1,10 @@
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
-  name: n8n-certificate
-  namespace: n8n
+  name: nextcloud-certificate
+  namespace: nextcloud
 spec:
-  secretName: n8n-local-tls
+  secretName: nextcloud-local-tls
   duration: 2160h # 90 days
   renewBefore: 360h # 15 days
   subject:
@@ -16,7 +16,7 @@ spec:
     encoding: PKCS1
     size: 2048
   dnsNames:
-    - n8n.seadogger-homelab
+    - nextcloud.seadogger-homelab
   issuerRef:
     name: internal-local-issuer
     kind: ClusterIssuer
