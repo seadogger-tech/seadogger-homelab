@@ -73,7 +73,7 @@ phpClientHttpsFix:
   protocol: https
 
 nextcloud:
-  host: nextcloud.kube.home
+  host: nextcloud.seadogger-homelab
   username: admin
   password: changeme
   ## Use an existing secret
@@ -93,7 +93,8 @@ nextcloud:
   persistence:
     subPath:
   # if set, we'll template this list to the NEXTCLOUD_TRUSTED_DOMAINS env var
-  trustedDomains: []
+  trustedDomains:
+    - nextcloud.seadogger-homelab
   ## SMTP configuration
   mail:
     enabled: false
@@ -127,7 +128,7 @@ nextcloud:
       # default port that can be changed based on your object store, e.g. for minio, you can use 9000
       port: "443"
       # this is the default in the nextcloud docs
-      region: "eu-west-1"
+      region: "us-east-1"
       # required if using s3, the name of the bucket you'd like to use
       bucket: ""
       # object prefix in bucket
@@ -448,7 +449,7 @@ mariadb:
       existingClaim: ""
       storageClass: "ceph-block-data"
       accessMode: ReadWriteOnce
-      size: 20Gi
+      size: 50Gi
 
 ##
 ## PostgreSQL chart configuration
@@ -618,9 +619,9 @@ persistence:
   ## Requires persistence.enabled: true
   ## If defined, PVC must be created manually before volume will be bound
   # existingClaim:
-  storageClass: ceph-block-data
-  accessMode: ReadWriteOnce
-  size: 100Gi
+  storageClass: ceph-fs-data-ec
+  accessMode: ReadWriteMany
+  size: 6000Gi
 
   ## Use an additional pvc for the data directory rather than a subpath of the default PVC
   ## Useful to store data on a different storageClass (e.g. on slower disks)

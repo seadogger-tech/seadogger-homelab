@@ -48,7 +48,7 @@
 - name: Download Nextcloud IngressRoutes manifest from GitHub
   ansible.builtin.get_url:
     url: "https://raw.githubusercontent.com/seadogger/seadogger-homelab/master/kubectl-deployments/traefik/traefik-nextcloud-ingress.yml"
-    dest: "/tmp/traefik-openwenextcloudbui-ingress.yml"
+    dest: "/tmp/traefik-nextcloud-ingress.yml"
     mode: "0644"
 
 - name: Apply Nextcloud IngressRoutes (no Helm/Argo)
