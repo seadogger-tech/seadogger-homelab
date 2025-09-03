@@ -3,7 +3,7 @@ crds:
 
 image:
   repository: rook/ceph
-  tag: v1.17.6
+  tag: v1.18.1
   pullPolicy: IfNotPresent
 
 resources:

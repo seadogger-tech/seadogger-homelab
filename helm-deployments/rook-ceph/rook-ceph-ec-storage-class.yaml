@@ -1,13 +1,14 @@
+# rook-ceph-ec-storage-class.yaml
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
 metadata:
   name: ceph-fs-data-ec
 provisioner: rook-ceph.cephfs.csi.ceph.com
 parameters:
-  # Match your cluster + FS + pool names
   clusterID: rook-ceph
   fsName: ceph-fs
   pool: ceph-fs-data-ec
+  mounter: kernel                       # add
   csi.storage.k8s.io/provisioner-secret-name: rook-csi-cephfs-provisioner
   csi.storage.k8s.io/provisioner-secret-namespace: rook-ceph
   csi.storage.k8s.io/controller-expand-secret-name: rook-csi-cephfs-provisioner
@@ -17,4 +18,5 @@ parameters:
 reclaimPolicy: Delete
 allowVolumeExpansion: true
 mountOptions:
-  - debug
+  - mds_namespace=ceph-fs               # add
+  # - debug                              # remove unless you actively need it
