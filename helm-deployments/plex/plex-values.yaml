@@ -51,9 +51,8 @@ pms:
   # with the correct secretKeyRef configuration
   # Clashes with providing PLEX_CLAIM via `extraEnv` so only provide one or the other!
   claimSecret:
-    name: ""
-    key: ""
-
+    name: "plex-claim-secret"
+    key: "claim"
   # Enabling this will add nvidia.com/gpu: 1 to limits, and will set
   # environment for the nvidia operator
   gpu:
@@ -256,12 +255,12 @@ priorityClassName: ""
 # -- Common Labels for all resources created by this chart.
 commonLabels: {}
 
-extraEnv: {}
+extraEnv: {} 
 # extraEnv:
 # This claim is optional, and is only used for the first startup of PMS
 # The claim is obtained from https://www.plex.tv/claim/ is is only valid for a few minutes
-#   PLEX_CLAIM: "claim"
-#   HOSTNAME: "PlexServer"
+#  PLEX_CLAIM: "claim"
+#  HOSTNAME: "SeadoggerPlexServer"
 #   TZ: "Etc/UTC"
 #   PLEX_UPDATE_CHANNEL: "5"
 #   PLEX_UID: "uid of plex user"

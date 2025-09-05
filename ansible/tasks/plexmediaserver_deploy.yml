@@ -5,19 +5,19 @@
     KUBECONFIG: /etc/rancher/k3s/k3s.yaml
 
 # Step 2: Create Plex claim secret
-#- name: Create Plex claim secret
-#  ansible.builtin.k8s:
-#    kubeconfig: "{{ KUBECONFIG }}"
-#    state: present
-#    definition:
-#      apiVersion: v1
-#      kind: Secret
-#      metadata:
-#        name: plex-claim-secret
-#        namespace: plex
-#      type: Opaque
-#      stringData:
-#        claim: "{{ plex_access_key }}"
+- name: Create Plex claim secret
+  ansible.builtin.k8s:
+    kubeconfig: "{{ KUBECONFIG }}"
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: plex-claim-secret
+        namespace: plex
+      type: Opaque
+      stringData:
+        claim: "{{ plex_access_key }}"
 
 # Step 3: Create ArgoCD Plex Application
 - name: Create Plex ArgoCD Application
