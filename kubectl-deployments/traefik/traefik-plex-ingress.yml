@@ -10,7 +10,7 @@ spec:
     - match: Host(`plex.seadogger-homelab`)
       kind: Rule
       services:
-        - name: plex
+        - name: plex-plex-media-server
           port: 32400
 
 ---
@@ -26,7 +26,7 @@ spec:
     - match: Host(`plex.seadogger-homelab`)
       kind: Rule
       services:
-        - name: plex
+        - name: plex-plex-media-server
           port: 32400
   tls:
     secretName: plex-local-tls
