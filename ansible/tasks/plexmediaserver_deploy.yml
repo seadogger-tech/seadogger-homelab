@@ -5,19 +5,19 @@
     KUBECONFIG: /etc/rancher/k3s/k3s.yaml
 
 # Step 2: Create Plex claim secret
-- name: Create Plex claim secret
-  ansible.builtin.k8s:
-    kubeconfig: "{{ KUBECONFIG }}"
-    state: present
-    definition:
-      apiVersion: v1
-      kind: Secret
-      metadata:
-        name: plex-claim-secret
-        namespace: plex
-      type: Opaque
-      stringData:
-        claim: "{{ plex_access_key }}"
+#- name: Create Plex claim secret
+#  ansible.builtin.k8s:
+#    kubeconfig: "{{ KUBECONFIG }}"
+#    state: present
+#    definition:
+#      apiVersion: v1
+#      kind: Secret
+#      metadata:
+#        name: plex-claim-secret
+#        namespace: plex
+#      type: Opaque
+#      stringData:
+#        claim: "{{ plex_access_key }}"
 
 # Step 3: Create ArgoCD Plex Application
 - name: Create Plex ArgoCD Application
@@ -63,3 +63,15 @@
          plex_status.resources[0].status.health.status == "Healthy"
   retries: 30
   delay: 10
+
+- name: Download plex IngressRoutes manifest from GitHub
+  ansible.builtin.get_url:
+    url: "https://raw.githubusercontent.com/seadogger/seadogger-homelab/master/kubectl-deployments/traefik/traefik-plex-ingress.yml"
+    dest: "/tmp/traefik-plex-ingress.yml"
+    mode: "0644"
+
+- name: Apply nplex IngressRoutes (no Helm/Argo)
+  kubernetes.core.k8s:
+    kubeconfig: "{{ KUBECONFIG }}"
+    state: present
+    src: "/tmp/traefik-plex-ingress.yml"

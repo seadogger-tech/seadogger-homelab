@@ -390,6 +390,7 @@
     - "n8n-certificate.yml"
     - "openwebui-certificate.yml"
     - "nextcloud-certificate.yml"
+    - "plexmediaserver-certificate.yml"
   run_once: true
   delegate_to: yoda.local
   become: false
@@ -405,6 +406,7 @@
     - "n8n-certificate.yml"
     - "openwebui-certificate.yml"
     - "nextcloud-certificate.yml"
+    - "plexmediaserver-certificate.yml"
   run_once: true
   delegate_to: yoda.local
   become: false
@@ -419,6 +421,7 @@
     - "n8n-certificate.yml"
     - "openwebui-certificate.yml"
     - "nextcloud-certificate.yml"
+    - "plexmediaserver-certificate.yml"
   run_once: true
   delegate_to: yoda.local
   become: false
