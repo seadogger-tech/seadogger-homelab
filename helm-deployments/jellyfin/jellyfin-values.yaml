@@ -1,0 +1,47 @@
+# jellyfin-values.yaml
+image:
+  repository: jellyfin/jellyfin
+  pullPolicy: IfNotPresent
+  # tag: <optional, let chart pin appVersion>
+
+env:
+  TZ: America/New_York
+
+service:
+  main:
+    ports:
+      http:
+        port: 8096
+
+ingress:
+  main:
+    enabled: false  # we'll use Traefik IngressRoute CRDs
+
+persistence:
+  # Jellyfin configuration (small, keeps library, users, plugins)
+  config:
+    enabled: true
+    size: 5Gi
+    # storageClass: rook-ceph-cephfs   # <--- set if you want a specific SC
+    accessMode: ReadWriteOnce
+    mountPath: /config
+
+  # Cache does NOT include transcode temp
+  cache:
+    enabled: true
+    size: 5Gi
+    # storageClass: rook-ceph-cephfs
+    accessMode: ReadWriteOnce
+    mountPath: /cache
+
+  # Media library - mount your existing CephFS PVC from earlier
+  media:
+    enabled: false
+    existingClaim: test-cephfs-ec-claim   # from your previous setup
+    mountPath: /media
+
+# Optional: run as non-root UID/GID (tune to your NAS perms if needed)
+# podSecurityContext:
+#   runAsUser: 568
+#   runAsGroup: 568
+#   fsGroup: 568
