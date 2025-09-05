@@ -391,6 +391,7 @@
     - "openwebui-certificate.yml"
     - "nextcloud-certificate.yml"
     - "plexmediaserver-certificate.yml"
+    - "jellyfin-certificate.yml"
   run_once: true
   delegate_to: yoda.local
   become: false
@@ -407,6 +408,7 @@
     - "openwebui-certificate.yml"
     - "nextcloud-certificate.yml"
     - "plexmediaserver-certificate.yml"
+    - "jellyfin-certificate.yml"
   run_once: true
   delegate_to: yoda.local
   become: false
@@ -422,6 +424,7 @@
     - "openwebui-certificate.yml"
     - "nextcloud-certificate.yml"
     - "plexmediaserver-certificate.yml"
+    - "jellyfin-certificate.yml"
   run_once: true
   delegate_to: yoda.local
   become: false
