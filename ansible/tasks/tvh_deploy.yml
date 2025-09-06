@@ -1,0 +1,64 @@
+---
+# Step 1: Set KUBECONFIG globally
+- name: Set KUBECONFIG global
+  ansible.builtin.set_fact:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+
+# Step 2: Create ArgoCD TVHeadend Application (uses remote values file)
+- name: Create TVHeadend ArgoCD Application
+  ansible.builtin.k8s:
+    kubeconfig: "{{ KUBECONFIG }}"
+    state: present
+    definition:
+      apiVersion: argoproj.io/v1alpha1
+      kind: Application
+      metadata:
+        name: tvheadend
+        namespace: argocd
+      spec:
+        project: default
+        source:
+          repoURL: https://k8s-at-home.com/charts/
+          chart: tvheadend
+          targetRevision: "*"
+          helm:
+            valueFiles:
+              - https://raw.githubusercontent.com/seadogger/seadogger-homelab/master/helm-deployments/tvheadend/tvh-values.yml
+        destination:
+          server: https://kubernetes.default.svc
+          namespace: tvh
+        syncPolicy:
+          automated:
+            prune: true
+            selfHeal: true
+          syncOptions:
+            - CreateNamespace=true
+
+# Step 3: Wait for TVHeadend application to be healthy
+- name: Wait for TVHeadend application to be healthy
+  kubernetes.core.k8s_info:
+    api_version: argoproj.io/v1alpha1
+    kind: Application
+    name: tvheadend
+    namespace: argocd
+    kubeconfig: "{{ KUBECONFIG }}"
+  register: tvh_status
+  until: tvh_status.resources is defined and
+         tvh_status.resources[0].status.health.status is defined and
+         tvh_status.resources[0].status.health.status == "Healthy"
+  retries: 30
+  delay: 10
+
+# Step 4: Download Jellyfin IngressRoutes manifest from GitHub
+- name: Download TVH IngressRoutes manifest from GitHub
+  ansible.builtin.get_url:
+    url: "https://raw.githubusercontent.com/seadogger/seadogger-homelab/master/kubectl-deployments/tvheadend/traefik-tvh-ingress.yml"
+    dest: "/tmp/traefik-tvh-ingress.yml"
+    mode: "0644"
+
+# Step 5: Apply Jellyfin IngressRoutes (no Helm/Argo)
+- name: Apply TVH IngressRoutes (no Helm/Argo)
+  kubernetes.core.k8s:
+    kubeconfig: "{{ KUBECONFIG }}"
+    state: present
+    src: "/tmp/traefik-tvh-ingress.yml"

@@ -129,3 +129,7 @@
     - name: Deploy JellyFin
       import_tasks: tasks/jellyfin_deploy.yml
       when: enable_jellyfin | default(true)
+
+    - name: Deploy TvHeadEnd
+      import_tasks: tasks/tvh_deploy.yml
+      when: enable_tvh | default(true)

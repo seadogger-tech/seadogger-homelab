@@ -1,0 +1,47 @@
+# tvh-values.yml
+image:
+  repository: ghcr.io/linuxserver/tvheadend
+  # tag: version-eb59284b   # or omit to follow chart default
+  pullPolicy: IfNotPresent
+
+env:
+  TZ: America/New_York
+  PUID: "1000"
+  PGID: "1000"
+
+# Let TVH see LAN broadcasts (HDHomeRun autodiscovery & DLNA)
+hostNetwork: true
+dnsPolicy: ClusterFirstWithHostNet
+
+service:
+  main:
+    ports:
+      http:
+        port: 9981        # TVH web UI / XMLTV export (HTTP)
+      htsp:
+        enabled: true     # enable HTSP (Kodi/clients)
+        protocol: TCP
+        port: 9982
+
+ingress:
+  main:
+    enabled: false        # We'll use Traefik IngressRoute CRDs instead
+
+persistence:
+  config:
+    enabled: true
+    mountPath: /config
+    size: 5Gi
+    # storageClass: rook-ceph-cephfs   # uncomment to pin SC
+  recordings:
+    enabled: true
+    mountPath: /recordings
+    size: 5Gi
+    # storageClass: rook-ceph-cephfs
+
+# Optional: run non-root and set fsGroup for CephFS/NFS ownership
+podSecurityContext:
+  fsGroup: 1000
+securityContext:
+  runAsUser: 1000
+  runAsGroup: 1000
