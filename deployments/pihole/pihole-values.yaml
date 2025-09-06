@@ -70,3 +70,16 @@ adlists:
     - https://raw.githubusercontent.com/xRuffKez/NRD/refs/heads/main/lists/30-day/adblock/nrd-30day_part_ab
 whitelist:
     - https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/whitelist-referral-native.txt
+
+
+dnsmasq:
+  # Add one line per host → IP
+  customDnsEntries:
+    - address=/ceph.seadogger-homelab/192.168.1.241
+    - address=/jellyfin.seadogger-homelab/192.168.1.241
+    - address=/n8n.seadogger-homelab/192.168.1.241
+    - address=/nextcloud.seadogger-homelab/192.168.1.241
+    - address=/openwebui.seadogger-homelab/192.168.1.241
+    - address=/plex.seadogger-homelab/192.168.1.241
+    - address=/pihole.seadogger-homelab/192.168.1.241
+    - address=/argocd.seadogger-homelab/192.168.1.241
