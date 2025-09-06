@@ -1,7 +1,8 @@
 # tvh-values.yml
 image:
-  repository: ghcr.io/linuxserver/tvheadend
-  # tag: version-eb59284b   # or omit to follow chart default
+  # Prefer lscr.io, which is the official multi-arch endpoint
+  repository: lscr.io/linuxserver/tvheadend
+  # tag: latest            # omit to follow chart default (multi-arch)
   pullPolicy: IfNotPresent
 
 env:
@@ -41,12 +42,9 @@ persistence:
     storageClass: ceph-fs-data-ec   # <--- set if you want a specific SC
     accessMode: ReadWriteOnce    # storageClass: rook-ceph-cephfs
 
-# Allow s6 to start as root and drop privileges internally
+# keep fsGroup and allow root at start for s6
+podSecurityContext:
+  fsGroup: 1000
 securityContext:
   runAsUser: 0
   runAsGroup: 0
-  readOnlyRootFilesystem: false   # (default, but being explicit is fine)
-
-# Keep fsGroup for CephFS/NFS ownership on mounted volumes
-podSecurityContext:
-  fsGroup: 1000
