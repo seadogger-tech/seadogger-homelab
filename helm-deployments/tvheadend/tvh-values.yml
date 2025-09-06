@@ -45,8 +45,11 @@ ingress:
 # @default -- See values.yaml
 persistence:
   config:
-    enabled: false
+    enabled: true
     mountPath: /config
+#    storageClass: "ceph-fs-data-ec"
+#    accessMode: ReadWriteMany
+#    size: 6000Gi
   recordings:
     enabled: false
     mountPath: /recordings
