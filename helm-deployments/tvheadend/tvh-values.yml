@@ -41,9 +41,12 @@ persistence:
     storageClass: ceph-fs-data-ec   # <--- set if you want a specific SC
     accessMode: ReadWriteOnce    # storageClass: rook-ceph-cephfs
 
-# Optional: run non-root and set fsGroup for CephFS/NFS ownership
+# Allow s6 to start as root and drop privileges internally
+securityContext:
+  runAsUser: 0
+  runAsGroup: 0
+  readOnlyRootFilesystem: false   # (default, but being explicit is fine)
+
+# Keep fsGroup for CephFS/NFS ownership on mounted volumes
 podSecurityContext:
   fsGroup: 1000
-securityContext:
-  runAsUser: 1000
-  runAsGroup: 1000
