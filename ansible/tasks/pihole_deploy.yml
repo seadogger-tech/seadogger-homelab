@@ -44,3 +44,15 @@
   retries: 30
   delay: 10
   until: pihole_pods is defined and 'resources' in pihole_pods and (pihole_pods.resources | selectattr('status.phase', 'equalto', 'Running') | list | length > 0)
+
+- name: Download Pihole IngressRoutes manifest from GitHub
+  ansible.builtin.get_url:
+    url: "https://raw.githubusercontent.com/seadogger/seadogger-homelab/master/ingress/traefik-pihole-ingress.yml"
+    dest: "/tmp/traefik-pihole-ingress.yml"
+    mode: "0644"
+
+- name: Apply Pihole IngressRoutes (no Helm/Argo)
+  kubernetes.core.k8s:
+    kubeconfig: "{{ KUBECONFIG }}"
+    state: present
+    src: "/tmp/traefik-pihole-ingress.yml"

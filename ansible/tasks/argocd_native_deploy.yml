@@ -52,3 +52,14 @@
             targetPort: 8080
         loadBalancerIP: 192.168.1.247
 
+- name: Download ArgoCD IngressRoutes manifest from GitHub
+  ansible.builtin.get_url:
+    url: "https://raw.githubusercontent.com/seadogger/seadogger-homelab/master/ingress/traefik-argocd-ingress.yml"
+    dest: "/tmp/traefik-argocd-ingress.yml"
+    mode: "0644"
+
+- name: Apply ArgoCD IngressRoutes (no Helm/Argo)
+  kubernetes.core.k8s:
+    kubeconfig: "{{ KUBECONFIG }}"
+    state: present
+    src: "/tmp/traefik-argocd-ingress.yml"
