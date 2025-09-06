@@ -98,10 +98,6 @@
       import_tasks: tasks/prometheus_deploy.yml
       when: enable_prometheus | default(true)
 
-    - name: Deploy Rook-Ceph - Part 2 (NFS Server)
-      import_tasks: tasks/rook_ceph_deploy_part2.yml
-      when: enable_rook_ceph_part2 | default(false)
-
     - name: Deploy Bedrock Gateway
       import_tasks: tasks/bedrock_gateway_deploy.yml
       when: enable_bedrock | default(true)
@@ -129,7 +125,3 @@
     - name: Deploy JellyFin
       import_tasks: tasks/jellyfin_deploy.yml
       when: enable_jellyfin | default(true)
-
-    - name: Deploy TvHeadEnd
-      import_tasks: tasks/tvh_deploy.yml
-      when: enable_tvh | default(true)

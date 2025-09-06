@@ -58,7 +58,7 @@
       helm upgrade --install rook-ceph rook-release/rook-ceph
       --namespace rook-ceph
       --create-namespace
-      -f https://raw.githubusercontent.com/seadogger/seadogger-homelab/master/helm-deployments/rook-ceph/rook-ceph-operator-values.yaml
+      -f https://raw.githubusercontent.com/seadogger/seadogger-homelab/master/deployments/rook-ceph/rook-ceph-operator-values.yaml
       --wait
   environment: "{{ env_vars }}"
   register: helm_operator_result
@@ -94,7 +94,7 @@
     cmd: >-
       helm upgrade --install rook-ceph-cluster rook-release/rook-ceph-cluster
       --namespace rook-ceph
-      -f https://raw.githubusercontent.com/seadogger/seadogger-homelab/master/helm-deployments/rook-ceph/rook-ceph-cluster-values.yaml
+      -f https://raw.githubusercontent.com/seadogger/seadogger-homelab/master/deployments/rook-ceph/rook-ceph-cluster-values.yaml
       --wait
   environment: "{{ env_vars }}"
   register: helm_cluster_result
@@ -174,7 +174,7 @@
   kubernetes.core.k8s:
     kubeconfig: "{{ KUBECONFIG }}"
     state: present
-    src: "https://raw.githubusercontent.com/seadogger/seadogger-homelab/refs/heads/master/helm-deployments/rook-ceph/rook-ceph-ec-storage-class.yaml"
+    src: "https://raw.githubusercontent.com/seadogger/seadogger-homelab/refs/heads/master/deployments/rook-ceph/rook-ceph-ec-storage-class.yaml"
 
 - name: Wait for ceph-fs-data-ec StorageClass to exist
   kubernetes.core.k8s_info:
@@ -188,7 +188,7 @@
 
 - name: Download CEPH IngressRoutes manifest from GitHub
   ansible.builtin.get_url:
-    url: "https://raw.githubusercontent.com/seadogger/seadogger-homelab/master/kubectl-deployments/traefik/traefik-ceph-dashboard-ingress.yml"
+    url: "https://raw.githubusercontent.com/seadogger/seadogger-homelab/master/deployments/traefik/traefik-ceph-dashboard-ingress.yml"
     dest: "/tmp/traefik-ceph-dashboard-ingress.yml"
     mode: "0644"
 
@@ -196,4 +196,4 @@
   kubernetes.core.k8s:
     kubeconfig: "{{ KUBECONFIG }}"
     state: present
-    src: "/tmp/traefik-ceph-dashboard-ingress.yml"  
+    src: "/tmp/traefik-ceph-dashboard-ingress.yml"

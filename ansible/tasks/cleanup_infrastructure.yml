@@ -77,7 +77,7 @@
     - name: "Delete MetalLB Custom Resources"
       kubernetes.core.k8s:
         kubeconfig: "{{ KUBECONFIG }}"
-        src: "https://raw.githubusercontent.com/seadogger/seadogger-homelab/main/helm-deployments/metallb/metallb-values.yaml"
+        src: "https://raw.githubusercontent.com/seadogger/seadogger-homelab/main/deployments/metallb/metallb-values.yaml"
         state: absent
         wait: yes
         wait_timeout: 300

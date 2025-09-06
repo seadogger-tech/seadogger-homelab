@@ -46,7 +46,7 @@
             project: default
             source:
               repoURL: https://github.com/seadogger/seadogger-homelab
-              path: kubectl-deployments/bedrock-access-gateway  # Ensure this path contains the metallb-values.yaml file as a manifest
+              path: deployments/bedrock-access-gateway  # Ensure this path contains the metallb-values.yaml file as a manifest
               targetRevision: HEAD
             destination:
               server: https://kubernetes.default.svc

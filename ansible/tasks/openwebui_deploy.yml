@@ -22,8 +22,8 @@
           chart: open-webui
           targetRevision: "7.6.0"
           helm:
-            valueFiles:
-              - https://raw.githubusercontent.com/seadogger/seadogger-homelab/master/helm-deployments/openwebui/openwebui-values.yaml
+              valueFiles:
+                - https://raw.githubusercontent.com/seadogger/seadogger-homelab/master/deployments/openwebui/openwebui-values.yaml
         destination:
           server: https://kubernetes.default.svc
           namespace: openwebui
@@ -48,7 +48,7 @@
 
 - name: Download OpenWebUI IngressRoutes manifest from GitHub
   ansible.builtin.get_url:
-    url: "https://raw.githubusercontent.com/seadogger/seadogger-homelab/master/kubectl-deployments/traefik/traefik-openwebui-ingress.yml"
+    url: "https://raw.githubusercontent.com/seadogger/seadogger-homelab/master/deployments/traefik/traefik-openwebui-ingress.yml"
     dest: "/tmp/traefik-openwebui-ingress.yml"
     mode: "0644"
 
@@ -57,4 +57,3 @@
     kubeconfig: "{{ KUBECONFIG }}"
     state: present
     src: "/tmp/traefik-openwebui-ingress.yml"
-

@@ -39,7 +39,7 @@ To resolve this issue and create a stable, idempotent, and flexible storage back
 
 The new architecture was implemented by making the following changes to the `seadogger-homelab` Infrastructure-as-Code repository:
 
-1.  **`helm-deployments/rook-ceph/rook-ceph-cluster-values.yaml`:**
+1.  **`deployments/rook-ceph/rook-ceph-cluster-values.yaml`:**
     *   Updated to define the `ceph-block` and `ceph-fs` filesystems with their corresponding pools and storage classes as detailed above.
     *   Pool names were corrected to their base names (e.g., `data-replicated`), as the Rook operator automatically prepends the filesystem name.
 

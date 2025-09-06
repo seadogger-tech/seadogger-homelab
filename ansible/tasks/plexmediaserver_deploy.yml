@@ -38,7 +38,7 @@
           targetRevision: "*"
           helm:
             valueFiles:
-              - https://raw.githubusercontent.com/seadogger/seadogger-homelab/master/helm-deployments/plex/plex-values.yaml
+              - https://raw.githubusercontent.com/seadogger/seadogger-homelab/master/deployments/plex/plex-values.yaml
         destination:
           server: https://kubernetes.default.svc
           namespace: plex
@@ -66,7 +66,7 @@
 
 - name: Download plex IngressRoutes manifest from GitHub
   ansible.builtin.get_url:
-    url: "https://raw.githubusercontent.com/seadogger/seadogger-homelab/master/kubectl-deployments/traefik/traefik-plex-ingress.yml"
+    url: "https://raw.githubusercontent.com/seadogger/seadogger-homelab/master/deployments/traefik/traefik-plex-ingress.yml"
     dest: "/tmp/traefik-plex-ingress.yml"
     mode: "0644"
 

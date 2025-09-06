@@ -44,7 +44,7 @@ The goal was to expose the Rook-Ceph dashboard via a `LoadBalancer` service and 
     - To prevent the operator from overwriting the password, we needed to provide our own secret.
     - **Action 1:** Added a `dashboard_password` variable to `ansible/config.yml`.
     - **Action 2:** Added a task to `ansible/tasks/rook_ceph_deploy_part1.yml` to create a Kubernetes secret named `rook-ceph-dashboard-password` from the new variable.
-    - **Action 3:** Modified `helm-deployments/rook-ceph/rook-ceph-cluster-values.yaml` to tell the operator to use the provided secret by setting `dashboard.security.adminPasswordSecretName: rook-ceph-dashboard-password`.
+    - **Action 3:** Modified `deployments/rook-ceph/rook-ceph-cluster-values.yaml` to tell the operator to use the provided secret by setting `dashboard.security.adminPasswordSecretName: rook-ceph-dashboard-password`.
 
 ### Final Outcome
 - The Ceph dashboard is now reliably exposed via a `LoadBalancer`.

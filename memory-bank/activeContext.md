@@ -24,7 +24,7 @@ We diagnosed a failing NFS deployment and, after a lengthy investigation, arrive
 ### Final Plan:
 The definitive plan is to manage the `CephNFS` resource declaratively within the Ansible playbook, separate from the Helm release.
 
-1.  **Clean `values.yaml`:** Remove the invalid `cephNFS` block from `helm-deployments/rook-ceph/rook-ceph-cluster-values.yaml`.
+1.  **Clean `values.yaml`:** Remove the invalid `cephNFS` block from `deployments/rook-ceph/rook-ceph-cluster-values.yaml`.
 2.  **Update Ansible Playbook:** Add a new task to `ansible/tasks/rook_ceph_deploy.yml` that uses the `ansible.builtin.k8s` module to create the `CephNFS` resource directly. This new resource will contain the correct security settings to prevent the pod crash.
 3.  **Deploy and Verify:** Run the updated Ansible playbook and verify that the NFS share is accessible.
 

@@ -24,7 +24,7 @@ The architecture is based on a Kubernetes (k3s) cluster running on a group of Ra
 *   **Immutable Infrastructure:** The goal is to treat the cluster nodes as immutable. Changes are made by updating the Ansible playbooks and re-running them, rather than making manual changes to the nodes.
 *   **Separation of Concerns:** The project is structured to separate concerns:
     *   `ansible/`: Infrastructure provisioning.
-    *   `helm-deployments/` & `kubectl-deployments/`: These directories contain Helm values files and Kubernetes manifests that are referenced by ArgoCD for application deployment.
+    *   `deployments/`: This directory contains Helm values files and Kubernetes manifests that are referenced by ArgoCD for application deployment.
     *   `memory-bank/`: Project documentation and context.
 *   **Application Deployment Workflow:** Each application (POD) deployment follows a consistent pattern:
     1.  **Ansible Task:** An Ansible task is responsible for the entire lifecycle of an application. This task can be enabled or disabled via the `config.yml` file.

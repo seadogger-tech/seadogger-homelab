@@ -23,7 +23,7 @@
           targetRevision: "*"
           helm:
             valueFiles:
-              - https://raw.githubusercontent.com/seadogger/seadogger-homelab/master/helm-deployments/pihole/pihole-values.yaml
+              - https://raw.githubusercontent.com/seadogger/seadogger-homelab/master/deployments/pihole/pihole-values.yaml
         destination:
           server: https://kubernetes.default.svc
           namespace: pihole

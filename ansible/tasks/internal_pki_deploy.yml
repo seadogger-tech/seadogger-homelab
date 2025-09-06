@@ -194,7 +194,7 @@
 - block:
     - name: Copy cert-manager application manifest to yoda
       copy:
-        src: "{{ playbook_dir }}/../kubectl-deployments/cert-manager-application.yml"
+        src: "{{ playbook_dir }}/../certificates/cert-manager-application.yml"
         dest: "/tmp/cert-manager-application.yml"
       run_once: true
       delegate_to: yoda.local
@@ -382,7 +382,7 @@
 # ─────────────────────────────
 - name: Copy Certificate Manifests to yoda
   copy:
-    src: "{{ playbook_dir }}/../kubectl-deployments/{{ item }}"
+    src: "{{ playbook_dir }}/../certificates/{{ item }}"
     dest: "/tmp/{{ item }}"
   loop:
     - "ceph-dashboard-certificate.yml"
