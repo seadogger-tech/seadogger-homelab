@@ -392,7 +392,6 @@
     - "nextcloud-certificate.yml"
     - "plexmediaserver-certificate.yml"
     - "jellyfin-certificate.yml"
-    - "tvh-certificate.yml"
   run_once: true
   delegate_to: yoda.local
   become: false
@@ -410,7 +409,6 @@
     - "nextcloud-certificate.yml"
     - "plexmediaserver-certificate.yml"
     - "jellyfin-certificate.yml"
-    - "tvh-certificate.yml"
   run_once: true
   delegate_to: yoda.local
   become: false
@@ -427,7 +425,6 @@
     - "nextcloud-certificate.yml"
     - "plexmediaserver-certificate.yml"
     - "jellyfin-certificate.yml"
-    - "tvh-certificate.yml"
   run_once: true
   delegate_to: yoda.local
   become: false
