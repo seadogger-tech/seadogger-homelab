@@ -1,87 +1,53 @@
-# image from lscr.io is good (multi-arch). Keep that change.
+#
+# IMPORTANT NOTE
+#
+# This chart inherits from our common library chart. You can check the default values/options here:
+# https://github.com/k8s-at-home/library-charts/tree/main/charts/stable/common/values.yaml
+#
+
 image:
-  repository: lscr.io/linuxserver/tvheadend
+  # -- image repository
+  repository: ghcr.io/linuxserver/tvheadend
+  # -- image tag
+  tag: version-eb59284b
+  # -- image pull policy
   pullPolicy: IfNotPresent
-  # tag:  # omit to let it select the right arch
 
+# -- environment variables. See [image docs](https://docs.linuxserver.io/images/docker-tvheadend#environment-variables-e) for more details.
+# @default -- See below
 env:
-  TZ: America/New_York
-  PUID: "1000"
-  PGID: "1000"
+  # -- Set the container timezone
+  TZ: UTC
+  # -- Specify the user ID the application will run as
+  PUID: "1001"
+  # -- Specify the group ID the application will run as
+  PGID: "1001"
 
-# host networking for HDHomeRun discovery is fine to keep
-hostNetwork: true
-dnsPolicy: ClusterFirstWithHostNet
-
+# -- Configures service settings for the chart.
+# @default -- See values.yaml
 service:
   main:
     ports:
       http:
-        port: 9981        # TVH web UI / XMLTV export (HTTP)
+        port: 9981
       htsp:
-        enabled: true     # enable HTSP (Kodi/clients)
+        enabled: false
         protocol: TCP
         port: 9982
 
 ingress:
+  # -- Enable and configure ingress settings for the chart under this key.
+  # @default -- See values.yaml
   main:
-    enabled: false        # We'll use Traefik IngressRoute CRDs instead
+    enabled: false
 
+# -- Configure persistence settings for the chart under this key.
+# @default -- See values.yaml
 persistence:
   config:
-    enabled: true
+    enabled: false
     mountPath: /config
-    size: 5Gi
-    storageClass: ceph-fs-data-ec   # <--- set if you want a specific SC
-    accessMode: ReadWriteMany    # storageClass: rook-ceph-cephfs   # uncomment to pin SC
   recordings:
-    enabled: true
+    enabled: false
     mountPath: /recordings
-    size: 5Gi
-    storageClass: ceph-fs-data-ec   # <--- set if you want a specific SC
-    accessMode: ReadWriteMany    # storageClass: rook-ceph-cephfs
 
-# <-- IMPORTANT: let s6 start as root and keep FS executable/writable
-securityContext:
-  runAsUser: 0
-  runAsGroup: 0
-  allowPrivilegeEscalation: true
-  readOnlyRootFilesystem: false
-  capabilities:
-    add: ["CHOWN","FOWNER","SETGID","SETUID","DAC_OVERRIDE"]
-
-# keep CephFS write perms for mounted volumes
-podSecurityContext:
-  fsGroup: 1000
-
-probes:
-  startup:
-    enabled: true
-    spec:
-      httpGet:
-        path: /
-        port: 9981
-      initialDelaySeconds: 30
-      periodSeconds: 10
-      timeoutSeconds: 3
-      failureThreshold: 30
-  liveness:
-    enabled: true
-    spec:
-      httpGet:
-        path: /
-        port: 9981
-      initialDelaySeconds: 60
-      periodSeconds: 10
-      timeoutSeconds: 3
-      failureThreshold: 10
-  readiness:
-    enabled: true
-    spec:
-      httpGet:
-        path: /
-        port: 9981
-      initialDelaySeconds: 60
-      periodSeconds: 10
-      timeoutSeconds: 3
-      failureThreshold: 10
