@@ -188,7 +188,7 @@
 
 - name: Download CEPH IngressRoutes manifest from GitHub
   ansible.builtin.get_url:
-    url: "https://raw.githubusercontent.com/seadogger/seadogger-homelab/master/deployments/traefik/traefik-ceph-dashboard-ingress.yml"
+    url: "https://raw.githubusercontent.com/seadogger/seadogger-homelab/master/ingress/traefik-ceph-dashboard-ingress.yml"
     dest: "/tmp/traefik-ceph-dashboard-ingress.yml"
     mode: "0644"
 

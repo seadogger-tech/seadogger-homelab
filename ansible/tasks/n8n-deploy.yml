@@ -50,7 +50,7 @@
 
 - name: Download n8n IngressRoutes manifest from GitHub
   ansible.builtin.get_url:
-    url: "https://raw.githubusercontent.com/seadogger/seadogger-homelab/master/deployments/traefik/traefik-n8n-ingress.yml"
+    url: "https://raw.githubusercontent.com/seadogger/seadogger-homelab/master/ingress/traefik-n8n-ingress.yml"
     dest: "/tmp/traefik-n8n-ingress.yml"
     mode: "0644"
 

@@ -47,7 +47,7 @@
 
 - name: Download Nextcloud IngressRoutes manifest from GitHub
   ansible.builtin.get_url:
-    url: "https://raw.githubusercontent.com/seadogger/seadogger-homelab/master/deployments/traefik/traefik-nextcloud-ingress.yml"
+    url: "https://raw.githubusercontent.com/seadogger/seadogger-homelab/master/ingress/traefik-nextcloud-ingress.yml"
     dest: "/tmp/traefik-nextcloud-ingress.yml"
     mode: "0644"
 

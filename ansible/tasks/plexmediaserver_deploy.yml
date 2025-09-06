@@ -66,7 +66,7 @@
 
 - name: Download plex IngressRoutes manifest from GitHub
   ansible.builtin.get_url:
-    url: "https://raw.githubusercontent.com/seadogger/seadogger-homelab/master/deployments/traefik/traefik-plex-ingress.yml"
+    url: "https://raw.githubusercontent.com/seadogger/seadogger-homelab/master/ingress/traefik-plex-ingress.yml"
     dest: "/tmp/traefik-plex-ingress.yml"
     mode: "0644"
 

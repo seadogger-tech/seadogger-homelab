@@ -48,7 +48,7 @@
 
 - name: Download OpenWebUI IngressRoutes manifest from GitHub
   ansible.builtin.get_url:
-    url: "https://raw.githubusercontent.com/seadogger/seadogger-homelab/master/deployments/traefik/traefik-openwebui-ingress.yml"
+    url: "https://raw.githubusercontent.com/seadogger/seadogger-homelab/master/ingress/traefik-openwebui-ingress.yml"
     dest: "/tmp/traefik-openwebui-ingress.yml"
     mode: "0644"
 
