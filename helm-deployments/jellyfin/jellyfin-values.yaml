@@ -12,6 +12,14 @@ service:
     ports:
       http:
         port: 8096
+      https:
+        port: 8920
+      discovery1:
+        port: 1900
+        protocol: UDP
+      discovery2:
+        port: 7359
+        protocol: UDP
 
 ingress:
   main:
@@ -22,7 +30,7 @@ persistence:
   config:
     enabled: true
     size: 5Gi
-    # storageClass: rook-ceph-cephfs   # <--- set if you want a specific SC
+    storageClass: ceph-fs-data-ec   # <--- set if you want a specific SC
     accessMode: ReadWriteOnce
     mountPath: /config
 
@@ -30,14 +38,16 @@ persistence:
   cache:
     enabled: true
     size: 5Gi
-    # storageClass: rook-ceph-cephfs
+    storageClass: ceph-fs-data-ec
     accessMode: ReadWriteOnce
     mountPath: /cache
 
   # Media library - mount your existing CephFS PVC from earlier
   media:
-    enabled: false
-    existingClaim: test-cephfs-ec-claim   # from your previous setup
+    enabled: true
+    size: 500Gi
+    storageClass: ceph-fs-data-ec
+    accessMode: ReadWriteOnce
     mountPath: /media
 
 # Optional: run as non-root UID/GID (tune to your NAS perms if needed)
@@ -45,3 +55,5 @@ persistence:
 #   runAsUser: 568
 #   runAsGroup: 568
 #   fsGroup: 568
+hostNetwork: true
+dnsPolicy: ClusterFirstWithHostNet
