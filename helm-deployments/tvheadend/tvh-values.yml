@@ -1,16 +1,15 @@
-# tvh-values.yml
+# image from lscr.io is good (multi-arch). Keep that change.
 image:
-  # Prefer lscr.io, which is the official multi-arch endpoint
   repository: lscr.io/linuxserver/tvheadend
-  # tag: latest            # omit to follow chart default (multi-arch)
   pullPolicy: IfNotPresent
+  # tag:  # omit to let it select the right arch
 
 env:
   TZ: America/New_York
   PUID: "1000"
   PGID: "1000"
 
-# Let TVH see LAN broadcasts (HDHomeRun autodiscovery & DLNA)
+# host networking for HDHomeRun discovery is fine to keep
 hostNetwork: true
 dnsPolicy: ClusterFirstWithHostNet
 
@@ -34,17 +33,55 @@ persistence:
     mountPath: /config
     size: 5Gi
     storageClass: ceph-fs-data-ec   # <--- set if you want a specific SC
-    accessMode: ReadWriteOnce    # storageClass: rook-ceph-cephfs   # uncomment to pin SC
+    accessMode: ReadWriteMany    # storageClass: rook-ceph-cephfs   # uncomment to pin SC
   recordings:
     enabled: true
     mountPath: /recordings
     size: 5Gi
     storageClass: ceph-fs-data-ec   # <--- set if you want a specific SC
-    accessMode: ReadWriteOnce    # storageClass: rook-ceph-cephfs
+    accessMode: ReadWriteMany    # storageClass: rook-ceph-cephfs
 
-# keep fsGroup and allow root at start for s6
-podSecurityContext:
-  fsGroup: 1000
+# <-- IMPORTANT: let s6 start as root and keep FS executable/writable
 securityContext:
   runAsUser: 0
   runAsGroup: 0
+  allowPrivilegeEscalation: true
+  readOnlyRootFilesystem: false
+  capabilities:
+    add: ["CHOWN","FOWNER","SETGID","SETUID","DAC_OVERRIDE"]
+
+# keep CephFS write perms for mounted volumes
+podSecurityContext:
+  fsGroup: 1000
+
+probes:
+  startup:
+    enabled: true
+    spec:
+      httpGet:
+        path: /
+        port: 9981
+      initialDelaySeconds: 30
+      periodSeconds: 10
+      timeoutSeconds: 3
+      failureThreshold: 30
+  liveness:
+    enabled: true
+    spec:
+      httpGet:
+        path: /
+        port: 9981
+      initialDelaySeconds: 60
+      periodSeconds: 10
+      timeoutSeconds: 3
+      failureThreshold: 10
+  readiness:
+    enabled: true
+    spec:
+      httpGet:
+        path: /
+        port: 9981
+      initialDelaySeconds: 60
+      periodSeconds: 10
+      timeoutSeconds: 3
+      failureThreshold: 10
