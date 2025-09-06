@@ -52,7 +52,7 @@
 # Step 4: Download Jellyfin IngressRoutes manifest from GitHub
 - name: Download TVH IngressRoutes manifest from GitHub
   ansible.builtin.get_url:
-    url: "https://raw.githubusercontent.com/seadogger/seadogger-homelab/master/kubectl-deployments/tvheadend/traefik-tvh-ingress.yml"
+    url: "https://raw.githubusercontent.com/seadogger/seadogger-homelab/master/kubectl-deployments/traefik/traefik-tvh-ingress.yml"
     dest: "/tmp/traefik-tvh-ingress.yml"
     mode: "0644"
 

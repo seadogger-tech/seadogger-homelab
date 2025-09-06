@@ -32,12 +32,14 @@ persistence:
     enabled: true
     mountPath: /config
     size: 5Gi
-    # storageClass: rook-ceph-cephfs   # uncomment to pin SC
+    storageClass: ceph-fs-data-ec   # <--- set if you want a specific SC
+    accessMode: ReadWriteOnce    # storageClass: rook-ceph-cephfs   # uncomment to pin SC
   recordings:
     enabled: true
     mountPath: /recordings
     size: 5Gi
-    # storageClass: rook-ceph-cephfs
+    storageClass: ceph-fs-data-ec   # <--- set if you want a specific SC
+    accessMode: ReadWriteOnce    # storageClass: rook-ceph-cephfs
 
 # Optional: run non-root and set fsGroup for CephFS/NFS ownership
 podSecurityContext:
