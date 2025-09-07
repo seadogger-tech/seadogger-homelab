@@ -45,3 +45,6 @@
 - Memory Bank in **`docs/wiki/memory_bank/`**
 - Images in **`docs/wiki/images/`** (`![...](images/...)`)
 - CI generates **14-Memory-Bank-Index** and topic backlinks automatically
+
+
+- Test push workflow
