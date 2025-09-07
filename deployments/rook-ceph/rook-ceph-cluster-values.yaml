@@ -136,7 +136,7 @@ cephBlockPools:
       enabled: true
       name: ceph-block-data
       isDefault: true
-      reclaimPolicy: Delete
+      reclaimPolicy: Retain
       allowVolumeExpansion: true
       parameters:
         imageFeatures: layering,exclusive-lock,object-map,fast-diff
@@ -229,7 +229,7 @@ cephFileSystems:
     storageClass:
       enabled: true
       name: ceph-fs-data-replicated
-      reclaimPolicy: Delete
+      reclaimPolicy: Retain
       allowVolumeExpansion: true
       parameters:
         clusterID: rook-ceph
@@ -247,7 +247,7 @@ cephFileSystems:
     # you can still keep this here for alignment and generate a manifest from it.
     additionalStorageClasses:
       - name: ceph-fs-data-ec
-        reclaimPolicy: Delete
+        reclaimPolicy: Retain
         allowVolumeExpansion: true
         parameters:
           clusterID: rook-ceph

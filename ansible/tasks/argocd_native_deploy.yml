@@ -39,6 +39,66 @@
         service:
           type: ClusterIP
 
+# --- Fix the proxy/TLS loop by telling ArgoCD it’s behind TLS-terminating proxy
+- name: Set server.insecure=true in argocd-cmd-params-cm
+  kubernetes.core.k8s_json_patch:
+    api_version: v1
+    kind: ConfigMap
+    namespace: argocd
+    name: argocd-cmd-params-cm
+    kubeconfig: "{{ KUBECONFIG }}"
+    patch:
+      - op: add
+        path: /data/server.insecure
+        value: "true"
+  ignore_errors: false
+
+- name: Set external URL in argocd-cm
+  kubernetes.core.k8s_json_patch:
+    api_version: v1
+    kind: ConfigMap
+    namespace: argocd
+    name: argocd-cm
+    kubeconfig: "{{ KUBECONFIG }}"
+    patch:
+      - op: add
+        path: /data/url
+        value: "https://argocd.seadogger-homelab"
+  ignore_errors: false
+
+# --- Roll the server so it picks up ConfigMap changes
+- name: Restart argocd-server by bumping pod template annotation
+  kubernetes.core.k8s:
+    kubeconfig: "{{ KUBECONFIG }}"
+    state: patched
+    definition:
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: argocd-server
+        namespace: argocd
+      spec:
+        template:
+          metadata:
+            annotations:
+              restartedAt: "{{ ansible_date_time.iso8601 }}"
+
+# --- Wait for rollout to complete
+- name: Wait for argocd-server to be ready
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ KUBECONFIG }}"
+    api_version: apps/v1
+    kind: Deployment
+    name: argocd-server
+    namespace: argocd
+  register: argocd_server_dep
+  retries: 30
+  delay: 5
+  until: argocd_server_dep.resources | length > 0 and
+         argocd_server_dep.resources[0].status.readyReplicas is defined and
+         argocd_server_dep.resources[0].status.readyReplicas >= 1
+         
+
 - name: Download ArgoCD IngressRoutes manifest from GitHub
   ansible.builtin.get_url:
     url: "https://raw.githubusercontent.com/seadogger/seadogger-homelab/master/ingress/traefik-argocd-ingress.yml"
