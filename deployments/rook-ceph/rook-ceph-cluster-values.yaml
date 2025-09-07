@@ -23,8 +23,8 @@ cephClusterSpec:
                     - rey.local
 
   dashboard:
-    enabled: false
-    ssl: true
+    enabled: true
+    ssl: false
     port: 7000
     urlPrefix: /
     security:

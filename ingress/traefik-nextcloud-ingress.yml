@@ -1,35 +1,33 @@
-# traefik-jellyfin-ingress.yml
-
 ---
 # 1) HTTP: serve Jellyfin directly (no redirect)
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
-  name: jellyfin-http
-  namespace: jellyfin
+  name: nextcloud-http
+  namespace: nextcloud
 spec:
   entryPoints: ["web"]
   routes:
-    - match: Host(`jellyfin.seadogger-homelab`)
+    - match: Host(`nextcloud.seadogger-homelab`)
       kind: Rule
       services:
-        - name: jellyfin
-          port: 8096
+        - name: nextcloud
+          port: 8080
 
 ---
 # 2) HTTPS: serve Jellyfin with TLS
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
-  name: jellyfin-https
-  namespace: jellyfin
+  name: nextcloud-https
+  namespace: nextcloud
 spec:
   entryPoints: ["websecure"]
   routes:
-    - match: Host(`jellyfin.seadogger-homelab`)
+    - match: Host(`nextcloud.seadogger-homelab`)
       kind: Rule
       services:
-        - name: jellyfin
-          port: 8096
+        - name: nextcloud
+          port: 8080
   tls:
-    secretName: jellyfin-local-tls
+    secretName: nextcloud-local-tls
