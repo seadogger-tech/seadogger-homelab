@@ -1,8 +1,7 @@
 
-name: Publish Wiki (Main only)
+name: Publish Wiki (Default branch only)
 on:
   push:
-    branches: [ main ]
     paths:
       - 'docs/wiki/**'
   workflow_dispatch:
@@ -11,7 +10,8 @@ concurrency:
   cancel-in-progress: true
 jobs:
   publish-wiki:
-    if: github.repository == 'seadogger/seadogger-homelab'
+    # only run when the push is to the repo's default branch
+    if: github.ref_name == github.event.repository.default_branch && github.repository == 'seadogger/seadogger-homelab'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
