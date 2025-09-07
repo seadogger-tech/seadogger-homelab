@@ -1,13 +1,12 @@
-
 name: Publish Wiki (Default branch only)
 on:
   push:
-    paths:
-      - 'docs/wiki/**'
   workflow_dispatch:
+
 concurrency:
   group: wiki-publish-${{ github.ref }}
   cancel-in-progress: true
+
 jobs:
   publish-wiki:
     # only run when the push is to the repo's default branch
@@ -15,23 +14,30 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.x'
+
       - name: Build Memory Bank Index & Topic summaries
         run: |
           python docs/wiki/tools/build_memory_bank_index.py
           python docs/wiki/tools/summarize_memory_bank_into_topics.py
+
       - name: Clone wiki
-        run: git clone https://oauth2:${{ secrets.WIKI_TOKEN }}@github.com/seadogger/seadogger-homelab.wiki.git wiki
+        run: git clone "https://oauth2:${{ secrets.WIKI_TOKEN }}@github.com/seadogger/seadogger-homelab.wiki.git" wiki
+
       - name: Sync wiki (markdown + memory_bank + images)
-        run: rsync -a --delete docs/wiki/ wiki/
-      - name: Commit & push
         run: |
-          cd wiki
+          rsync -a --delete --exclude '.git/' docs/wiki/ wiki/
+
+      - name: Commit & push (to wiki repo)
+        working-directory: wiki
+        run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote -v
           git add -A
           git commit -m "CI: Publish wiki from docs/wiki (auto index + summaries)" || true
           git push
