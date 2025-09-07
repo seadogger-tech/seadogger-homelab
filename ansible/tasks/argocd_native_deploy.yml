@@ -27,30 +27,17 @@
     state: present
     kubeconfig: "{{ KUBECONFIG }}"
 
-- name: Expose ArgoCD as a LoadBalancer service
-  kubernetes.core.k8s:
+- name: Force argocd server.service.type=ClusterIP via Helm
+  kubernetes.core.helm:
+    name: argocd
+    chart_ref: argo/argo-cd
+    release_namespace: argocd
     state: present
     kubeconfig: "{{ KUBECONFIG }}"
-    definition:
-      apiVersion: v1
-      kind: Service
-      metadata:
-        name: argocd-server
-        namespace: argocd
-      spec:
-        type: LoadBalancer
-        selector:
-          app.kubernetes.io/name: argocd-server
-        ports:
-          - name: http
-            port: 80
-            protocol: TCP
-            targetPort: 8080
-          - name: https
-            port: 443
-            protocol: TCP
-            targetPort: 8080
-        loadBalancerIP: 192.168.1.247
+    values:
+      server:
+        service:
+          type: ClusterIP
 
 - name: Download ArgoCD IngressRoutes manifest from GitHub
   ansible.builtin.get_url:
