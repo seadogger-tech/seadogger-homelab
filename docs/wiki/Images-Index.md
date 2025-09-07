@@ -1,6 +1,20 @@
 # Images
+*Generated gallery from docs/wiki/images — 2025-09-07 23:19 UTC*
 
-Images live under `docs/wiki/images/`.
-
-![Banner](images/wiki-banner.svg)
-![Accent](images/accent-divider.svg)
+![Architecture.png](images/Architecture.png)
+![Grafana-Dashboard.png](images/Grafana-Dashboard.png)
+![IO-Benchmark-2.png](images/IO-Benchmark-2.png)
+![NVMe-Performance-Compare.png](images/NVMe-Performance-Compare.png)
+![Partition-Map-NVMe-worker.png](images/Partition-Map-NVMe-worker.png)
+![Partition-Map-NVMe.png](images/Partition-Map-NVMe.png)
+![PiHole-Dashboard.png](images/PiHole-Dashboard.png)
+![Rack-Mounted-Pi5-Nodes.jpeg](images/Rack-Mounted-Pi5-Nodes.jpeg)
+![SSD-Compatibility.png](images/SSD-Compatibility.png)
+![Single-Node-Mounted-2.jpeg](images/Single-Node-Mounted-2.jpeg)
+![WebUI-Laptop-UI.png](images/WebUI-Laptop-UI.png)
+![WebUI-iPhone-UI.png](images/WebUI-iPhone-UI.png)
+![accent-divider.svg](images/accent-divider.svg)
+![bedrock.png](images/bedrock.png)
+![btop-Dashboard.png](images/btop-Dashboard.png)
+![helm-useful-cmds.png](images/helm-useful-cmds.png)
+![wiki-banner.svg](images/wiki-banner.svg)

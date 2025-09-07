@@ -2,6 +2,11 @@ name: Publish Wiki (Default branch only)
 on:
   push:
   workflow_dispatch:
+    inputs:
+      autogen:
+        description: 'Regenerate wiki content from README/manifests/memory_bank?'
+        required: false
+        default: 'false'
 
 concurrency:
   group: wiki-publish-${{ github.ref }}
@@ -15,22 +20,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Python
+      # Run the generator ONLY when you manually dispatch with autogen=true
+      - name: Setup Python (manual autogen only)
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.autogen == 'true' }}
         uses: actions/setup-python@v5
         with:
           python-version: '3.x'
 
-      - name: Build Memory Bank Index & Topic summaries
-        run: |
-          python docs/wiki/tools/build_memory_bank_index.py
-          python docs/wiki/tools/summarize_memory_bank_into_topics.py
+      - name: Build ALL wiki pages (manual autogen only)
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.autogen == 'true' }}
+        run: python docs/wiki/tools/build_all.py
 
       - name: Clone wiki
         run: git clone "https://oauth2:${{ secrets.WIKI_TOKEN }}@github.com/seadogger/seadogger-homelab.wiki.git" wiki
 
       - name: Sync wiki (markdown + memory_bank + images)
-        run: |
-          rsync -a --delete --exclude '.git/' docs/wiki/ wiki/
+        run: rsync -a --delete --exclude '.git/' docs/wiki/ wiki/
 
       - name: Commit & push (to wiki repo)
         working-directory: wiki
@@ -39,5 +44,5 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git remote -v
           git add -A
-          git commit -m "CI: Publish wiki from docs/wiki (auto index + summaries)" || true
+          git commit -m "Publish wiki (autogen=${{ github.event_name == 'workflow_dispatch' && inputs.autogen == 'true' }})" || true
           git push

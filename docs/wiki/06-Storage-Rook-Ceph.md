@@ -1,6 +1,36 @@
-# Storage: Rook‑Ceph
+# Storage: Rook-Ceph
+*Generated — 2025-09-07 23:19 UTC*
 
-RBD default; CephFS replicated + EC (2+1); MDS 1+1.
+## Overview
+- RBD default; CephFS with EC for bulk; MDS 1 active + 1 standby.
+
+## StorageClasses (discovered)
+- `Add`
+- `Apply`
+- `Assert`
+- `Check`
+- `Create`
+- `Detect`
+- `Display`
+- `Download`
+- `Install`
+- `Set`
+- `Unset`
+- `Wait`
+- `argocd`
+- `ceph-fs`
+- `ceph-fs-data-ec`
+- `metallb`
+- `metallb-system`
+- `nfs-cephfs`
+- `prometheus-stack`
+- `rook-ceph`
+- `rook-ceph-dashboard-password`
+- `rook-csi-cephfs-node`
+- `rook-csi-cephfs-provisioner`
+- `rook-nfs-loadbalancer`
+
+Rook detected in manifests: yes
 
 
 ## From the Memory Bank
