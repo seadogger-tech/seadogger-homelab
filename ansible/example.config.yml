@@ -14,28 +14,27 @@ cold_start_stage_1_wipe_cluster: true
 
 # --- STAGE 2: INSTALL INFRASTRUCTURE (main.yml) ---
 # Set to true to run the infrastructure installation tasks in `main.yml`.
-cold_start_stage_2_install_infrastructure: false
+cold_start_stage_2_install_infrastructure: true
 
 # --- STAGE 3: INSTALL APPLICATIONS (main.yml) ---
 # Set to true to run the application deployment tasks in `main.yml`.
-cold_start_stage_3_install_applications: false
+cold_start_stage_3_install_applications: true
 
 # --- Manual Install Toggles ---
 # Use these flags to deploy services individually when the Stage 3 master switch is false.
-manual_install_rook_ceph_part2: true
-manual_install_nfs_server: true
 manual_install_bedrock: true
 manual_install_pihole: true
 manual_install_prometheus: true
 manual_install_openwebui: true
 manual_install_n8n: true
-manual_install_plex: false
+manual_install_nextcloud: true
+manual_install_jellyfin: true
 
 # --- Secrets ---
 dashboard_password: "YourSecurePasswordHere"
 aws_bedrock_api_key_id: "YOUR_AWS_ACCESS_KEY_ID_HERE"
 aws_bedrock_api_access_key: "YOUR_AWS_SECRET_ACCESS_KEY_HERE"
-plex_access_key: "YOUR_PLEX_CLAIM_TOKEN_HERE" # This key is only good for 5 minutes. You get this from https://plex.tv/claim
+xmltv_stream: "https://api.hdhomerun.com/api/xmltv?DeviceAuth=YOUR_HDHOMERUN_ACCESS_KEY"
 
 # ==============================================================================
 # --- Granular Cleanup Configuration ---
@@ -81,13 +80,14 @@ plex_access_key: "YOUR_PLEX_CLAIM_TOKEN_HERE" # This key is only good for 5 minu
 # Physical disk wiping is still protected by the separate `perform_physical_disk_wipe` flag.
 
 # --- POD / APPLICATION CLEANUP ---
-run_pod_cleanup: false
+run_pod_cleanup: true
 pod_cleanup_list:
   - { name: "bedrock-access-gateway", namespace: "bedrock-gateway", selector: "app=bedrock-access-gateway", delete_pvc: true }
   - { name: "pihole", namespace: "pihole", selector: "app.kubernetes.io/name=pihole", delete_pvc: true }
   - { name: "openwebui", namespace: "openwebui", selector: "app.kubernetes.io/instance=openwebui", delete_pvc: true }
   - { name: "n8n", namespace: "n8n", selector: "app.kubernetes.io/instance=n8n", delete_pvc: true }
-  - { name: "plex", namespace: "plex", selector: "app=plex", delete_pvc: true }
+  - { name: "nextcloud", namespace: "nextcloud", selector: "app=nextcloud", delete_pvc: true }
+  - { name: "jellyfin", namespace: "jellyfin", selector: "app=jellyfin", delete_pvc: true }
 
 # --- INFRASTRUCTURE CLEANUP ---
 run_infrastructure_cleanup: false
@@ -96,6 +96,19 @@ infrastructure_cleanup_list:
   - "argocd"
   - "metallb"
   - "rook-ceph" # Note: This does NOT wipe physical disks.
+
+# --- Namespace Pre-cooking Configuration ---
+precook_namespaces:
+  - { name: "openwebui" }
+  - { name: "monitoring" }
+  - { name: "argocd" }
+  - { name: "rook-ceph" }
+  - { name: "pihole" }
+  - { name: "n8n" }
+  - { name: "bedrock-gateway" }
+  - { name: "nextcloud" }
+  - { name: "jellyfin" }
+
 
 # ===================================================================================
 # --- Ansible Playbook Variables (GENERATED FROM THE SWITCHES ABOVE) ---
@@ -116,14 +129,14 @@ enable_k3s_workers: "{{ cold_start_stage_2_install_infrastructure | bool }}"
 enable_rook_ceph_part1: "{{ cold_start_stage_2_install_infrastructure | bool }}"
 enable_metallb_native: "{{ cold_start_stage_2_install_infrastructure | bool }}"
 enable_argocd_native: "{{ cold_start_stage_2_install_infrastructure | bool }}"
+enable_internal_pki: "{{ cold_start_stage_2_install_infrastructure | bool }}"
+enable_prometheus: "{{ cold_start_stage_2_install_applications | bool and manual_install_prometheus | bool }}"
 
 # --- Stage 3: Application Deployment Variables ---
 # An application is enabled if the STAGE 3 master switch is ON, AND if its individual MANUAL switch is ON.
-enable_rook_ceph_part2: "{{ cold_start_stage_3_install_applications | bool and manual_install_rook_ceph_part2 | bool }}"
-enable_nfs_server: "{{ cold_start_stage_3_install_applications | bool and manual_install_nfs_server | bool }}"
 enable_bedrock: "{{ cold_start_stage_3_install_applications | bool and manual_install_bedrock | bool }}"
 enable_pihole: "{{ cold_start_stage_3_install_applications | bool and manual_install_pihole | bool }}"
-enable_prometheus: "{{ cold_start_stage_3_install_applications | bool and manual_install_prometheus | bool }}"
 enable_openwebui: "{{ cold_start_stage_3_install_applications | bool and manual_install_openwebui | bool }}"
 enable_n8n: "{{ cold_start_stage_3_install_applications | bool and manual_install_n8n | bool }}"
-enable_plex: "{{ cold_start_stage_3_install_applications | bool and manual_install_plex | bool }}"
+enable_nextcloud: "{{ cold_start_stage_3_install_applications | bool and manual_install_nextcloud | bool }}"
+enable_jellyfin: "{{ cold_start_stage_3_install_applications | bool and manual_install_jellyfin | bool }}"

@@ -390,7 +390,6 @@
     - "n8n-certificate.yml"
     - "openwebui-certificate.yml"
     - "nextcloud-certificate.yml"
-    - "plexmediaserver-certificate.yml"
     - "jellyfin-certificate.yml"
     - "pihole-certificate.yml"
   run_once: true
@@ -408,7 +407,6 @@
     - "n8n-certificate.yml"
     - "openwebui-certificate.yml"
     - "nextcloud-certificate.yml"
-    - "plexmediaserver-certificate.yml"
     - "jellyfin-certificate.yml"
     - "pihole-certificate.yml"
   run_once: true
@@ -425,7 +423,6 @@
     - "n8n-certificate.yml"
     - "openwebui-certificate.yml"
     - "nextcloud-certificate.yml"
-    - "plexmediaserver-certificate.yml"
     - "jellyfin-certificate.yml"
     - "pihole-certificate.yml"
   run_once: true
