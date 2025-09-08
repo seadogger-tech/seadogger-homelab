@@ -4,6 +4,9 @@
 
 The cluster's storage is managed by Rook-Ceph, providing both block and filesystem storage. The architecture is designed for a balance of performance, data redundancy, and storage efficiency.
 
+![ceph-dashboard](images/ceph-dashboard.png)
+
+
 ![accent-divider.svg](images/accent-divider.svg)
 ### CEPH Block Storage
 -   **Pool:** `ceph-block-data` (Replicated, size 3)

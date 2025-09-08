@@ -4,6 +4,8 @@
 
 This document outlines the structured test plan for validating the new idempotent Ansible deployment (`main.yml`) and granular cleanup (`cleanup.yml`) playbooks. The tests will be performed incrementally on an existing, fully deployed cluster.
 
+![argo-dashboard](images/argo-dashboard.png)
+
 ![accent-divider.svg](images/accent-divider.svg)
 ## Test Plan
 
