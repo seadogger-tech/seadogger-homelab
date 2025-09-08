@@ -1,12 +1,14 @@
-# Prometheus Stack Deployment Verification
+![wiki-banner.svg](images/wiki-banner.svg)
+# Monitoring with Prometheus, Alertmanager, Grafana
 
-## Date: 2025-08-15
-
-## Overview
 The Prometheus monitoring stack has been successfully deployed and verified in the k3s cluster. The deployment includes Prometheus, Grafana, and Alertmanager, all accessible via LoadBalancer services.
 
+![](images/Grafana-Dashboard.png)
+
+![accent-divider](images/accent-divider.svg)
 ## Components
 
+![accent-divider](images/accent-divider.svg)
 ### Core Services
 1. Prometheus
    - LoadBalancer IP: 192.168.1.244:9090
@@ -23,14 +25,17 @@ The Prometheus monitoring stack has been successfully deployed and verified in t
    - 3 replicas for high availability
    - Web interface accessible
 
+![accent-divider](images/accent-divider.svg)
 ### Supporting Components
 - node-exporter: Running on all nodes
 - kube-state-metrics: Collecting cluster metrics
 - blackbox-exporter: For external service monitoring
 - prometheus-adapter: For custom metrics API
 
+![accent-divider](images/accent-divider.svg)
 ## Network Configuration
 
+![accent-divider](images/accent-divider.svg)
 ### Network Policies
 Custom network policies have been implemented to allow external access while maintaining security:
 ```yaml
@@ -53,15 +58,18 @@ spec:
 # Similar policies for Grafana (3000) and Alertmanager (9093)
 ```
 
+![accent-divider](images/accent-divider.svg)
 ### LoadBalancer Services
 Services are configured with static IPs through MetalLB:
 - Prometheus: 192.168.1.244
 - Grafana: 192.168.1.245
 - Alertmanager: 192.168.1.246
 
+![accent-divider](images/accent-divider.svg)
 ## Deployment Method
 The stack is deployed through ArgoCD using the kube-prometheus manifests, with additional customization for LoadBalancer services and network policies managed through our Ansible playbook.
 
+![accent-divider](images/accent-divider.svg)
 ## Verification Steps
 1. All pods running successfully in monitoring namespace
 2. LoadBalancer services assigned correct IPs
@@ -71,12 +79,15 @@ The stack is deployed through ArgoCD using the kube-prometheus manifests, with a
    - Grafana login page reachable
    - Alertmanager interface working
 
-## Known Issues
-During deployment, we encountered and resolved:
-1. Namespace deletion issues due to problematic metrics.k8s.io/v1beta1 APIService
-2. Initial network policy restrictions blocking external access
-
+![accent-divider](images/accent-divider.svg)
 ## Next Steps
 1. Configure Grafana dashboards
 2. Set up alerting rules in Prometheus
 3. Configure external service monitoring through blackbox-exporter
+
+![accent-divider](images/accent-divider.svg)
+## Other Monitoring Tools
+
+### btop
+![btop-Dashboard.png](images/btop-Dashboard.png)
+

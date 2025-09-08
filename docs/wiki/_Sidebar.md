@@ -1,6 +1,5 @@
-
+![wiki-banner.svg](images/wiki-banner.svg)
 ## 🧭 Essentials
-- [[Home]]
 - [[01-Overview]]
 - [[02-Architecture]]
 
@@ -17,13 +16,9 @@
 
 ## 📊 Ops
 - [[10-Benchmarking]]
-- [[11-Runbooks]]
+- [[11-Monitoring]]
 - [[12-Troubleshooting]]
 
 ## 🧠 Knowledge
 - [[13-ADR-Index]]
-- [[14-Memory-Bank-Index]]
-- [[15-Chronology-Logs]]
-- [[16-Design-Deep-Dives]]
-- [[Images-Index]]
-- [[Glossary]]
+- [[14-Design-Deep-Dives]]

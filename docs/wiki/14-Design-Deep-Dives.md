@@ -1,3 +1,8 @@
+![wiki-banner.svg](images/wiki-banner.svg)
+![accent-divider](images/accent-divider.svg)
+# Design Deep Dives
+
+![accent-divider](images/accent-divider.svg)
 # Rook-Ceph CephFS with Erasure Coding Lessons
 
 ## Issue
@@ -98,3 +103,4 @@ cephFileSystems:
 2. Consider adding health checks for MDS state
 3. Document EC pool requirements in deployment guide
 4. Add validation steps for EC configuration
+
