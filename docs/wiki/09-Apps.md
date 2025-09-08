@@ -23,6 +23,16 @@ User facing applications that are applied thru ArgoCD on top of the k3s tech sta
 </p>
 
 ![accent-divider](images/accent-divider.svg)
+## AWS Bedrock Access Gateway: **Website/Repo:** [https://github.com/aws-samples/bedrock-access-gateway](https://github.com/aws-samples/bedrock-access-gateway)
+- Open-source gateway that exposes **OpenAI-compatible REST APIs** for **Amazon Bedrock**.
+- Lets existing OpenAI SDKs/tools (e.g., OpenAI Python/JS, LangChain-OpenAI, AutoGen) work with Bedrock **without code changes**.
+- Supports **SSE streaming**, **Chat Completions**, **Embeddings**, **Tool/function calling**, **Multimodal**, **Models API**, **Cross-region inference**, and **Application Inference Profiles**.
+- **Easy deployment:** 1-click CloudFormation to **ALB + Lambda** or **ALB + Fargate**; also runs **locally** or in **containers/Kubernetes**.
+- Regions & models: follows **Bedrock-supported regions**; use the **Models API** to discover availability.
+![Bedrock](images/bedrock.png)
+
+
+![accent-divider](images/accent-divider.svg)
 ## NextCloud: **Website:** [https://nextcloud.com](https://nextcloud.com)
 - Open-source, self-hosted content-collaboration and file-sync platform.
 - Files & sharing, Office (collaborative editing), Calendar, Contacts, Talk (chat/video).
