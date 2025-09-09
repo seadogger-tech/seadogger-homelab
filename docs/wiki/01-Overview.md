@@ -4,6 +4,8 @@
 
 The primary goal of this project is to create a robust and well-documented guide for deploying a Kubernetes (k3s) cluster on a set of Raspberry Pi 5 nodes. The deployment should be automated using Ansible and manage applications via ArgoCD, following GitOps best practices.
 
+![accent-divider.svg](images/tech-stack.png)
+
 ![accent-divider.svg](images/accent-divider.svg)
 # Problem Statement
 

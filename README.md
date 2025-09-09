@@ -2,6 +2,8 @@
 
 The primary goal of this project is to create a robust and well-documented guide for deploying a Kubernetes (k3s) cluster on a set of Raspberry Pi 5 nodes. The deployment should be automated using Ansible and manage applications via ArgoCD, following GitOps best practices.
 
+![alt text](docs/wiki/images/tech-stack.png)
+
 ## Problem Statement
 
 Setting up a personal homelab, especially a Kubernetes cluster on Raspberry Pi hardware, can be a complex and error-prone process. Many guides are incomplete, outdated, or lack the automation needed for a reliable and maintainable setup. This project aims to solve that by providing a comprehensive, automated, and well-documented solution.
@@ -70,6 +72,7 @@ The project is current fully functional as of 09-07-2025. The core infrastructur
 *   **Node Configuration:** The control plane and worker nodes are configured and managed by Ansible.
 *   **Storage System:** Rook-Ceph is deployed and providing distributed storage with both erasure-coded and replicated pools.
 *   **Network Configuration:** MetalLB and Traefik are functioning, providing load balancing and ingress for deployed services.
+*   **Ingress PKI:** Enable Traefik to terminate TLS at ingress point with self signed cert authority within the cluster.
 *   **GitOps:** ArgoCD is successfully managing the deployment of most applications.
 *   **Monitoring Stack:** The Prometheus and Grafana deployments are stable.
 *   **User Apps & Services:** PiHole, OpenWebUI, Bedrock Access Gateway, N8N, JellyFin, and Nextcloud are deployed and operational.
@@ -103,7 +106,6 @@ The project is current fully functional as of 09-07-2025. The core infrastructur
   - Reserve IPs up to 192.168.1.239
   - Leaves space for MetalLB allocation above this range
   - NOTE - If you are using a different subnet, there is a lot of changes to apply throughout the deployment scripts.  
-  `TODO: centralize the subnet in the ansible manifest config.yaml`
 - WireGuard (optional)
   - Required only for remote access
   - Provides encrypted tunnels for services like OpenWebUI, PiHole when you are not on your network
@@ -121,7 +123,6 @@ The project is current fully functional as of 09-07-2025. The core infrastructur
 ### Technologies
 - [Kubernetes (k3s)](https://docs.k3s.io/architecture) architecture and deployment
 - [kubectl](https://kubernetes.io/docs/reference/kubectl/) for cluster management
-- [Deploying Plex on Kubernetes](https://www.debontonline.com/2021/01/part-14-deploy-plexserver-yaml-with.html)
 
 ## Author
 The repository was forked from [Jeff Geerling](https://www.jeffgeerling.com)'s Pi-Cluster project and was modified by [seadogger]().
