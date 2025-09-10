@@ -142,7 +142,6 @@ The project is current fully functional as of 09-07-2025. The core infrastructur
 ## Technologies
 - [Kubernetes (k3s)](https://docs.k3s.io/architecture) architecture and deployment
 - [kubectl](https://kubernetes.io/docs/reference/kubectl/) for cluster management
-- [Deploying Plex on Kubernetes](https://www.debontonline.com/2021/01/part-14-deploy-plexserver-yaml-with.html)
 
 ![accent-divider.svg](images/accent-divider.svg)
 # Author
