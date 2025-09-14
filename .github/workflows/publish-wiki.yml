@@ -1,4 +1,5 @@
 name: Publish Wiki (Default branch only)
+
 on:
   push:
   workflow_dispatch:
@@ -9,16 +10,27 @@ on:
         default: 'false'
 
 concurrency:
-  group: wiki-publish-${{ github.ref }}
+  group: wiki-publish-${{ github.repository }}-${{ github.ref_name }}
   cancel-in-progress: true
+
+permissions:
+  contents: read  # we push to a separate wiki repo via PAT
 
 jobs:
   publish-wiki:
-    # only run when the push is to the repo's default branch
-    if: github.ref_name == github.event.repository.default_branch && github.repository == 'seadogger/seadogger-homelab'
+    # Only run on default branch in the intended repo
+    if: github.ref_name == github.event.repository.default_branch && github.repository == 'seadogger-tech/seadogger-homelab'
     runs-on: ubuntu-latest
+
+    env:
+      # Prevent interactive git prompts in CI
+      GIT_TERMINAL_PROMPT: '0'
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository (no default creds)
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       # Run the generator ONLY when you manually dispatch with autogen=true
       - name: Setup Python (manual autogen only)
@@ -31,18 +43,24 @@ jobs:
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.autogen == 'true' }}
         run: python docs/wiki/tools/build_all.py
 
-      - name: Clone wiki
-        run: git clone "https://oauth2:${{ secrets.WIKI_TOKEN }}@github.com/seadogger/seadogger-homelab.wiki.git" wiki
+      - name: Clone wiki (via fine-grained PAT)
+        run: |
+          git clone "https://oauth2:${{ secrets.WIKI_TOKEN }}@github.com/seadogger-tech/seadogger-homelab.wiki.git" wiki
 
       - name: Sync wiki (markdown + memory_bank + images)
-        run: rsync -a --delete --exclude '.git/' docs/wiki/ wiki/
+        run: |
+          rsync -a --delete --exclude '.git/' docs/wiki/ wiki/
 
       - name: Commit & push (to wiki repo)
         working-directory: wiki
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.name "SeaDogger Wiki Bot"
+          git config user.email "wiki-bot@users.noreply.github.com"
           git remote -v
-          git add -A
-          git commit -m "Publish wiki (autogen=${{ github.event_name == 'workflow_dispatch' && inputs.autogen == 'true' }})" || true
-          git push
+          if [ -n "$(git status --porcelain)" ]; then
+            git add -A
+            git commit -m "Publish wiki (autogen=${{ github.event_name == 'workflow_dispatch' && inputs.autogen == 'true' }})"
+            git push origin HEAD:main || git push origin HEAD:master
+          else
+            echo "No changes to publish."
+          fi
