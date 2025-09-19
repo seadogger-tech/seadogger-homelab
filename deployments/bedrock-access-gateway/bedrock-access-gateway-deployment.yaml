@@ -17,7 +17,7 @@ spec:
         - name: aws-secret-access-key
       containers:
         - name: bedrock-access-gateway
-          image: dayaengineering/bedrock-access-gateway:20241211115329
+          image: ghcr.io/seadogger/aws-bedrock-gateway:0.1.0
           imagePullPolicy: Always
           ports:
             - containerPort: 80
