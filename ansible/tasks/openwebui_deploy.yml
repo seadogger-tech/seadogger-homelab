@@ -18,9 +18,9 @@
       spec:
         project: default
         source:
-          repoURL: https://open-webui.github.io/helm-charts
+          repoURL: https://open.io/helm-charts-webui.github
           chart: open-webui
-          targetRevision: "7.6.0"
+          targetRevision: "8.6.0"
           helm:
               valueFiles:
                 - https://raw.githubusercontent.com/seadogger/seadogger-homelab/master/deployments/openwebui/openwebui-values.yaml
