@@ -28,3 +28,7 @@ ingress:
 #     username: n8n
 #     password: n8npass
 #     database: n8n
+
+extraEnvVars:
+  - name: WEBHOOK_URL
+    value: "https://n8n.seadogger-homelab"
