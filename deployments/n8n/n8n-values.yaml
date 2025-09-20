@@ -10,8 +10,8 @@ main:
     storageClass: ceph-block-data
     size: 50Gi
 
-  extraEnvVars:
-    WEBHOOK_URL: "https://n8n.seadogger-homelab"
+#  extraEnvVars:
+#    WEBHOOK_URL: "https://n8n.seadogger-homelab"
 
 ingress:
   enabled: false
