@@ -10,8 +10,12 @@ main:
     storageClass: ceph-block-data
     size: 50Gi
 
-#  extraEnvVars:
+  extraEnvVars:
 #    WEBHOOK_URL: "https://n8n.seadogger-homelab"
+
+    #. access to n8n will be routed to https.  this will only work this way when setting up the 
+    #   localhost tunnel to perform the initial Oauth2 handshake
+    N8N_SECURE_COOKIE: "false" 
 
 ingress:
   enabled: false
