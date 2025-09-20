@@ -86,12 +86,13 @@ The project is current fully functional as of 09-07-2025. The core infrastructur
 *   **GitOps:** ArgoCD is successfully managing the deployment of most applications.
 *   **Monitoring Stack:** The Prometheus and Grafana deployments are stable.
 *   **User Apps & Services:** PiHole, OpenWebUI, Bedrock Access Gateway, N8N, JellyFin, and Nextcloud are deployed and operational.
+*   **Portal (Pro):** Single pane of glass to access applications and monitor tech stack.
 
 ![accent-divider.svg](images/accent-divider.svg)
 ## What's Left to Build
 
-*   **Portal:** Single pane of glass to access applications and monitor tech stack.  Everything is a separate dashboard (functional but not ideal)
-*   **Single Sign On Integration:** Enable single sign on thru Keycloak.
+
+*   **Single Sign On Integration (Pro):** Enable single sign on thru Keycloak.
 
 ![accent-divider.svg](images/accent-divider.svg)
 ## Known Issues
@@ -107,7 +108,7 @@ The project is current fully functional as of 09-07-2025. The core infrastructur
 - Raspberry Pi5 nodes (1 server node and 3 worker nodes)
 - POE switch (recommended: Ubiquiti Dream @Machine SE)
   - Powers Raspberry Pis via POE HAT
-  - Simplifies the wiring and setup, but not totally neccessary.  
+  - Simplifies the wiring and setup, but not totally necessary.  
   - **If you do not use POE, adjust the BoM (e.g. rack mounted solution will be different, likely)**
 - Ethernet cables for hardwired connections
   - WiFi is disabled and not recommended for k3s clusters
@@ -120,8 +121,7 @@ The project is current fully functional as of 09-07-2025. The core infrastructur
 - DHCP service range configuration
   - Reserve IPs up to 192.168.1.239
   - Leaves space for MetalLB allocation above this range
-  - NOTE - If you are using a different subnet, there is a lot of changes to apply throughout the deployment scripts.  
-  `TODO: centralize the subnet in the ansible manifest config.yaml`
+  - If you use a different subnet, set the network variables in `ansible/config.yml` (`ipv4_subnet_prefix`, `ipv4_gateway`, `dns4_servers`) and update MetalLB `IPAddressPool` and VIPs to match.
 - WireGuard (optional)
   - Required only for remote access
   - Provides encrypted tunnels for services like OpenWebUI, PiHole when you are not on your network
@@ -145,4 +145,4 @@ The project is current fully functional as of 09-07-2025. The core infrastructur
 
 ![accent-divider.svg](images/accent-divider.svg)
 # Author
-The repository was forked from [Jeff Geerling](https://www.jeffgeerling.com)'s Pi-Cluster project and was modified by [seadogger]().
+The repository was forked from [Jeff Geerling](https://www.jeffgeerling.com)'s Pi-Cluster project and was modified by [seadogger-tech](https://github.com/seadogger-tech).

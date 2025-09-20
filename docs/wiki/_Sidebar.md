@@ -13,11 +13,14 @@
 - [[07-Networking-and-Ingress]]
 - [[08-Security-and-Certificates]]
 - [[09-Apps]]
+- [[16-Pro-Overlays-and-SSO]]
 
 ## 📊 Ops
 - [[10-Benchmarking]]
 - [[11-Monitoring]]
 - [[12-Troubleshooting]]
+- [[15-CI-CD-and-GitHub-Actions]]
+- [[17-Runbooks]]
 
 ## 🧠 Knowledge
 - [[13-ADR-Index]]

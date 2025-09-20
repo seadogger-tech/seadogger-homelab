@@ -1,200 +1,97 @@
 ![wiki-banner.svg](images/wiki-banner.svg)
 # Bootstrap & Cold Start (IaC)
 
-## Raspberry Pi 5 Setup
+A streamlined, playbook-aligned path to stand up (or reset) the cluster.
 
-### POE HAT and Drive install
+![accent-divider.svg](images/accent-divider.svg)
+## Pre‑flight (once per environment)
+1) Controller setup
+- Install Ansible on your admin machine
+- Clone this repo and enter `core/ansible`
 
-Install POE HAT with NVMe PCIe adapter on all Raspberry Pi 5s
+2) Inventory and config
+- Copy `example.hosts.ini` → `hosts.ini` and set `control_plane` + `nodes` (yoda/anakin/obiwan/rey)
+- Copy `example.config.yml` → `config.yml`
+- Set network keys: `ipv4_subnet_prefix`, `ipv4_gateway`, `dns4_servers`
+- Choose deployment stages and `manual_install_*` flags as needed
 
-![Hardware Build](images/Single-Node-Mounted-2.jpeg) 
+3) SSH access
+- Ensure passwordless SSH to all nodes
+  ```
+  ssh-copy-id pi@node[X].local
+  ansible all -m ping
+  ```
 
-> **Note**: The BoM includes nylon standoffs.  The solution I found uses an 11mm male standoff with a 2mm nut on the male standoff and a 2mm nylon nut on top with a nylon screw thru to the top nut and into the standoff.  This gives you about 15.5mm of total height between the Pi and the POE HAT.  Less than that and it will not fit over the USB ports.  More than that and the POE transformer hits the top of the rack
+4) Optional — NVMe boot prep on Raspberry Pi 5
+- Hardware mount NVMe (POE HAT w/ PCIe); see photos in [[03-Hardware-and-Network]].
+- On each node, run the appropriate script from `seadogger-homelab/useful-scripts`:
+  - `partition_and_boot_NVMe_master_node.sh` (control plane)
+  - `partition_and_boot_NVMe_worker_node.sh` (workers)
+- Set boot order to NVMe in `raspi-config` and verify with `lsblk`.
+- Rook‑Ceph expects the data partition unformatted; the scripts leave it blank for Rook to claim.
 
-![Hardware Build](images/Rack-Mounted-Pi5-Nodes.jpeg)
+![accent-divider.svg](images/accent-divider.svg)
+## Stage 2 — Install Infrastructure (`main.yml`)
+Enable in `ansible/config.yml`: `cold_start_stage_2_install_infrastructure: true`
 
-### NVMe Drive list recommendations
-
-> **Note**: I have not tested all the drives from this list.   The NVMe drives in the latest BoM do work with the HAT and Pi5 
-
-> **Note**:  [This](https://www.amazon.com/gp/product/B08DTP8LG8/ref=ewc_pr_img_1?smid=A2CP9SZGVW0PFE&th=1) NVMe drive has been tested and does not work. **DO NOT BUY this one!**
-
-![NVME Drive List](images/SSD-Compatibility.png)
-
-### [Raspberry Pi Setup](https://youtu.be/x9ceI0_r_Kg)
-
-This setup assumes a Raspberry Pi5 64 bit OS Lite (no desktop) will be setup in a k3s cluster with a single server node and 3 worker nodes with 4TB in each worker node. 
-
-The approach taken to get to here included flashing the Raspberry Pi OS (64-bit, lite) to the storage devices using Raspberry Pi Imager onto a 64GB sdCard.  This was then installed into each Pi and transferred to the NVMe in the previous section.  This should be successful before proceeding into this step.
-
-To make network discovery and integration easier, I edit the advanced configuration in Imager, and set the following options:
-
-  - Set hostname: `node1.local` (set to `2` for node 2, `3` for node 3, etc.)
-  - Enable SSH
-  - Disable WiFi
-
-After setting all those options, and the hostname is unique to each node (and matches what is in `hosts.ini`), I inserted the microSD cards into the respective Pis, or installed the NVMe SSDs into the correct slots, and booted the cluster.
-
-### Get Remote PC ready for Ansible Deployment 
-Clone the Ansible tasks to your remote PC to that will manage the k3s cluster
-   ```bash
-   git clone https://github.com/seadogger/seadogger-homelab.git
-   ```
-
-### SSH connection test
-
-To test the SSH connection from the host or PC you intend to run Ansible from, connect to each server individually, and accepted the hostkey.  This must be done for all nodes so password is not requested by the nodes during the Ansible playbook run:
-
+Run:
 ```
-ssh-copy-id pi@node[X].local
-ssh pi@192.168.1.[X]
-ssh pi@node[X].local
+ansible-playbook main.yml
 ```
 
-This ensures Ansible will also be able to connect via SSH in the following steps. You can test Ansible's connection with:
+What this runs (mapped to task files):
+- Raspberry Pi tuning (cgroups, kernel modules, PCIe) — `raspberry_pi_config.yml`
+- Firmware update — `raspberry_pi_config.yml`
+- k3s control plane — `k3s_control_plane.yml`
+- k3s workers — `k3s_workers.yml`
+- MetalLB (native) — `metallb_native_deploy.yml`
+- Rook‑Ceph Part 1 (operators/CRDs) — `rook_ceph_deploy_part1.yml`
+- ArgoCD (native) — `argocd_native_deploy.yml`
+- Internal PKI (cert-manager, Root/Intermediate, ClusterIssuer, per‑app certs) — `internal_pki_deploy.yml`
 
+![accent-divider.svg](images/accent-divider.svg)
+## Stage 3 — Deploy Applications (via ArgoCD)
+Enable in `ansible/config.yml`: `cold_start_stage_3_install_applications: true` and the specific `manual_install_*` flags.
+
+Run:
 ```
-ansible all -m ping
-```
-
-It should respond with a 'SUCCESS' message for each node.
-
-### NVMe Boot and 4TB NVMe Drive Setup  
-
-This guide will help you set up and use a **4TB NVMe drive** on a **Raspberry Pi 5**. This process involves partitioning, formatting, cloning partitions, updating `/etc/fstab`, and troubleshooting common issues.
-
-`rpi-clone` seems to reset the partition table to MBR vs. GPT so we lose storage space as MBR is confined to 2TB.  These scripts are very specific the hardware stack choosen in the BoM for partition setup and reformats these partitions and you will lose any data on them.  **Use at your own risk!**
-
-I am using a 64GB sdCard and transitioning the `/boot` and `/` mounts to a `4TB NVMe` using the `52Pi POE w/PCIe HAT`.  This will partition the NVMe just slightly larger than the partitions on the sdCard so the rsync transfers complete without error but we do not waste a ton of space.  
-
-> **Note**: All the sector definitions are based on this size sdCard for gdisk.  If you are using a smaller or larger sdCard you will need to modify the partition tables settings in these scripts.  
-
-#### Prepare the 512GB NVMe Drive (Master Node)
-```bash
-   git clone https://github.com/seadogger/seadogger-homelab.git
-   cd seadogger-homelab/useful-scripts
-   sudo ./partition_and_boot_NVMe_master_node.sh
+ansible-playbook main.yml
 ```
 
-#### Prepare the 4TB NVMe Drive (Worker / Storage Node)
-```bash
-   git clone https://github.com/seadogger/seadogger-homelab.git
-   cd seadogger-homelab/useful-scripts
-   sudo ./partition_and_boot_NVMe_worker_node.sh
+Applications (examples):
+- Pi-hole — `pihole_deploy.yml`
+- Prometheus/Grafana/Alertmanager — `prometheus_deploy.yml`
+- OpenWebUI — `openwebui_deploy.yml`
+- n8n — `n8n-deploy.yml`
+- Jellyfin — `jellyfin_deploy.yml`
+- Nextcloud — `nextcloud_deploy.yml`
+
+> ArgoCD reconciles the app state from `core/deployments/**`. Ingress hosts use `*.seadogger-homelab`; TLS keys are issued by `internal-local-issuer` into `*-local-tls` secrets.
+
+![accent-divider.svg](images/accent-divider.svg)
+## Stage 1 — Optional Wipe (`cleanup.yml`) [Destructive]
+Enable in `ansible/config.yml`: `cold_start_stage_1_wipe_cluster: true`
+
+Run:
 ```
-> **Note**:  Rook does not want formatted partitions which is different than Longhorn so the Partitioning and Cloning script leaves the 3rd partition completely alone and unformatted.
+ansible-playbook cleanup.yml
+```
 
-> **Note**: Rook and Ceph are more enterprise ready and enables future growth into LakeFS
+What it does (in order):
+- Gracefully removes applications (respects `run_pod_cleanup` and `pod_cleanup_list` with `delete_pvc` options) — `cleanup_pod_item.yml`
+- Removes infrastructure (MetalLB, ArgoCD, Prometheus, Rook‑Ceph) when enabled — `cleanup_infrastructure.yml`
+- Wipes k3s and cluster artifacts — `wipe_k3s_cluster.yml`
+- Optional physical disk wipe when `perform_physical_disk_wipe: true` (DANGER: data loss)
 
+This separation prevents accidental wipes; installation never performs destructive actions.
 
+![accent-divider.svg](images/accent-divider.svg)
+## Notes
+- NVMe partition maps (for reference):
+  ![Partition Info](images/Partition-Map-NVMe.png)
+  ![Partition Info](images/Partition-Map-NVMe-worker.png)
 
-### Script Summary
-
-1. Partition the NVMe drive using GPT.
-2. Format partitions (`vfat` for EFI, `ext4` for root).
-3. Clone partitions from the SD card using `rsync`.
-4. Update `/etc/fstab`, `/boot/firmware/config.txt`, and `/boot/firmware/cmdline.txt`
-5. Cloning the sdCard to the NVMe partition structure
-6. Running disk checks on the NVMe `e2fsck` and `fsck.vfat`
-7. Reload systemd daemon.
-8. A few manual steps after the script runs to get everything ready (Change boot order, shutdown and reboot)
-
-> **Note**: Before you reboot after the above you need to setup for NVMe to boot first in the boot order
-- Set the NVMe first in the boot order 
-    ```bash
-     sudo raspi-config
-    ``` 
-Under advanced options set the boot order to boot the NVMe first.  
-> **Note**: When prompted to reboot **`decline`.  We will reboot in the next step.**
-
-- Shutdown:
-   ```bash
-   sudo shutdown now
-   ```
-- Pull the sdCard out and reboot
-
-- Verify partitions are correctly mounted:
-   ```bash
-   lsblk -o NAME,SIZE,FSTYPE,MOUNTPOINT
-   ```
-#### Master Node
-![Partition Info](images/Partition-Map-NVMe.png)
-
-#### Worker / Storage Nodes
-![Partition Info](images/Partition-Map-NVMe-worker.png)
-
-## Raspberry Pi Cluster Mangement with Ansible
-
-### Usage
-
-  1. Make sure [Ansible](https://docs.ansible.com/ansible/latest/installation_guide/intro_installation.html) is installed on your remote PC (in my case it is a Macbook Air and is attached on the same subnet as my cluster).
-  
-  2. Copy the `example.hosts.ini` inventory file to `hosts.ini`. Make sure it has the `control_plane` and `node`(s) configured correctly.
-  
-  3. Copy the `example.config.yml` file to `config.yml`, and modify the variables to your setup.
-
-
-### Cluster configuration, K3s, App deployment
-
-**This is where the magic of Ansible and ArgoCD take over**
-
-
-### Cold Start Procedure
-
-A full, destructive "cold start" of the cluster can be performed to validate the IaaC configuration. This process has been significantly refactored for safety and clarity.
-
-The new workflow is a deliberate, two-playbook process:
-
-1.  **Teardown (`cleanup.yml`)**: This playbook is the single entry point for all destructive operations.
-    -   To perform a full cold start, edit `ansible/config.yml` and set `cold_start_stage_1_wipe_cluster: true`.
-    -   Run the command: `ansible-playbook cleanup.yml`.
-    -   This will gracefully tear down all applications and infrastructure in the correct order before wiping the k3s installation from all nodes.
-    -   For an even deeper clean that includes wiping the Ceph storage partition, also set `perform_physical_disk_wipe: true`. **Warning:** This is a data-loss operation.
-    -   Application and Service Cleanup: This stage iterates through the `pod_cleanup_list` in `config.yml` and gracefully removes each application.
-    -   Core Infrastructure Cleanup: This stage removes the core infrastructure components (Prometheus, ArgoCD, MetalLB, and Rook-Ceph) in the correct order.
-    -   Cluster Wipe: This stage performs a full, destructive wipe of the k3s cluster.
-
-
-2.  **Installation (`main.yml`)**: This playbook is now solely responsible for installation and upgrades.
-    -   To install the cluster, edit `ansible/config.yml` and set `cold_start_stage_2_install_infrastructure: true` and `cold_start_stage_3_install_applications: true`.
-    -   Run the command:.
-        ```
-        ansible-playbook main.yml
-        ```
-
-        See the detailed instructions within `ansible/config.yml` for usage patterns.
-
-        - Updates apt package cache
-        - Configures cgroups are configured correctly in cmdline.txt.
-        - Installs necessary packages
-        - Enables and starts iscsid service
-        - Configures PCIe settings exist in config.txt
-        - Loads dm_crypt kernel module
-        - Loads rbd kernel module
-        - Appends dm_crypt and rbd to /etc/modules
-        - Updates Raspberry Pi firmware to rpi-6.6.y
-        - Setup/deploy k3s to the control_plane (e.g. server node)
-        - Setup/deploy k3s to the worker node(s)
-
-        `NOTE - if you get an error about cgroups you should perform a reboot and run the ansible script again` 
-
-        - Deploy MetalLB
-        - Deploy Ceph-Rook separately between these deployments
-        - Deploy ArgoCD for GitOps
-
-        - Deploy PODs/Apps thru ArgoCD  
-
-            - MetalLB
-            - AWS Bedrock
-            - PiHole
-            - Prometheus and Grafana
-            - OpenWeb UI
-            - JellyFin
-            - N8N
-
-        > **Note**: Applications are deployed declaratively through ArgoCD, ensuring GitOps best practices
-
-This two-step process prevents accidental cluster wipes and ensures a clear separation between build and destroy operations. For more granular cleanup options, see the detailed instructions in `ansible/config.yml`.
+<!-- Planning/retrospective content moved to deep dives/ADRs to keep this page task-focused. -->
 
 
 

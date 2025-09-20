@@ -5,7 +5,7 @@
 ![accent-divider.svg](images/accent-divider.svg)
 # Internal PKI and HTTPS Data Flow Architecture
 
-This document outlines the definitive architecture for issuing and using TLS certificates for all internal services within the Kubernetes cluster. It follows the best practice of using a dedicated **Intermediate Certificate Authority (CA)** to sign service certificates, keeping the Root CA offline and secure. All internal services will use the `.local` top-level domain.
+This document outlines the definitive architecture for issuing and using TLS certificates for all internal services within the Kubernetes cluster. It follows the best practice of using a dedicated **Intermediate Certificate Authority (CA)** to sign service certificates, keeping the Root CA offline and secure. All internal services use the `*.seadogger-homelab` internal domain.
 
 ![accent-divider.svg](images/accent-divider.svg)
 ### 1. The CA Hierarchy and Full Service List
@@ -15,9 +15,9 @@ A two-tier trust chain will be established. The Intermediate CA will sign leaf c
 ```mermaid
 graph TD
     A["Root CA<br>(Offline, Highly Secure)"] --> B{"Intermediate CA<br>(Online, in k8s Secret)"};
-    B --> prometheus["prometheus.local<br>192.168.1.244"];
-    B --> grafana["grafana.local<br>192.168.1.245"];
-    B --> alertmanager["alertmanager.local<br>192.168.1.246"];
+    B --> prometheus["prometheus.seadogger-homelab<br>192.168.1.244"];
+    B --> grafana["grafana.seadogger-homelab<br>192.168.1.245"];
+    B --> alertmanager["alertmanager.seadogger-homelab<br>192.168.1.246"];
     B --> openwebui["openwebui.seadogger-homelab"];
     B --> argocd["argocd.seadogger-homelab"];
     B --> ceph["ceph.seadogger-homelab"];
@@ -104,47 +104,47 @@ sequenceDiagram
     participant CI as ClusterIssuer(internal-local-issuer)
     participant ING as Ingress (Traefik)
 
-    Note over CM,ING: Process is triggered by Ingress annotations for all .local services.
+    Note over CM,ING: Process is triggered by Ingress annotations for all *.seadogger-homelab services.
 
-    CM->>CI: Request sign(openwebui.local)
-    CI-->>CM: Cert for openwebui.local
+    CM->>CI: Request sign(openwebui.seadogger-homelab)
+    CI-->>CM: Cert for openwebui.seadogger-homelab
     CM->>ING: Store cert in secret 'openwebui-local-tls'
 
-    CM->>CI: Request sign(prometheus.local)
-    CI-->>CM: Cert for prometheus.local
+    CM->>CI: Request sign(prometheus.seadogger-homelab)
+    CI-->>CM: Cert for prometheus.seadogger-homelab
     CM->>ING: Store cert in secret 'prometheus-local-tls'
 
-    CM->>CI: Request sign(grafana.local)
-    CI-->>CM: Cert for grafana.local
+    CM->>CI: Request sign(grafana.seadogger-homelab)
+    CI-->>CM: Cert for grafana.seadogger-homelab
     CM->>ING: Store cert in secret 'grafana-local-tls'
 
-    CM->>CI: Request sign(alertmanager.local)
-    CI-->>CM: Cert for alertmanager.local
+    CM->>CI: Request sign(alertmanager.seadogger-homelab)
+    CI-->>CM: Cert for alertmanager.seadogger-homelab
     CM->>ING: Store cert in secret 'alertmanager-local-tls'
 
-    CM->>CI: Request sign(argocd.local)
-    CI-->>CM: Cert for argocd.local
+    CM->>CI: Request sign(argocd.seadogger-homelab)
+    CI-->>CM: Cert for argocd.seadogger-homelab
     CM->>ING: Store cert in secret 'argocd-local-tls'
 
-    CM->>CI: Request sign(ceph.local)
-    CI-->>CM: Cert for ceph.local
+    CM->>CI: Request sign(ceph.seadogger-homelab)
+    CI-->>CM: Cert for ceph.seadogger-homelab
     CM->>ING: Store cert in secret 'ceph-local-tls'
 
-    CM->>CI: Request sign(pihole.local)
-    CI-->>CM: Cert for pihole.local
+    CM->>CI: Request sign(pihole.seadogger-homelab)
+    CI-->>CM: Cert for pihole.seadogger-homelab
     CM->>ING: Store cert in secret 'pihole-local-tls'
 
-    CM->>CI: Request sign(plex.local)
-    CI-->>CM: Cert for plex.local
-    CM->>ING: Store cert in secret 'plex-local-tls'
+    CM->>CI: Request sign(jellyfin.seadogger-homelab)
+    CI-->>CM: Cert for jellyfin.seadogger-homelab
+    CM->>ING: Store cert in secret 'jellyfin-local-tls'
 
-    CM->>CI: Request sign(n8n.local)
-    CI-->>CM: Cert for n8n.local
+    CM->>CI: Request sign(n8n.seadogger-homelab)
+    CI-->>CM: Cert for n8n.seadogger-homelab
     CM->>ING: Store cert in secret 'n8n-local-tls'
 ```
 
 ![accent-divider.svg](images/accent-divider.svg)
-### 4. HTTPS Request Path (Example: `plex.local`)
+### 4. HTTPS Request Path (Example: `jellyfin.seadogger-homelab`)
 
 This flow is identical for all services. The user's browser connects to the single Traefik VIP, which then routes the request to the correct internal service IP.
 
@@ -158,12 +158,12 @@ sequenceDiagram
     participant KS as Secret (jellyfin-local-tls)
     participant POD as JellyFin Pod (at jellyfin.seadogger-homelab)
 
-    U->>DNS: Resolve plex.local
+    U->>DNS: Resolve jellyfin.seadogger-homelab
     DNS-->>U: 192.168.1.241 (Traefik VIP)
     U->>LB: TCP :443
     LB->>TR: Forward stream
-    U->>TR: TLS ClientHello (SNI=plex.local)
-    TR->>KS: Load cert/key for plex.local
+    U->>TR: TLS ClientHello (SNI=jellyfin.seadogger-homelab)
+    TR->>KS: Load cert/key for jellyfin.seadogger-homelab
     KS-->>TR: Leaf cert + chain
     TR-->>U: ServerHello + Certificate
     U-->>U: Verify certificate chain up to the trusted Root CA
@@ -186,10 +186,51 @@ Centralize login with Keycloak, enforce it uniformly at the edge with `oauth2-pr
 ![accent-divider.svg](images/accent-divider.svg)
 ## Architecture and Hostnames
 
-*   **Keycloak (IdP):** `idp.local` (will be assigned a new VIP, e.g., 192.168.1.253)
-*   **oauth2-proxy:** `auth.local` (internal service, no dedicated VIP)
+*   **Keycloak (IdP):** `idp.seadogger-homelab` (will be assigned a new VIP, e.g., 192.168.1.253)
+*   **oauth2-proxy:** `auth.seadogger-homelab` (internal service, no dedicated VIP)
 *   **Traefik (Ingress):** `192.168.1.241` (existing VIP)
-*   **Protected Applications:** `grafana.local`, `n8n.local`, `openwebui.local`, `prometheus.local`, `alertmanager.local`, `argocd.local`, `ceph.local`.
+*   **Protected Applications:** `grafana.seadogger-homelab`, `n8n.seadogger-homelab`, `openwebui.seadogger-homelab`, `prometheus.seadogger-homelab`, `alertmanager.seadogger-homelab`, `argocd.seadogger-homelab`, `ceph.seadogger-homelab`.
+
+![accent-divider.svg](images/accent-divider.svg)
+## Secrets & Credentials
+
+- Do not commit real credentials to git. Store sensitive values with Ansible Vault (e.g., `ansible-vault encrypt_string`) and use GitHub Actions secrets for CI (e.g., `WIKI_TOKEN`). If any secrets were committed previously, rotate them immediately (create new credentials, update Vault/CI, disable the old ones).
+
+![accent-divider.svg](images/accent-divider.svg)
+## Client Trust: Export and Install the Root CA
+
+To avoid browser “untrusted site” warnings when accessing the portal and other internal services, install your internal Root CA on your devices.
+
+### 1) Export the Root CA (and optional Intermediate)
+Get the Root CA PEM (the trust anchor to install on devices):
+```
+kubectl -n cert-manager get secret internal-root-ca-secret \
+  -o jsonpath='{.data.root-ca\.crt}' | base64 -d > seadogger-rootCA.pem
+```
+
+Optional — export the Intermediate CA (for inspection/chain debugging):
+```
+kubectl -n cert-manager get secret internal-intermediate-ca-secret \
+  -o jsonpath='{.data.tls\.crt}' | base64 -d > seadogger-intermediateCA.pem
+```
+
+### 2) Install on Devices
+- iPhone / iPad (iOS & iPadOS)
+  - AirDrop or email `seadogger-rootCA.pem` to the device
+  - Tap to install: Settings > General > VPN & Device Management > Profiles
+  - Then: Settings > General > About > Certificate Trust Settings → enable “Full Trust” for “SeaDogger Root CA”
+
+- Mac (macOS)
+  - Double‑click `seadogger-rootCA.pem` → opens in Keychain Access
+  - Install into the System keychain
+  - Right‑click the certificate → Get Info → Trust → set to “Always Trust”
+
+- Chrome
+  - Uses the OS trust store
+  - On macOS: inherits Keychain trust (works after steps above)
+  - On iOS/iPadOS: uses system trust (works after enabling “Full Trust”)
+
+After installation, your browser will trust certificates issued for `*.seadogger-homelab` by your internal CA.
 
 ![accent-divider.svg](images/accent-divider.svg)
 ### SSO Component Block Diagram
@@ -207,13 +248,13 @@ graph LR
         O[oauth2-proxy]
         K[Keycloak]
         subgraph "SSO-Protected Apps"
-            A1[grafana.local]
-            A2[n8n.local]
-            A3[openwebui.local]
-            A4[prometheus.local]
-            A5[alertmanager.local]
-            A6[argocd.local]
-            A7[ceph.local]
+            A1[grafana.seadogger-homelab]
+            A2[n8n.seadogger-homelab]
+            A3[openwebui.seadogger-homelab]
+            A4[prometheus.seadogger-homelab]
+            A5[alertmanager.seadogger-homelab]
+            A6[argocd.seadogger-homelab]
+            A7[ceph.seadogger-homelab]
         end
     end
 
@@ -241,18 +282,18 @@ graph LR
 ![accent-divider.svg](images/accent-divider.svg)
 ## SSO Login Flow (First Time Access)
 
-This diagram shows a user accessing a protected application (`grafana.local`) for the first time.
+This diagram shows a user accessing a protected application (`grafana.seadogger-homelab`) for the first time.
 
 ```mermaid
 sequenceDiagram
     autonumber
     participant User
     participant Traefik as Traefik Ingress (192.168.1.241)
-    participant OAuth2Proxy as oauth2-proxy (auth.local)
-    participant Keycloak as Keycloak (idp.local)
+    participant OAuth2Proxy as oauth2-proxy (auth.seadogger-homelab)
+    participant Keycloak as Keycloak (idp.seadogger-homelab)
     participant Grafana as Grafana App
 
-    User->>Traefik: GET https://grafana.local
+    User->>Traefik: GET https://grafana.seadogger-homelab
     Traefik->>OAuth2Proxy: ForwardAuth: Is user authenticated?
     OAuth2Proxy-->>Traefik: No (401 Unauthorized)
     Traefik-->>User: Redirect to login page
@@ -263,8 +304,8 @@ sequenceDiagram
     User->>OAuth2Proxy: GET /oauth2/callback?code=...
     OAuth2Proxy->>Keycloak: Exchange auth code for tokens
     Keycloak-->>OAuth2Proxy: ID, Access, Refresh Tokens
-    OAuth2Proxy-->>User: Set session cookie, redirect to original URL (grafana.local)
-    User->>Traefik: GET https://grafana.local (with session cookie)
+    OAuth2Proxy-->>User: Set session cookie, redirect to original URL (grafana.seadogger-homelab)
+    User->>Traefik: GET https://grafana.seadogger-homelab (with session cookie)
     Traefik->>OAuth2Proxy: ForwardAuth: Is user authenticated?
     OAuth2Proxy-->>Traefik: Yes (200 OK) + sets X-Forwarded-User header
     Traefik->>Grafana: Forward request with user identity header
@@ -281,10 +322,10 @@ sequenceDiagram
     autonumber
     participant User
     participant Traefik as Traefik Ingress (192.168.1.241)
-    participant OAuth2Proxy as oauth2-proxy (auth.local)
+    participant OAuth2Proxy as oauth2-proxy (auth.seadogger-homelab)
     participant N8N as n8n App
 
-    User->>Traefik: GET https://n8n.local (with session cookie)
+    User->>Traefik: GET https://n8n.seadogger-homelab (with session cookie)
     Traefik->>OAuth2Proxy: ForwardAuth: Validate cookie
     OAuth2Proxy-->>Traefik: OK (200) + X-Forwarded-User header
     Traefik->>N8N: Forward request with identity
@@ -301,10 +342,10 @@ sequenceDiagram
     autonumber
     participant User
     participant Traefik as Traefik Ingress (192.168.1.241)
-    participant OAuth2Proxy as oauth2-proxy (auth.local)
-    participant Keycloak as Keycloak (idp.local)
+    participant OAuth2Proxy as oauth2-proxy (auth.seadogger-homelab)
+    participant Keycloak as Keycloak (idp.seadogger-homelab)
 
-    User->>Traefik: GET https://auth.local/oauth2/sign_out
+    User->>Traefik: GET https://auth.seadogger-homelab/oauth2/sign_out
     Note over User, Traefik: (This link would be present in the UI of Grafana, n8n, etc.)
     Traefik->>OAuth2Proxy: Forward request to sign_out endpoint
     OAuth2Proxy-->>User: Clear session cookie

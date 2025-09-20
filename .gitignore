@@ -2,6 +2,7 @@ hosts.ini
 hosts-*
 config.yml
 config-*
+*.pem
 
 
 /wiki/

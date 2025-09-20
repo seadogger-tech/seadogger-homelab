@@ -10,12 +10,12 @@
 - **Status:** Complete
 
 ## Summary
-This document outlines a comprehensive debugging session that resolved a cascading series of failures in the Ansible deployment playbook. The root cause of the initial instability was traced to faulty hardware (a PoE network port), which was causing filesystem corruption on the `anakin.local` node. Subsequent investigation revealed and corrected multiple latent bugs in the Ansible playbooks.
+This document outlines a comprehensive debugging session that resolved a cascading series of failures in the Ansible deployment playbook. The root cause of the initial instability was traced to faulty hardware (a PoE network port), which was causing filesystem corruption on the `anakin.seadogger-homelab` node. Subsequent investigation revealed and corrected multiple latent bugs in the Ansible playbooks.
 
 ## Issues and Resolutions
 
 ### 1. Initial Node Instability and Filesystem Corruption
-- **Symptom:** The `anakin.local` node was frequently going down, and its root filesystem was mounting as read-only (`ro`). The node also required an SD card to boot despite having its rootfs on an NVMe drive.
+- **Symptom:** The `anakin.seadogger-homelab` node was frequently going down, and its root filesystem was mounting as read-only (`ro`). The node also required an SD card to boot despite having its rootfs on an NVMe drive.
 - **Investigation:**
   - Confirmed the Pi's EEPROM bootloader was not configured to prioritize the NVMe drive.
   - Identified that running the `wipe_k3s_cluster.yml` playbook was making the node unbootable, suggesting a destructive operation was corrupting the disk.
@@ -159,7 +159,5 @@ The definitive plan is to manage the `CephNFS` resource declaratively within the
 1.  **Clean `values.yaml`:** Remove the invalid `cephNFS` block from `deployments/rook-ceph/rook-ceph-cluster-values.yaml`.
 2.  **Update Ansible Playbook:** Add a new task to `ansible/tasks/rook_ceph_deploy.yml` that uses the `ansible.builtin.k8s` module to create the `CephNFS` resource directly. This new resource will contain the correct security settings to prevent the pod crash.
 3.  **Deploy and Verify:** Run the updated Ansible playbook and verify that the NFS share is accessible.
-
-
 
 

@@ -11,6 +11,8 @@
 ## Networking
 The cluster assumes static node IPs and a dedicated MetalLB pool. If you change the subnet, update the Ansible inventory, MetalLB `IPAddressPool`, and any VIPs referenced in manifests.
 
+Note: Prefer exposing application UIs via Ingress + TLS (cert-manager) at the Traefik VIP. Use direct MetalLB LoadBalancer IPs only where Ingress is not appropriate.
+
 ![accent-divider.svg](images/accent-divider.svg)
 ### VIP L2 Advertisements (MetalLB)
 | VIP            | Purpose            |

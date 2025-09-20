@@ -1,7 +1,9 @@
 ![wiki-banner.svg](images/wiki-banner.svg)
 # Monitoring with Prometheus, Alertmanager, Grafana
 
-The Prometheus monitoring stack has been successfully deployed and verified in the k3s cluster. The deployment includes Prometheus, Grafana, and Alertmanager, all accessible via LoadBalancer services.
+The Prometheus monitoring stack has been successfully deployed and verified in the k3s cluster. The deployment includes Prometheus, Grafana, and Alertmanager.
+
+Note: Prefer exposing these UIs via Ingress + TLS (cert-manager) at the Traefik VIP (recommended), and use direct MetalLB LoadBalancer IPs only where Ingress is not appropriate.
 
 ![](images/Grafana-Dashboard.png)
 
@@ -90,4 +92,3 @@ The stack is deployed through ArgoCD using the kube-prometheus manifests, with a
 
 ### btop
 ![btop-Dashboard.png](images/btop-Dashboard.png)
-
