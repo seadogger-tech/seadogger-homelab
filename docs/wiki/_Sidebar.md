@@ -15,6 +15,9 @@
 - [[09-Apps]]
 - [[16-Pro-Overlays-and-SSO]]
 
+## 🧩 Setting Up Apps
+- [[18-Setting-Up-n8n-Connections]]
+
 ## 📊 Ops
 - [[10-Benchmarking]]
 - [[11-Monitoring]]
