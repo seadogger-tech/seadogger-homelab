@@ -13,6 +13,7 @@
 - [[07-Networking-and-Ingress]]
 - [[08-Security-and-Certificates]]
 - [[09-Apps]]
+- [[20-HDHomeRun-Guide]]
 - [[16-Pro-Overlays-and-SSO]]
 
 ## 🧩 Setting Up Apps
