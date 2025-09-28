@@ -45,9 +45,8 @@ persistence:
   # Media library - mount your existing CephFS PVC from earlier
   media:
     enabled: true
-    size: 500Gi
-    storageClass: ceph-fs-data-ec
-    accessMode: ReadWriteOnce
+    existingClaim: jellyfin-media-ro
+    readOnly: true
     mountPath: /media
 
 # Optional: run as non-root UID/GID (tune to your NAS perms if needed)

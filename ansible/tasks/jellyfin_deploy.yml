@@ -4,6 +4,32 @@
   ansible.builtin.set_fact:
     KUBECONFIG: /etc/rancher/k3s/k3s.yaml
 
+# Download static PV manifest for Jellyfin media
+- name: Download static PV manifest for Jellyfin media
+  ansible.builtin.get_url:
+    url: https://raw.githubusercontent.com/seadogger-tech/seadogger-homelab-pro/main/core/deployments/jellyfin/static-pv.yaml
+    dest: /tmp/jellyfin-static-pv.yaml
+    mode: '0644'
+
+- name: Apply static PV for Jellyfin media
+  ansible.builtin.k8s:
+    kubeconfig: "{{ KUBECONFIG }}"
+    state: present
+    src: /tmp/jellyfin-static-pv.yaml
+
+# Download read‑only PVC manifest for Jellyfin media
+- name: Download read‑only PVC manifest for Jellyfin media
+  ansible.builtin.get_url:
+    url: https://raw.githubusercontent.com/seadogger-tech/seadogger-homelab-pro/main/core/deployments/jellyfin/ro-pvc.yaml
+    dest: /tmp/jellyfin-ro-pvc.yaml
+    mode: '0644'
+
+- name: Apply read‑only PVC for Jellyfin media
+  ansible.builtin.k8s:
+    kubeconfig: "{{ KUBECONFIG }}"
+    state: present
+    src: /tmp/jellyfin-ro-pvc.yaml
+
 # Step 2: Create ArgoCD Jellyfin Application
 - name: Create Jellyfin ArgoCD Application
   ansible.builtin.k8s:
@@ -22,8 +48,8 @@
           chart: jellyfin
           targetRevision: "*"
           helm:
-              valueFiles:
-                - https://raw.githubusercontent.com/seadogger/seadogger-homelab/master/deployments/jellyfin/jellyfin-values.yaml
+                valueFiles:
+                  - https://raw.githubusercontent.com/seadogger-tech/seadogger-homelab-pro/main/core/deployments/jellyfin/jellyfin-values.yaml
         destination:
           server: https://kubernetes.default.svc
           namespace: jellyfin

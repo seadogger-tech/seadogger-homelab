@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: jellyfin-nextcloud-media-ro
+spec:
+  capacity:
+    storage: 1Gi               # size is ignored by CephFS, required field
+  accessModes:
+    - ReadOnlyMany
+  persistentVolumeReclaimPolicy: Retain
+  volumeMode: Filesystem
+  storageClassName: ""         # static PV, no dynamic provisioning
+  csi:
+    driver: rook-ceph.cephfs.csi.ceph.com
+    fsType: ext4
+    volumeHandle: 0001-0009-rook-ceph-0000000000000001-e8a1abca-840a-4e16-adc1-9a19a836bc39
+    nodeStageSecretRef:
+      name: rook-csi-cephfs-node
+      namespace: rook-ceph
+    nodePublishSecretRef:
+      name: rook-csi-cephfs-node
+      namespace: rook-ceph
+    controllerPublishSecretRef:
+      name: rook-csi-cephfs-provisioner
+      namespace: rook-ceph
+    controllerExpandSecretRef:
+      name: rook-csi-cephfs-provisioner
+      namespace: rook-ceph
+  mountOptions:
+    - ro
+    - mds_namespace=ceph-fs
