@@ -7,14 +7,9 @@ A small utility that:
 1. Retrieves the HDHomeRun device discovery JSON from a configurable URL.
 2. Extracts the ``DeviceAuth`` token from the discovery payload.
 3. Calls the HDHomeRun public guide API using that token.
-4. Stores the resulting XML guide either:
-   • Locally on the filesystem, **or**
-   • Remotely via WebDAV (e.g. Nextcloud).
+4. Stores the resulting XML guide locally (either in the current directory or at a user‑specified path).
 
-The script is fully configurable via command‑line arguments and includes a
-help/usage message.  See the accompanying ``README.md`` for examples.
-
-Author: Cline (generated)
+The script is fully configurable via command‑line arguments and includes a helpful ``--help`` output.
 """
 
 import argparse
@@ -23,7 +18,6 @@ import pathlib
 import sys
 import urllib.error
 import urllib.request
-from urllib.parse import urljoin
 
 # ----------------------------------------------------------------------
 # Helper functions
@@ -62,30 +56,6 @@ def write_local(path: pathlib.Path, content: bytes):
         raise RuntimeError(f"Unable to write XML to {path}: {e}") from e
 
 
-def upload_webdav(url: str, content: bytes, username: str = None, password: str = None):
-    """Upload ``content`` to a WebDAV endpoint using HTTP PUT.
-
-    If ``username``/``password`` are supplied, HTTP Basic Auth is used.
-    """
-    request = urllib.request.Request(url, data=content, method="PUT")
-    request.add_header("Content-Type", "application/xml")
-    if username and password:
-        password_mgr = urllib.request.HTTPPasswordMgrWithDefaultRealm()
-        password_mgr.add_password(None, url, username, password)
-        handler = urllib.request.HTTPBasicAuthHandler(password_mgr)
-        opener = urllib.request.build_opener(handler)
-        urllib.request.install_opener(opener)
-
-    try:
-        with urllib.request.urlopen(request, timeout=30) as resp:
-            if resp.status not in (200, 201, 204):
-                raise RuntimeError(f"WebDAV upload failed with status {resp.status}")
-    except urllib.error.URLError as e:
-        raise RuntimeError(f"WebDAV upload error for {url!r}: {e.reason}") from e
-    except Exception as e:
-        raise RuntimeError(f"Unexpected error during WebDAV upload: {e}") from e
-
-
 # ----------------------------------------------------------------------
 # Main execution
 # ----------------------------------------------------------------------
@@ -93,7 +63,7 @@ def upload_webdav(url: str, content: bytes, username: str = None, password: str 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Fetch HDHomeRun guide XML and store it locally or via WebDAV."
+        description="Fetch HDHomeRun guide XML and store it locally."
     )
     parser.add_argument(
         "--discover-url",
@@ -105,19 +75,9 @@ def parse_args() -> argparse.Namespace:
         required=False,
         default=None,
         help=(
-            "Destination for the XML guide. "
-            "Either a local filesystem path (e.g. /path/to/xmltv.xml) "
-            "or a WebDAV URL (e.g. https://nextcloud.example.com/remote.php/dav/files/HomeMedia/Live_TV_Guide/xmltv.xml). "
-            "If omitted, the guide is saved as 'xmltv.xml' in the current working directory."
+            "Filesystem path where the XML guide should be saved. "
+            "If omitted, the guide is saved as ``xmltv.xml`` in the current working directory."
         ),
-    )
-    parser.add_argument(
-        "--username",
-        help="Username for WebDAV Basic Auth (if needed).",
-    )
-    parser.add_argument(
-        "--password",
-        help="Password for WebDAV Basic Auth (if needed).",
     )
     return parser.parse_args()
 
@@ -141,19 +101,10 @@ def main():
         default_path = pathlib.Path.cwd() / "xmltv.xml"
         write_local(default_path, guide_xml)
         print(f"Guide saved to default location: {default_path}")
-    elif args.target.lower().startswith("http"):
-        # WebDAV upload
-        upload_webdav(
-            url=args.target,
-            content=guide_xml,
-            username=args.username,
-            password=args.password,
-        )
-        print(f"Guide successfully uploaded to WebDAV location: {args.target}")
     else:
-        # Local filesystem write to user‑specified path
+        # Save to user‑specified path
         write_local(pathlib.Path(args.target), guide_xml)
-        print(f"Guide successfully saved to local path: {args.target}")
+        print(f"Guide successfully saved to: {args.target}")
 
 
 if __name__ == "__main__":

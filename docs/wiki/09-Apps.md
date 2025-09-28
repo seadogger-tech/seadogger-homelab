@@ -39,6 +39,25 @@ User facing applications that are applied thru ArgoCD on top of the k3s tech sta
 - Desktop & mobile clients; extensible via a large app ecosystem.
 ![NextCloud](images/nextcloud-dashboard.png)
 
+## HDHomeRun Guide Utility
+
+A tiny Python utility that pulls the HDHomeRun XMLTV guide and stores it locally.  
+It can be run with:
+
+```bash
+# Default (no target, saves to xmltv.xml in current directory)
+./fetch_hdhomerun_guide.py \
+    --discover-url http://192.168.1.70/discover.json
+
+# Save to a specific location
+./fetch_hdhomerun_guide.py \
+    --discover-url http://192.168.1.70/discover.json \
+    --target /media/data/HomeMedia/files/Live_TV_Guide/xmltv.xml
+```
+
+The script lives in `seadogger-homelab-pro/core/useful_scripts/fetch_hdhomerun_guide.py` and is documented in the wiki page **[HDHomeRun Guide Utility](20-HDHomeRun-Guide.md)**.
+
+
 ![accent-divider](images/accent-divider.svg)
 ## N8N: **Website:** [https://n8n.io](https://n8n.io)
 - Source-available, self-hostable workflow-automation platform.
@@ -56,4 +75,3 @@ User facing applications that are applied thru ArgoCD on top of the k3s tech sta
 - Hardware-accelerated transcoding via FFmpeg when available.
 - 100% free—no tracking and no premium tiers.
 ![JellyFin](images/jellyfin-dashboard.png)
-
