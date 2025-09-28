@@ -49,22 +49,6 @@ persistence:
     readOnly: true
     mountPath: /media
 
-extraVolumes:
-  - name: nextcloud-media
-    persistentVolumeClaim:
-      claimName: nextcloud-media-ro
-
-extraVolumeMounts:
-  - name: nextcloud-media
-    mountPath: /videos
-    subPath: data/HomeMedia/files/Videos
-    readOnly: true
-  - name: nextcloud-media
-    mountPath: /music
-    subPath: data/HomeMedia/files/Music
-    readOnly: true
-
-
 # Optional: run as non-root UID/GID (tune to your NAS perms if needed)
 # podSecurityContext:
 #   runAsUser: 568

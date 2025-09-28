@@ -75,36 +75,6 @@
   retries: 30
   delay: 10
 
-# Apply Jellyfin subPath mounts for Videos and Music
-- name: Apply Jellyfin subPath mounts
-  ansible.builtin.k8s:
-    kubeconfig: "{{ KUBECONFIG }}"
-    state: present
-    definition:
-      apiVersion: apps/v1
-      kind: Deployment
-      metadata:
-        name: jellyfin
-        namespace: jellyfin
-      spec:
-        template:
-          spec:
-            containers:
-              - name: jellyfin
-                volumeMounts:
-                  - name: media
-                    mountPath: /videos
-                    subPath: data/HomeMedia/files/Videos
-                    readOnly: true
-                  - name: media
-                    mountPath: /music
-                    subPath: data/HomeMedia/files/Music
-                    readOnly: true
-            volumes:
-              - name: media
-                persistentVolumeClaim:
-                  claimName: jellyfin-media-ro
-
 # Step 4: Download Jellyfin IngressRoutes manifest from GitHub
 - name: Download jellyfin IngressRoutes manifest from GitHub
   ansible.builtin.get_url:
