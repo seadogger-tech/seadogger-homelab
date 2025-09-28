@@ -12,7 +12,7 @@ spec:
   storageClassName: ""         # static PV, no dynamic provisioning
   csi:
     driver: rook-ceph.cephfs.csi.ceph.com
-    fsType: ext4
+    fsType: ceph
     volumeHandle: 0001-0009-rook-ceph-0000000000000001-e8a1abca-840a-4e16-adc1-9a19a836bc39
     nodeStageSecretRef:
       name: rook-csi-cephfs-node
