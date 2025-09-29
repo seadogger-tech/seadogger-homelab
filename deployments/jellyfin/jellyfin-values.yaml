@@ -44,7 +44,7 @@ persistence:
 
   cache:
     enabled: true
-    size: 5Gi
+    size: 250Gi
     accessMode: ReadWriteOnce
     storageClass: ceph-fs-data-ec
     globalMounts:
