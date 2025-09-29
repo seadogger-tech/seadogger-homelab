@@ -10,6 +10,7 @@ controllers:
         runAsUser: 1000
         runAsGroup: 1000
         fsGroup: 1000
+        supplementalGroups: [33]
     containers:
       app:
         image:
