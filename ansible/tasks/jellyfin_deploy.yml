@@ -1,90 +1,152 @@
 ---
-# Step 1: Set KUBECONFIG globally
-- name: Set KUBECONFIG global
-  ansible.builtin.set_fact:
-    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+- name: Jellyfin deploy on remote K3s master (no deletions)
+  hosts: k3s_master          # <— change to your host/group, e.g., yoda
+  become: true               # needed for system-wide pip / file perms
+  gather_facts: false
+  any_errors_fatal: true
 
-# Download static PV manifest for Jellyfin media
-- name: Download static PV manifest for Jellyfin media
-  ansible.builtin.get_url:
-    url: https://raw.githubusercontent.com/seadogger-tech/seadogger-homelab-pro/main/core/deployments/jellyfin/static-pv.yaml
-    dest: /tmp/jellyfin-static-pv.yaml
-    mode: '0644'
+  vars:
+    kubeconfig_path: /etc/rancher/k3s/k3s.yaml
+    jellyfin_namespace: jellyfin
+    argocd_namespace: argocd
 
-- name: Apply static PV for Jellyfin media
-  ansible.builtin.k8s:
-    kubeconfig: "{{ KUBECONFIG }}"
-    state: present
-    src: /tmp/jellyfin-static-pv.yaml
+    # Static PV/PVC you already use
+    pv_name:  jellyfin-nextcloud-media-ro
+    pvc_name: jellyfin-media-ro
 
-# Download read‑only PVC manifest for Jellyfin media
-- name: Download read‑only PVC manifest for Jellyfin media
-  ansible.builtin.get_url:
-    url: https://raw.githubusercontent.com/seadogger-tech/seadogger-homelab-pro/main/core/deployments/jellyfin/ro-pvc.yaml
-    dest: /tmp/jellyfin-ro-pvc.yaml
-    mode: '0644'
+    # Helm/Argo (bjw-s/app-template)
+    helm_repo_url: "https://bjw-s.github.io/helm-charts"
+    helm_chart: "app-template"
+    helm_version: "4.3.0"
+    values_url: "https://raw.githubusercontent.com/seadogger-tech/seadogger-homelab-pro/main/core/deployments/jellyfin/jellyfin-values.yaml"
 
-- name: Apply read‑only PVC for Jellyfin media
-  ansible.builtin.k8s:
-    kubeconfig: "{{ KUBECONFIG }}"
-    state: present
-    src: /tmp/jellyfin-ro-pvc.yaml
+    # Traefik IngressRoutes manifest
+    ingress_url: "https://raw.githubusercontent.com/seadogger/seadogger-homelab/master/ingress/traefik-jellyfin-ingress.yml"
 
-# Step 2: Create ArgoCD Jellyfin Application
-- name: Create Jellyfin ArgoCD Application
-  ansible.builtin.k8s:
-    kubeconfig: "{{ KUBECONFIG }}"
-    state: present
-    definition:
-      apiVersion: argoproj.io/v1alpha1
-      kind: Application
-      metadata:
+  pre_tasks:
+    - name: Ensure Python deps for k8s modules on remote
+      ansible.builtin.package:
+        name:
+          - python3-pip
+          - python3-setuptools
+        state: present
+
+    - name: Install kubernetes Python client on remote
+      ansible.builtin.pip:
+        name:
+          - kubernetes
+          - pyyaml
+        executable: pip3
+
+    - name: Export KUBECONFIG on remote
+      ansible.builtin.set_fact:
+        KUBECONFIG: "{{ kubeconfig_path }}"
+
+  tasks:
+    - name: Recreate jellyfin namespace (safe if exists)
+      kubernetes.core.k8s:
+        state: present
+        kubeconfig: "{{ KUBECONFIG }}"
+        definition:
+          apiVersion: v1
+          kind: Namespace
+          metadata:
+            name: "{{ jellyfin_namespace }}"
+      run_once: true
+
+    # ---- Make Released PV reusable by clearing the old claimRef (no resource deletions) ----
+    - name: Read current static PV
+      kubernetes.core.k8s_info:
+        kubeconfig: "{{ KUBECONFIG }}"
+        api_version: v1
+        kind: PersistentVolume
+        name: "{{ pv_name }}"
+      register: pv_info
+      run_once: true
+
+    - name: Clear claimRef if PV is Released (enables new binding)
+      ansible.builtin.command:
+        cmd: >
+          kubectl patch pv {{ pv_name }} --type=json
+          -p='[{"op":"remove","path":"/spec/claimRef"}]'
+      environment:
+        KUBECONFIG: "{{ KUBECONFIG }}"
+      when:
+        - pv_info.resources | length > 0
+        - pv_info.resources[0].status.phase == "Released"
+        - pv_info.resources[0].spec.claimRef is defined
+      changed_when: true
+      failed_when: false
+      run_once: true
+
+    # ---- Recreate the RO PVC to bind the PV by name ----
+    - name: Apply RO PVC (binds to {{ pv_name }})
+      kubernetes.core.k8s:
+        state: present
+        kubeconfig: "{{ KUBECONFIG }}"
+        definition:
+          apiVersion: v1
+          kind: PersistentVolumeClaim
+          metadata:
+            name: "{{ pvc_name }}"
+            namespace: "{{ jellyfin_namespace }}"
+          spec:
+            accessModes: ["ReadOnlyMany"]
+            resources: { requests: { storage: 1Gi } }
+            storageClassName: ""
+            volumeName: "{{ pv_name }}"
+      run_once: true
+
+    # ---- ArgoCD Application for bjw-s/app-template ----
+    - name: Create/Update ArgoCD Application (bjw-s/app-template)
+      kubernetes.core.k8s:
+        state: present
+        kubeconfig: "{{ KUBECONFIG }}"
+        definition:
+          apiVersion: argoproj.io/v1alpha1
+          kind: Application
+          metadata:
+            name: jellyfin
+            namespace: "{{ argocd_namespace }}"
+          spec:
+            project: default
+            source:
+              repoURL: "{{ helm_repo_url }}"
+              chart: "{{ helm_chart }}"
+              targetRevision: "{{ helm_version }}"
+              helm:
+                valueFiles: ["{{ values_url }}"]
+            destination:
+              server: https://kubernetes.default.svc
+              namespace: "{{ jellyfin_namespace }}"
+            syncPolicy:
+              automated: { prune: true, selfHeal: true }
+              syncOptions: ["CreateNamespace=true"]
+      run_once: true
+
+    - name: Wait for Argo app to be Healthy
+      kubernetes.core.k8s_info:
+        kubeconfig: "{{ KUBECONFIG }}"
+        api_version: argoproj.io/v1alpha1
+        kind: Application
         name: jellyfin
-        namespace: argocd
-      spec:
-        project: default
-        source:
-          repoURL: https://k8s-at-home.com/charts/
-          chart: jellyfin
-          targetRevision: "*"
-          helm:
-                valueFiles:
-                  - https://raw.githubusercontent.com/seadogger-tech/seadogger-homelab-pro/main/core/deployments/jellyfin/jellyfin-values.yaml
-        destination:
-          server: https://kubernetes.default.svc
-          namespace: jellyfin
-        syncPolicy:
-          automated:
-            prune: true
-            selfHeal: true
-          syncOptions:
-            - CreateNamespace=true
+        namespace: "{{ argocd_namespace }}"
+      register: app
+      retries: 30
+      delay: 10
+      until: app.resources and app.resources[0].status.health.status == "Healthy"
+      run_once: true
 
-# Step 3: Wait for Jellyfin application to be healthy
-- name: Wait for Jellyfin application to be healthy
-  kubernetes.core.k8s_info:
-    api_version: argoproj.io/v1alpha1
-    kind: Application
-    name: jellyfin
-    namespace: argocd
-    kubeconfig: "{{ KUBECONFIG }}"
-  register: jellyfin_status
-  until: jellyfin_status.resources is defined and
-         jellyfin_status.resources[0].status.health.status is defined and
-         jellyfin_status.resources[0].status.health.status == "Healthy"
-  retries: 30
-  delay: 10
+    # ---- Traefik IngressRoutes (unchanged) ----
+    - name: Fetch IngressRoutes manifest (remote)
+      ansible.builtin.get_url:
+        url: "{{ ingress_url }}"
+        dest: "/tmp/traefik-jellyfin-ingress.yml"
+        mode: "0644"
 
-# Step 4: Download Jellyfin IngressRoutes manifest from GitHub
-- name: Download jellyfin IngressRoutes manifest from GitHub
-  ansible.builtin.get_url:
-    url: "https://raw.githubusercontent.com/seadogger/seadogger-homelab/master/ingress/traefik-jellyfin-ingress.yml"
-    dest: "/tmp/traefik-jellyfin-ingress.yml"
-    mode: "0644"
-
-# Step 5: Apply Jellyfin IngressRoutes (no Helm/Argo)
-- name: Apply Jellyfin IngressRoutes (no Helm/Argo)
-  kubernetes.core.k8s:
-    kubeconfig: "{{ KUBECONFIG }}"
-    state: present
-    src: "/tmp/traefik-jellyfin-ingress.yml"
+    - name: Apply IngressRoutes
+      kubernetes.core.k8s:
+        state: present
+        kubeconfig: "{{ KUBECONFIG }}"
+        src: "/tmp/traefik-jellyfin-ingress.yml"
+      run_once: true

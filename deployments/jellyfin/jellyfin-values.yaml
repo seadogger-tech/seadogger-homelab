@@ -1,11 +1,28 @@
 # jellyfin-values.yaml
-image:
-  repository: jellyfin/jellyfin
-  pullPolicy: IfNotPresent
-  # tag: <optional, let chart pin appVersion>
+# values for bjw-s/app-template
+fullnameOverride: jellyfin
 
-env:
-  TZ: America/New_York
+controllers:
+  main:
+    replicas: 1
+    pod:
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+    containers:
+      app:
+        image:
+          repository: jellyfin/jellyfin
+          tag: "10.10.7"      # bump to 10.11.x later after you’re stable
+          pullPolicy: IfNotPresent
+        env:
+          TZ: America/New_York
+        resources:
+          requests: { cpu: "200m", memory: "512Mi" }
+          limits:   { cpu: "2",    memory: "4Gi" }
 
 service:
   main:
@@ -21,38 +38,43 @@ service:
         port: 7359
         protocol: UDP
 
+
 ingress:
   main:
-    enabled: false  # we'll use Traefik IngressRoute CRDs
+    enabled: false  # you keep using Traefik IngressRoute CRDs
 
 persistence:
-  # Jellyfin configuration (small, keeps library, users, plugins)
   config:
     enabled: true
     size: 5Gi
-    storageClass: ceph-fs-data-ec   # <--- set if you want a specific SC
     accessMode: ReadWriteOnce
+    storageClass: ceph-fs-data-ec
     mountPath: /config
 
-  # Cache does NOT include transcode temp
   cache:
     enabled: true
-    size: 5Gi
-    storageClass: ceph-fs-data-ec
+    size: 250Gi
     accessMode: ReadWriteOnce
+    storageClass: ceph-fs-data-ec
     mountPath: /cache
 
-  # Media library - mount your existing CephFS PVC from earlier
   media:
     enabled: true
-    existingClaim: jellyfin-media-ro
+    existingClaim: jellyfin-media-ro   # from your static PV/PVC below
     readOnly: true
     mountPath: /media
+    # If you’d like explicit subfolders like before, uncomment:
+    # advancedMounts:
+    #   main:
+    #     app:
+    #       - path: /videos
+    #         subPath: data/HomeMedia/files/Videos
+    #         readOnly: true
+    #       - path: /music
+    #         subPath: data/HomeMedia/files/Music
+    #         readOnly: true
 
-# Optional: run as non-root UID/GID (tune to your NAS perms if needed)
-# podSecurityContext:
-#   runAsUser: 568
-#   runAsGroup: 568
-#   fsGroup: 568
-hostNetwork: true
-dnsPolicy: ClusterFirstWithHostNet
+probes:
+  liveness:  { enabled: true }
+  readiness: { enabled: true }
+  startup:   { enabled: true }
