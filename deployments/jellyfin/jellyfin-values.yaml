@@ -1,5 +1,3 @@
-# jellyfin-values.yaml
-# values for bjw-s/app-template
 fullnameOverride: jellyfin
 
 controllers:
@@ -16,7 +14,7 @@ controllers:
       app:
         image:
           repository: jellyfin/jellyfin
-          tag: "10.10.7"      # bump to 10.11.x later after you’re stable
+          tag: "10.10.7"   # bump to 10.11.x later
           pullPolicy: IfNotPresent
         env:
           TZ: America/New_York
@@ -29,19 +27,10 @@ service:
     ports:
       http:
         port: 8096
-      https:
-        port: 8920
-      discovery1:
-        port: 1900
-        protocol: UDP
-      discovery2:
-        port: 7359
-        protocol: UDP
-
 
 ingress:
   main:
-    enabled: false  # you keep using Traefik IngressRoute CRDs
+    enabled: false   # you’re using Traefik IngressRoute separately
 
 persistence:
   config:
@@ -49,32 +38,20 @@ persistence:
     size: 5Gi
     accessMode: ReadWriteOnce
     storageClass: ceph-fs-data-ec
-    mountPath: /config
+    globalMounts:
+      - path: /config
 
   cache:
     enabled: true
-    size: 250Gi
+    size: 5Gi
     accessMode: ReadWriteOnce
     storageClass: ceph-fs-data-ec
-    mountPath: /cache
+    globalMounts:
+      - path: /cache
 
   media:
     enabled: true
-    existingClaim: jellyfin-media-ro   # from your static PV/PVC below
-    readOnly: true
-    mountPath: /media
-    # If you’d like explicit subfolders like before, uncomment:
-    # advancedMounts:
-    #   main:
-    #     app:
-    #       - path: /videos
-    #         subPath: data/HomeMedia/files/Videos
-    #         readOnly: true
-    #       - path: /music
-    #         subPath: data/HomeMedia/files/Music
-    #         readOnly: true
-
-probes:
-  liveness:  { enabled: true }
-  readiness: { enabled: true }
-  startup:   { enabled: true }
+    existingClaim: jellyfin-media-ro
+    globalMounts:
+      - path: /media
+        readOnly: true

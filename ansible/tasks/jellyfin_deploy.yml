@@ -10,9 +10,9 @@
     helm_repo_url: "https://bjw-s-labs.github.io/helm-charts"
     helm_chart: "app-template"
     helm_version: "4.3.0"
-    values_url: "https://raw.githubusercontent.com/seadogger-tech/seadogger-homelab/refs/heads/master/deployments/jellyfin/jellyfin-values.yaml"
+    values_url: "https://raw.githubusercontent.com/seadogger-tech/seadogger-homelab/master/deployments/jellyfin/jellyfin-values.yaml"
 
-    ingress_url: "https://raw.githubusercontent.com/seadogger-tech/seadogger-homelab/refs/heads/master/ingress/traefik-jellyfin-ingress.yml"
+    ingress_url: "https://raw.githubusercontent.com/seadogger-tech/seadogger-homelab/master/ingress/traefik-jellyfin-ingress.yml"
   block:
     - name: Ensure jellyfin namespace exists (you deleted it earlier)
       kubernetes.core.k8s:
