@@ -40,3 +40,4 @@
 - [[14-Design-Deep-Dives]]
 - [[19-Refactoring-Roadmap]]
 - [[21-Deployment-Dependencies]]
+- [[22-C4-Architecture-Diagrams]]

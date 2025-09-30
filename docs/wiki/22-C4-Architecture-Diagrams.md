@@ -1,6 +1,10 @@
+![wiki-banner.svg](images/wiki-banner.svg)
+![accent-divider.svg](images/accent-divider.svg)
 # C4 Architecture Diagrams
 
 These diagrams follow the C4 model (Context, Containers, Components, Code) to visualize the Seadogger Homelab architecture at different levels of abstraction.
+
+> **💡 Tip:** These diagrams are built with Mermaid and render interactively on GitHub. The diagrams may take a moment to load.
 
 ## Level 1: System Context
 
@@ -222,3 +226,32 @@ C4Component
 - These diagrams represent the **target architecture** after GitOps migration (see [[21-Deployment-Dependencies]])
 - Current state still has some infrastructure deployed via Ansible (being migrated)
 - Sync waves enforce deployment order: Wave 0 (operators) → Wave 1 (clusters) → Wave 2+ (applications)
+![accent-divider.svg](images/accent-divider.svg)
+## How to View These Diagrams
+
+### On GitHub Wiki
+1. Navigate to this page on GitHub: https://github.com/seadogger-tech/seadogger-homelab/wiki/22-C4-Architecture-Diagrams
+2. GitHub automatically renders Mermaid diagrams
+3. Diagrams may take 5-10 seconds to render (be patient!)
+
+### In VS Code
+1. Install the "Markdown Preview Mermaid Support" extension
+2. Open this file and press `Cmd+Shift+V` (macOS) or `Ctrl+Shift+V` (Windows/Linux)
+3. Diagrams render inline
+
+### Online Mermaid Editor
+If diagrams don't render, you can view/edit them at:
+- https://mermaid.live/
+- Copy any `mermaid` code block and paste into the editor
+
+![accent-divider.svg](images/accent-divider.svg)
+## See Also
+
+- **[[02-Architecture]]** - High-level architecture overview
+- **[[21-Deployment-Dependencies]]** - Deployment order and dependencies
+- **[[13-ADR-Index]]** - Architecture Decision Records
+- **[[14-Design-Deep-Dives]]** - Technical deep dives
+
+**Related Issues:**
+- [#48 - Deployment Dependencies Refactor](https://github.com/seadogger-tech/seadogger-homelab/issues/48) - GitOps migration to match target architecture
+- [#50 - Move infrastructure to ArgoCD](https://github.com/seadogger-tech/seadogger-homelab/issues/50) - Implementing sync waves shown in diagrams

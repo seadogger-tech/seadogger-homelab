@@ -9,7 +9,7 @@ This document describes the system architecture, key technical decisions, and de
 **High-Level Overview:**
 ![Pi Cluster Architecture](images/Architecture.png)
 
-**Detailed C4 Diagrams:** For interactive, detailed architecture diagrams following the C4 model (Context, Containers, Components), see **[C4 Architecture Diagrams](images/c4-architecture.md)**:
+**Detailed C4 Diagrams:** For interactive, detailed architecture diagrams following the C4 model (Context, Containers, Components), see **[[22-C4-Architecture-Diagrams]]**:
 - **System Context** - External systems and user interactions
 - **Container Diagram** - K3s cluster infrastructure and services
 - **Component Diagrams** - GitOps pipeline, storage architecture, network & security
