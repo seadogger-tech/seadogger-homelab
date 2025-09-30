@@ -58,9 +58,9 @@ graph TB
     BuildPush --> PushGHCR
     PushGHCR --> UpdateSHA
 
-    style WikiFlow fill:#2d5016,stroke:#5a9216,stroke-width:2px
-    style BedrockFlow fill:#1e3a5f,stroke:#4a90e2,stroke-width:2px
-    style Triggers fill:#8b4513,stroke:#d2691e,stroke-width:2px
+    style WikiFlow fill:#e8f5e9,stroke:#4caf50,stroke-width:3px,color:#000
+    style BedrockFlow fill:#e3f2fd,stroke:#2196f3,stroke-width:3px,color:#000
+    style Triggers fill:#fff3e0,stroke:#ff9800,stroke-width:3px,color:#000
 ```
 
 ![accent-divider](images/accent-divider.svg)
@@ -243,10 +243,10 @@ graph LR
     ArgoCD --> K3sCluster
     K3sCluster --> BedrockPod
 
-    style Developer fill:#2d5016,stroke:#5a9216,stroke-width:2px
-    style GitHub fill:#1e3a5f,stroke:#4a90e2,stroke-width:2px
-    style Outputs fill:#8b4513,stroke:#d2691e,stroke-width:2px
-    style Deployment fill:#4a1e5f,stroke:#8e4ae2,stroke-width:2px
+    style Developer fill:#e8f5e9,stroke:#4caf50,stroke-width:3px,color:#000
+    style GitHub fill:#e3f2fd,stroke:#2196f3,stroke-width:3px,color:#000
+    style Outputs fill:#fff3e0,stroke:#ff9800,stroke-width:3px,color:#000
+    style Deployment fill:#f3e5f5,stroke:#9c27b0,stroke-width:3px,color:#000
 ```
 
 ![accent-divider](images/accent-divider.svg)
