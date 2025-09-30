@@ -21,7 +21,7 @@ The architecture is based on a Kubernetes (k3s) cluster running on a group of Ra
 
 *   **Kubernetes Distribution:** k3s was chosen for its lightweight nature and suitability for resource-constrained environments like the Raspberry Pi.
 *   **Infrastructure as Code:** Ansible is used for provisioning and configuring the cluster nodes, ensuring a declarative and repeatable setup process.
-*   **GitOps:** ArgoCD is the cornerstone of the application deployment strategy. All application configurations are stored in a Git repository, and ArgoCD ensures the cluster state matches the desired state in Git. The only portion of the project which is not managed by Argo is the deployment of Rook-Ceph.
+*   **GitOps:** ArgoCD is the cornerstone of the application deployment strategy. All application configurations are stored in a Git repository, and ArgoCD ensures the cluster state matches the desired state in Git. Currently, some infrastructure (MetalLB, Rook-Ceph) is deployed via Ansible, but migration to pure GitOps is in progress (see [[25-Deployment-Dependencies]]).
 *   **Distributed Storage:** Rook-Ceph is used to provide a resilient and scalable storage layer, abstracting the underlying NVMe drives on the worker nodes.
 
 ![accent-divider.svg](images/accent-divider.svg)
@@ -39,11 +39,18 @@ The architecture is based on a Kubernetes (k3s) cluster running on a group of Ra
     *   `ingress/`: Manifest which setup ingress routes for each app thru Traefik.
     *   `useful_scripts/`: Scripts for partitioning 4TB NVMe drive as well as getting the RPi5 to boot from the NVMe vs. SDCard.
     *   `memory-bank/`: Project documentation waiting to be integrated into the project Wiki.
-*   **Application Deployment Workflow:** Each application (POD) deployment follows a consistent pattern:
-    1.  **Ansible Task:** An Ansible task is responsible for the entire lifecycle of an application. This task can be enabled or disabled via the `config.yml` file.
-    2.  **Cleanup:** The task begins by cleaning up any resources from previous deployments to ensure a clean state.
-    3.  **Namespace Creation:** A dedicated Kubernetes namespace is created for the application.
-    4.  **ArgoCD Application:** The task deploys an ArgoCD `Application` resource, which points to the application's configuration (Helm values or Kubernetes manifests) in the Git repository.
-    5.  **Synchronization:** ArgoCD then takes over, continuously monitoring the Git repository and ensuring the deployed application's state matches the configuration.
+*   **Application Deployment Workflow:** Application deployments follow a GitOps pattern:
+    1.  **Git Configuration:** Application manifests, Helm values, or Kustomize overlays are stored in Git
+    2.  **ArgoCD Application:** ArgoCD `Application` resources define what to deploy and where
+    3.  **Automated Sync:** ArgoCD continuously monitors Git and ensures cluster state matches desired state
+    4.  **Self-Healing:** ArgoCD automatically corrects drift from the desired state
 
+    **Current State:** Most applications follow this pattern. Infrastructure components (MetalLB, Rook-Ceph) are transitioning from Ansible deployment to ArgoCD Applications with Kustomize (see [[25-Deployment-Dependencies]]).
 
+![accent-divider.svg](images/accent-divider.svg)
+## See Also
+
+- **[[25-Deployment-Dependencies]]** - Detailed analysis of deployment dependencies and GitOps migration plan
+- **[[13-ADR-Index]]** - Architecture Decision Records documenting key technical choices
+- **[[14-Design-Deep-Dives]]** - In-depth technical discussions on specific topics
+- **[[19-Refactoring-Roadmap]]** - Current development priorities and improvement roadmap

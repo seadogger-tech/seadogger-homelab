@@ -74,7 +74,14 @@ The project provides a set of Ansible playbooks and Kubernetes and Helm manifest
 
 ![accent-divider.svg](images/accent-divider.svg)
 # Project Status
-The project is current fully functional as of 09-07-2025. The core infrastructure is solid and is able to be deployed with a single button press (takes about 30 minutes).  The remaining integration issues are quality of life updates identified above.
+
+**Status:** Production (September 2025)
+**Deployment Time:** ~30 minutes (fully automated)
+**Cluster State:** Running 24/7 with active users and ~4TB of production data
+
+The homelab is fully functional and serving production workloads. Core infrastructure is stable and reliable. Current development focuses on operational excellence, disaster recovery, and pure GitOps conversion.
+
+**See [[19-Refactoring-Roadmap]] for current priorities and [GitHub Issues](https://github.com/seadogger-tech/seadogger-homelab/issues) for active development.**
 
 ![accent-divider.svg](images/accent-divider.svg)
 ## What Works
@@ -89,15 +96,28 @@ The project is current fully functional as of 09-07-2025. The core infrastructur
 *   **Portal (Pro):** Single pane of glass to access applications and monitor tech stack.
 
 ![accent-divider.svg](images/accent-divider.svg)
-## What's Left to Build
+## Current Development Priorities
 
+### 🔴 Critical
+1. **Disaster Recovery** ([#24](https://github.com/seadogger-tech/seadogger-homelab/issues/24)) - S3 Glacier backup for production data
+2. **Staging Environment** ([#47](https://github.com/seadogger-tech/seadogger-homelab/issues/47)) - Safe ARM64 testing without production risk
 
-*   **Single Sign On Integration (Pro):** Enable single sign on thru Keycloak.
+### 🟠 High Priority
+3. **Deployment Dependencies Refactor** ([#48](https://github.com/seadogger-tech/seadogger-homelab/issues/48)) - Pure GitOps with ArgoCD + Kustomize
+4. **Ansible Restructure** ([#32](https://github.com/seadogger-tech/seadogger-homelab/issues/32)) - Convert to role-based structure
+
+### 🟡 Medium Priority
+5. **Single Sign On (Pro)** ([#3](https://github.com/seadogger-tech/seadogger-homelab-pro/issues/3)) - SSO integration for unified authentication
+
+**Full details:** [[19-Refactoring-Roadmap]] | **Dependency Analysis:** [[25-Deployment-Dependencies]]
 
 ![accent-divider.svg](images/accent-divider.svg)
-## Known Issues
+## Known Issues & Limitations
 
-*   **NFS Compatibility:** Ganesha NFS (via CephFS) has compatibility issues with macOS clients, so this was deprecated and replaced with Nextcloud
+*   **NFS Compatibility:** Ganesha NFS (via CephFS) has compatibility issues with macOS clients - using Nextcloud instead
+*   **Image Versions:** Some deployments use "latest" tag - see [#43](https://github.com/seadogger-tech/seadogger-homelab/issues/43)
+*   **Subnet Hardcoding:** Network subnet scattered across multiple files - see [#41](https://github.com/seadogger-tech/seadogger-homelab/issues/41)
+*   **Mixed Deployment Methods:** Infrastructure split between Ansible and ArgoCD - migration in progress
 *   **Plex Media Server:** Plex states support for k3s but Plex Pass is a PITA to deploy locally w/o Plex supervision.  Replaced media capabilities with JellyFin
 
 ![accent-divider.svg](images/accent-divider.svg)

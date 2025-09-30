@@ -1,4 +1,13 @@
 ![wiki-banner.svg](images/wiki-banner.svg)
+
+<div align="center">
+
+**[🏠 Wiki Home](Home)**
+
+</div>
+
+---
+
 ## 🧭 Essentials
 - [[01-Overview]]
 - [[02-Architecture]]
