@@ -82,7 +82,6 @@ Deep dives, design decisions, and planning.
 | **[[14-Design-Deep-Dives]]** | Technical deep dives into complex topics |
 | **[[19-Refactoring-Roadmap]]** | Development priorities and improvement roadmap |
 | **[[21-Deployment-Dependencies]]** | Dependency analysis and GitOps conversion plan |
-| **[[22-C4-Architecture-Diagrams]]** | Interactive C4 model diagrams (Context, Containers, Components) |
 
 ![accent-divider.svg](images/accent-divider.svg)
 
