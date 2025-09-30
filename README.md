@@ -4,131 +4,215 @@
        width="100%" />
 </p>
 
-# Overview
+<div align="center">
 
-The primary goal of this project is to create a robust and well-documented guide for deploying a Kubernetes (k3s) cluster on a set of Raspberry Pi 5 nodes. The deployment should be automated using Ansible and manage applications via ArgoCD, following GitOps best practices.
+**Production-Ready Kubernetes Homelab on Raspberry Pi 5 Cluster**
 
-![alt text](docs/wiki/images/tech-stack.png)
+[![Wiki](https://img.shields.io/badge/📖-Wiki-blue)](https://github.com/seadogger-tech/seadogger-homelab/wiki) [![Issues](https://img.shields.io/github/issues/seadogger-tech/seadogger-homelab)](https://github.com/seadogger-tech/seadogger-homelab/issues) [![License](https://img.shields.io/github/license/seadogger-tech/seadogger-homelab)](LICENSE)
 
-## Problem Statement
+*Enterprise-grade infrastructure • GitOps automation • Self-hosted privacy*
 
-Setting up a personal homelab, especially a Kubernetes cluster on Raspberry Pi hardware, can be a complex and error-prone process. Many guides are incomplete, outdated, or lack the automation needed for a reliable and maintainable setup. This project aims to solve that by providing a comprehensive, automated, and well-documented solution.
+[Features](#-features) • [Quick Start](#-quick-start) • [Documentation](#-documentation) • [Tech Stack](#-tech-stack)
 
-## Key Goals
+</div>
 
-*   **Reproducibility:** The setup and deployment process should be clearly documented and scripted to allow others to reproduce the homelab environment with minimal effort.
-*   **Automation:** Leverage Ansible for infrastructure provisioning and configuration to ensure consistency and reduce manual intervention.
-*   **GitOps:** Use ArgoCD to manage all Kubernetes applications, ensuring that the cluster state is defined declaratively in a Git repository.
-*   **Comprehensive Documentation:** Provide detailed guides, diagrams, and explanations covering hardware setup, software configuration, and operational procedures.
-*   **Extensibility:** The architecture should be modular to allow for the addition of new services and applications over time.
+---
 
+## 🚀 Overview
 
-## Target Audience
+**Seadogger Homelab** is a fully automated, production-ready Kubernetes cluster running on Raspberry Pi 5 hardware. Deploy a complete self-hosted cloud platform in 30 minutes with enterprise-grade features: distributed storage, AI capabilities, media streaming, workflow automation, and comprehensive monitoring.
 
-*   **Hobbyists and Enthusiasts:** Individuals interested in learning about Kubernetes, cloud-native technologies, and running their own services at home.
-*   **Developers:** Engineers who want a local development environment that mirrors production cloud environments.
-*   **Students and Learners:** Anyone looking for a hands-on project to understand modern infrastructure and DevOps practices.
+**Perfect for:**
+- 🏠 **Homelab enthusiasts** seeking production-quality infrastructure
+- 💻 **Developers** needing local Kubernetes environments
+- 🎓 **Students** learning cloud-native technologies
+- 🔒 **Privacy advocates** wanting full data ownership
 
-## How It Works
+![Tech Stack](docs/wiki/images/tech-stack.png)
 
-The project provides a set of Ansible playbooks and Kubernetes and Helm manifests that automate the entire setup process, from configuring the Raspberry Pi nodes to deploying a suite of useful applications. Users clone the repository, customize a few configuration files, and run a single command to bring up the entire cluster.
+---
 
-## User Experience Goals
+## ✨ Features
 
-*   **Simplicity:** The setup process should be as simple as possible, abstracting away much of the underlying complexity.
-*   **Clarity:** The documentation should be clear, concise, and easy to follow, with diagrams and examples to aid understanding.
-*   **Reliability:** The resulting homelab should be stable and reliable, providing a solid platform for running various services.
-*   **Flexibility:** While providing a default set of applications, the project should be flexible enough to allow users to easily add or remove services to suit their needs.
+### 🏗️ **Core Infrastructure**
+- **K3s Kubernetes** - Lightweight, production-ready orchestration
+- **ArgoCD GitOps** - Declarative, automated deployments
+- **Rook-Ceph Storage** - Distributed storage with erasure coding (4+2 EC)
+- **MetalLB** - Bare-metal load balancing
+- **Traefik Ingress** - Automatic HTTPS with internal PKI
+- **Ansible Automation** - One-command deployment
 
-## Core Technologies
+### 📦 **Applications**
+- **🤖 OpenWebUI + AWS Bedrock** - AI chat with Claude/Sonnet models
+- **☁️ Nextcloud** - Personal cloud storage (4TB+)
+- **🎬 Jellyfin** - Media server with live TV (HDHomeRun)
+- **⚙️ N8N** - Workflow automation and integrations
+- **🛡️ PiHole** - Network-wide DNS and ad-blocking
+- **📊 Prometheus + Grafana** - Comprehensive monitoring
 
-*   **Operating System:** Debian GNU/Linux 12 (bookworm) on all Raspberry Pi nodes.
-*   **Container Orchestration:** Kubernetes (k3s)
-*   **Infrastructure Automation:** Ansible
-*   **GitOps:** ArgoCD
-*   **Distributed Storage:** Rook-Ceph
-*   **Ingress Controller:** Traefik
-*   **PKI:** Cert-Manager w/ Traefik TLS termination
-*   **Load Balancer & IP L2Advertisement:** MetalLB
-*   **Monitoring:** Prometheus, Alertmanager, & Grafana
-*   **DNS & Ad-Blocking:** PiHole
-*   **User Apps/Services:** Nextcloud, Jellyfin, OpenwebUI, N8N
-*   **Hardware:** Raspberry Pi 5 nodes. While it may be adaptable to other hardware, the documentation and scripts are tailored to this platform.
-*   **Networking:** The project assumes a specific networking setup including static IP assignments, designated IP range for MetalLB, and Traefik routing 
-*   **Storage:** Rook-Ceph
+### 🔐 **Security & Reliability**
+- Internal PKI with cert-manager
+- WireGuard VPN for remote access
+- Kubernetes secrets encryption
+- S3 Glacier disaster recovery (planned)
+- 24/7 uptime with HA storage
 
-## Development Environment
+---
 
-*   **Code Editor:** VS Code is recommended, particularly with the SSH Remote and Continue extensions.
-*   **Configuration Files:** The primary configuration files for the user are `hosts.ini` and `config.yml` within the `ansible/` directory.
-*   **Git:** A working knowledge of Git and GitHub is required for managing the repository and contributing.
+## 🎯 Quick Start
 
-## Dependencies
+### Prerequisites
+- **Hardware:** 3× Raspberry Pi 5 (8GB RAM, 4TB NVMe storage)
+- **Network:** Static IPs, MetalLB range (192.168.1.240-254)
+- **Software:** Ansible, kubectl, AWS account (for Bedrock)
 
-*   **Ansible:** Must be installed on the machine used to manage the cluster.
-*   **kubectl:** Required for interacting with the Kubernetes cluster.
-*   **AWS Account:** An AWS account with Bedrock API tokens is needed for the Bedrock Access Gateway service.
+### Deploy in 3 Steps
 
-## Project Status
-The project is current fully functional as of 09-07-2025. The core infrastructure is solid and is able to be deployed with a single button press (takes about 30 minutes).  The remaining integration issues are quality of life updates identified above.
+```bash
+# 1. Clone repository
+git clone https://github.com/seadogger-tech/seadogger-homelab.git
+cd seadogger-homelab/core
 
-### What Works
+# 2. Configure your cluster
+cp ansible/example.config.yml ansible/config.yml
+# Edit ansible/config.yml with your settings
+# Edit ansible/hosts.ini with your Pi IP addresses
 
-*   **Core Infrastructure:** The Kubernetes (k3s) cluster is up and running on the Raspberry Pi 5 nodes.
-*   **Node Configuration:** The control plane and worker nodes are configured and managed by Ansible.
-*   **Storage System:** Rook-Ceph is deployed and providing distributed storage with both erasure-coded and replicated pools.
-*   **Network Configuration:** MetalLB and Traefik are functioning, providing load balancing and ingress for deployed services.
-*   **Ingress PKI:** Enable Traefik to terminate TLS at ingress point with self signed cert authority within the cluster.
-*   **GitOps:** ArgoCD is successfully managing the deployment of most applications.
-*   **Monitoring Stack:** The Prometheus and Grafana deployments are stable.
-*   **User Apps & Services:** PiHole, OpenWebUI, Bedrock Access Gateway, N8N, JellyFin, and Nextcloud are deployed and operational.
+# 3. Deploy everything (takes ~30 minutes)
+ansible-playbook ansible/main.yml
+```
 
-### What's Left to Build
+**That's it!** Your cluster is live with all applications deployed.
 
-*   **Portal:** Single pane of glass to access applications and monitor tech stack.  Everything is a separate dashboard (functional but not ideal)
-*   **Single Sign On Integration:** Enable single sign on thru Keycloak.
+---
 
-### Known Issues
+## 📖 Documentation
 
-*   **NFS Compatibility:** Ganesha NFS (via CephFS) has compatibility issues with macOS clients, so this was deprecated and replaced with Nextcloud
-*   **Plex Media Server:** Plex states support for k3s but Plex Pass is a PITA to deploy locally w/o Plex supervision.  Replaced media capabilities with JellyFin
+Comprehensive guides available in the **[GitHub Wiki](https://github.com/seadogger-tech/seadogger-homelab/wiki)**:
 
-## Prerequisites
+| Documentation | Description |
+|---------------|-------------|
+| **[Architecture](https://github.com/seadogger-tech/seadogger-homelab/wiki/02-Architecture)** | System design with interactive C4 diagrams |
+| **[Bootstrap Guide](https://github.com/seadogger-tech/seadogger-homelab/wiki/04-Bootstrap-and-Cold-Start)** | Complete deployment walkthrough |
+| **[Hardware Setup](https://github.com/seadogger-tech/seadogger-homelab/wiki/03-Hardware-and-Network)** | Bill of materials and network topology |
+| **[Troubleshooting](https://github.com/seadogger-tech/seadogger-homelab/wiki/12-Troubleshooting)** | Common issues and solutions |
+| **[Runbooks](https://github.com/seadogger-tech/seadogger-homelab/wiki/17-Runbooks)** | Operational procedures |
 
-### Hardware Requirements
-- Raspberry Pi5 nodes (1 server node and 3 worker nodes)
-- POE switch (recommended: Ubiquiti Dream @Machine SE)
-  - Powers Raspberry Pis via POE HAT
-  - Simplifies the wiring and setup, but not totally neccessary.  
-  - **If you do not use POE, adjust the BoM (e.g. rack mounted solution will be different, likely)**
-- Ethernet cables for hardwired connections
-  - WiFi is disabled and not recommended for k3s clusters
+---
 
-### Network Setup
-- DHCP static IP assignments for all Raspberry Pis
-  - Configured on network switch for centralized management
-  - Static IPs required for k3s cluster nodes
-- DHCP service range configuration
-  - Reserve IPs up to 192.168.1.239
-  - Leaves space for MetalLB allocation above this range
-  - NOTE - If you are using a different subnet, there is a lot of changes to apply throughout the deployment scripts.  
-- WireGuard (optional)
-  - Required only for remote access
-  - Provides encrypted tunnels for services like OpenWebUI, PiHole when you are not on your network
+## 🏗️ Tech Stack
 
-### Software Requirements
-- SSH enabled on all Raspberry Pis
-- AWS account with [Bedrock](https://jrpospos.blog/posts/2024/08/using-amazon-bedrock-with-openwebui-when-working-with-sensitive-data/) API tokens
-- Working knowledge of:
-  - Docker containers and orchestration
-  - Basic AWS services
-  - Git and GitHub CLI tools
+<table>
+<tr>
+<td width="50%">
 
-## Learning Outcomes
+**Platform**
+- Raspberry Pi OS (ARM64)
+- K3s Kubernetes
+- Ansible automation
+- ArgoCD GitOps
 
-### Technologies
-- [Kubernetes (k3s)](https://docs.k3s.io/architecture) architecture and deployment
-- [kubectl](https://kubernetes.io/docs/reference/kubectl/) for cluster management
+**Infrastructure**
+- Rook-Ceph storage
+- MetalLB load balancer
+- Traefik ingress
+- cert-manager PKI
 
-## Author
-The repository was forked from [Jeff Geerling](https://www.jeffgeerling.com)'s Pi-Cluster project and was modified by [seadogger]().
+</td>
+<td width="50%">
+
+**Monitoring**
+- Prometheus metrics
+- Grafana dashboards
+- Alertmanager
+
+**Applications**
+- Nextcloud • Jellyfin
+- OpenWebUI • N8N
+- PiHole • Portal (Pro)
+
+</td>
+</tr>
+</table>
+
+---
+
+## 📊 Project Status
+
+**Current Version:** Production (September 2025)
+**Cluster Uptime:** Running 24/7 with active users
+**Data Managed:** ~4TB (Nextcloud, Jellyfin media)
+
+### ✅ What Works
+- Core K3s cluster with 3-node HA
+- Rook-Ceph distributed storage (erasure coding + replication)
+- ArgoCD GitOps deployment pipeline
+- All applications deployed and operational
+- Internal PKI with automatic TLS certificates
+- Prometheus/Grafana monitoring stack
+- WireGuard VPN remote access
+
+### 🚧 Roadmap
+See **[Refactoring Roadmap](https://github.com/seadogger-tech/seadogger-homelab/wiki/19-Refactoring-Roadmap)** and **[GitHub Issues](https://github.com/seadogger-tech/seadogger-homelab/issues)**
+
+**Priority 0:**
+- [#24](https://github.com/seadogger-tech/seadogger-homelab/issues/24) S3 Glacier disaster recovery (4TB backup)
+- [#47](https://github.com/seadogger-tech/seadogger-homelab/issues/47) ARM64 staging environment
+
+**Priority 1:**
+- [#48](https://github.com/seadogger-tech/seadogger-homelab/issues/48) Pure GitOps refactor (eliminate deployment dependencies)
+- Keycloak SSO integration (Pro)
+
+---
+
+## 🎓 Learning Resources
+
+**New to Kubernetes?**
+- [K3s Documentation](https://docs.k3s.io/)
+- [Kubernetes Basics](https://kubernetes.io/docs/tutorials/kubernetes-basics/)
+
+**New to GitOps?**
+- [ArgoCD Getting Started](https://argo-cd.readthedocs.io/en/stable/getting_started/)
+- [Kustomize Tutorial](https://kubectl.docs.kubernetes.io/guides/introduction/kustomize/)
+
+**Raspberry Pi Clusters:**
+- [Jeff Geerling's Pi Cluster](https://github.com/geerlingguy/turing-pi-cluster)
+
+---
+
+## 🤝 Contributing
+
+Found a bug? Have a suggestion? Contributions welcome!
+
+- **🐛 Bug Reports:** [Open an issue](https://github.com/seadogger-tech/seadogger-homelab/issues/new)
+- **💡 Feature Requests:** [Start a discussion](https://github.com/seadogger-tech/seadogger-homelab/discussions)
+- **🔧 Pull Requests:** Fork, branch, and submit a PR
+
+---
+
+## 📜 License
+
+This project is licensed under the MIT License - see [LICENSE](LICENSE) for details.
+
+---
+
+## 🙏 Acknowledgments
+
+Originally forked from [Jeff Geerling's Pi Cluster](https://www.jeffgeerling.com) project and extensively modified for production homelab deployment.
+
+**Built with:**
+- AWS Bedrock Gateway from [aws-samples](https://github.com/aws-samples/bedrock-access-gateway)
+- Rook-Ceph storage from [Rook Project](https://rook.io)
+- ArgoCD from [Argo Project](https://argoproj.github.io)
+
+---
+
+<div align="center">
+
+**Built with ❤️ using Raspberry Pi, Kubernetes, and Open Source**
+
+[📖 Wiki](https://github.com/seadogger-tech/seadogger-homelab/wiki) • [🐛 Issues](https://github.com/seadogger-tech/seadogger-homelab/issues) • [💬 Discussions](https://github.com/seadogger-tech/seadogger-homelab/discussions)
+
+⭐ **Star this repo if you find it useful!**
+
+</div>

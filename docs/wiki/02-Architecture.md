@@ -250,6 +250,9 @@ graph TB
         PrometheusApp[Prometheus<br/>→ ceph-block-data]
         NextcloudApp[Nextcloud<br/>→ ceph-fs-data-ec]
         JellyfinApp[Jellyfin<br/>→ ceph-fs-data-ec]
+        N8NApp[N8N<br/>→ ceph-block-data]
+        OpenWebUIApp[OpenWebUI<br/>→ ceph-block-data]
+        JellyfinMedia[Jellyfin Media<br/>Read-Only]
     end
 
     Operator --> MON
@@ -270,9 +273,8 @@ graph TB
     PrometheusApp --> Default
     NextcloudApp --> FSEC
     JellyfinApp --> FSEC
-    N8NApp[N8N] --> Default
-    OpenWebUIApp[OpenWebUI] --> Default
-    JellyfinMedia[Jellyfin Media<br/>Read-Only]
+    N8NApp --> Default
+    OpenWebUIApp --> Default
 
     style RookCeph fill:#1e3a5f,stroke:#4a90e2,stroke-width:2px
     style Storage fill:#5a4e8f,stroke:#9b8ac4,stroke-width:2px
