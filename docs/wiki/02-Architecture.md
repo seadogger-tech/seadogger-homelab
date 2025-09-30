@@ -5,11 +5,6 @@
 This document describes the system architecture, key technical decisions, and design patterns used in the `seadogger-homelab` project.
 
 ![accent-divider.svg](images/accent-divider.svg)
-## High-Level Architecture
-
-![Pi Cluster Architecture](images/Architecture.png)
-
-![accent-divider.svg](images/accent-divider.svg)
 ## Interactive Architecture Diagrams
 
 Visual representations at different levels of abstraction, following C4 model principles.
@@ -140,8 +135,8 @@ graph TB
     AWS_Secret -.->|Encrypted| Bedrock_GW
 
     Prom -->|Scrapes| Apps
-    OpenWebUI -->|HTTP| Bedrock_GW
-    Bedrock_GW -->|HTTPS + TLS| AWS
+    OpenWebUI -->|HTTP:6880| Bedrock_GW
+    Bedrock_GW -->|HTTPS + TLS 1.3| AWS
     Nextcloud -->|Encrypted| S3
 
     style Infrastructure fill:#1e3a5f,stroke:#4a90e2,stroke-width:2px
@@ -157,9 +152,16 @@ graph TB
 - 💼 Pro Features - Commercial/premium (dashed border)
 - 🔐 Secrets - Kubernetes secrets (encrypted at rest)
 
+**AWS Bedrock Integration:**
+- **OpenWebUI** → HTTP requests to **Bedrock Gateway** (192.168.1.242:6880)
+- **Bedrock Gateway** → Authenticates using Kubernetes secrets (aws-credentials)
+- **Bedrock Gateway** → HTTPS + TLS 1.3 to AWS Bedrock API (Claude/Sonnet models)
+- Gateway built from [aws-samples/bedrock-access-gateway](https://github.com/aws-samples/bedrock-access-gateway)
+- Auto-rebuilds via GitHub Actions when upstream changes (every 6 hours check)
+
 **Security Notes:**
-- AWS credentials stored as Kubernetes secrets
-- Bedrock Gateway proxies requests with TLS encryption
+- AWS credentials stored as Kubernetes secrets (encrypted at rest)
+- Bedrock Gateway proxies requests with TLS 1.3 encryption to AWS
 - All ingress traffic uses TLS certificates from cert-manager
 - External access requires WireGuard VPN authentication
 
@@ -268,6 +270,9 @@ graph TB
     PrometheusApp --> Default
     NextcloudApp --> FSEC
     JellyfinApp --> FSEC
+    N8NApp[N8N] --> Default
+    OpenWebUIApp[OpenWebUI] --> Default
+    JellyfinMedia[Jellyfin Media<br/>Read-Only]
 
     style RookCeph fill:#1e3a5f,stroke:#4a90e2,stroke-width:2px
     style Storage fill:#5a4e8f,stroke:#9b8ac4,stroke-width:2px
@@ -278,10 +283,13 @@ graph TB
 
 **Storage Classes Details:**
 - **ceph-block-data** (DEFAULT): Block storage with replication (RBD)
+  - Used by: N8N (n8n-main-persistence), OpenWebUI (open-webui)
 - **ceph-bucket**: S3-compatible object storage for backups
 - **ceph-fs-data-ec**: CephFS with erasure coding (4+2 EC) for large files
+  - Used by: Nextcloud (nextcloud-nextcloud), Jellyfin config/cache (jellyfin-config, jellyfin-cache)
 - **ceph-fs-data-replicated**: CephFS with 3× replication for high availability
 - **local-path**: K3s built-in, single-node local storage
+- **No storage class**: Read-only volume mounts (e.g., Jellyfin media library)
 
 **Reclaim Policy:** All Ceph storage classes use `Retain` policy to prevent accidental data loss
 
