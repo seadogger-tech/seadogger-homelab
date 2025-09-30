@@ -8,7 +8,7 @@ This repository uses two main GitHub Actions workflows for automation: **Publish
 ## Overview Diagram
 
 ```mermaid
-%%{init: {'theme':'dark','themeVariables': {'darkMode':'true'}}}%%
+%%{init: {'theme':'base'}}%%
 graph TB
     subgraph Triggers["🔔 Workflow Triggers"]
         Push[Git Push to master]
@@ -74,7 +74,7 @@ graph TB
 ### Workflow Details
 
 ```mermaid
-%%{init: {'theme':'dark','themeVariables': {'darkMode':'true'}}}%%
+%%{init: {'theme':'base'}}%%
 sequenceDiagram
     participant Dev as Developer
     participant GH as GitHub Actions
@@ -135,7 +135,7 @@ sequenceDiagram
 ### Workflow Details
 
 ```mermaid
-%%{init: {'theme':'dark','themeVariables': {'darkMode':'true'}}}%%
+%%{init: {'theme':'base'}}%%
 sequenceDiagram
     participant Cron as GitHub Cron
     participant GH as GitHub Actions
@@ -211,7 +211,7 @@ sequenceDiagram
 ## CI/CD Architecture Diagram
 
 ```mermaid
-%%{init: {'theme':'dark','themeVariables': {'darkMode':'true'}}}%%
+%%{init: {'theme':'base'}}%%
 graph LR
     subgraph Developer["👨‍💻 Developer Workflow"]
         EditWiki[Edit docs/wiki/]
