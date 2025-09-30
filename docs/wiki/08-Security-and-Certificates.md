@@ -2,6 +2,16 @@
 ![accent-divider.svg](images/accent-divider.svg)
 # Security & Certificates
 
+---
+> **🌙 Diagram Viewing Recommendation**
+>
+> The interactive Mermaid diagrams below are **optimized for GitHub Dark Mode** to provide maximum readability and visual impact.
+>
+> **To enable Dark Mode:** GitHub Settings → Appearance → Theme → **Dark default**
+>
+> *Light mode users can still view the diagrams, though colors may appear less vibrant.*
+---
+
 ![accent-divider.svg](images/accent-divider.svg)
 # Internal PKI and HTTPS Data Flow Architecture
 
@@ -25,8 +35,8 @@ graph TD
     B --> jellyfin["jellyfin.seadogger-homelab"];
     B --> n8n["n8n.seadogger-homelab"];
 
-    style A fill:#f9f,stroke:#333,stroke-width:2px
-    style B fill:#ccf,stroke:#333,stroke-width:2px
+    style A fill:#7b1fa2,stroke:#9c27b0,stroke-width:2px
+    style B fill:#1e3a5f,stroke:#4a90e2,stroke-width:2px
 ```
 
 ![accent-divider.svg](images/accent-divider.svg)
@@ -275,9 +285,9 @@ graph LR
     T -- "Forwards to" --> A6
     T -- "Forwards to" --> A7
 
-    style T fill:#89cff0
-    style O fill:#f9e79f
-    style K fill:#f5b7b1
+    style T fill:#1e3a5f,stroke:#4a90e2,stroke-width:2px
+    style O fill:#ff9900,stroke:#ff9900,stroke-width:2px
+    style K fill:#7b1fa2,stroke:#9c27b0,stroke-width:2px
 ```
 ![accent-divider.svg](images/accent-divider.svg)
 ## SSO Login Flow (First Time Access)

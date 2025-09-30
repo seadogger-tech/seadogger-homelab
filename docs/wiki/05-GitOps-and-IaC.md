@@ -2,6 +2,16 @@
 ![accent-divider.svg](images/accent-divider.svg)
 # GitOps & IaC
 
+---
+> **🌙 Diagram Viewing Recommendation**
+>
+> The interactive Mermaid diagrams below are **optimized for GitHub Dark Mode** to provide maximum readability and visual impact.
+>
+> **To enable Dark Mode:** GitHub Settings → Appearance → Theme → **Dark default**
+>
+> *Light mode users can still view the diagrams, though colors may appear less vibrant.*
+---
+
 This page explains how automation is split between Ansible and ArgoCD, and provides a practical test plan.
 
 For CI/CD automation and repo workflows, see [[15-CI-CD-and-GitHub-Actions]].
@@ -131,3 +141,52 @@ For CI/CD automation and repo workflows, see [[15-CI-CD-and-GitHub-Actions]].
 **Related Issues:**
 - [#48 - Deployment Dependencies Refactor](https://github.com/seadogger-tech/seadogger-homelab/issues/48) - Pure GitOps migration
 - [#50 - Move infrastructure to ArgoCD](https://github.com/seadogger-tech/seadogger-homelab/issues/50) - Converting all to Kustomize
+
+![accent-divider.svg](images/accent-divider.svg)
+## Deployment Order (Sync Waves)
+
+Shows ArgoCD sync wave deployment sequence.
+
+```mermaid
+graph TD
+    subgraph Wave0["🌊 Wave 0: Operators & Base"]
+        MetalLB[MetalLB]
+        RookOp[Rook-Ceph<br/>Operator]
+        CertMgr[cert-manager]
+    end
+
+    subgraph Wave1["🌊 Wave 1: Clusters & PKI"]
+        RookCluster[Rook-Ceph<br/>Cluster + Storage Classes]
+        PKI[Internal PKI<br/>CA + ClusterIssuer]
+    end
+
+    subgraph Wave2["🌊 Wave 2: Monitoring"]
+        Prometheus[Prometheus<br/>Stack]
+    end
+
+    subgraph Wave3["🌊 Wave 3+: Applications"]
+        Apps[Nextcloud, Jellyfin<br/>OpenWebUI, N8N<br/>PiHole]
+    end
+
+    subgraph WavePro["🌊 Wave 4: Pro Features"]
+        Pro[Portal<br/>Keycloak Future]
+    end
+
+    Wave0 --> Wave1
+    Wave1 --> Wave2
+    Wave2 --> Wave3
+    Wave3 --> WavePro
+
+    style Wave0 fill:#1e3a5f,stroke:#4a90e2,stroke-width:3px
+    style Wave1 fill:#1e3a5f,stroke:#4a90e2,stroke-width:3px
+    style Wave2 fill:#1e3a5f,stroke:#4a90e2,stroke-width:3px
+    style Wave3 fill:#2d5016,stroke:#5a9216,stroke-width:3px
+    style WavePro fill:#7b1fa2,stroke:#9c27b0,stroke-width:3px,stroke-dasharray: 5 5
+```
+
+**Wave Ordering Rationale:**
+- **Wave 0:** Foundation services (MetalLB for IPs, Rook operator, cert-manager)
+- **Wave 1:** Clusters that depend on operators (Ceph cluster, PKI setup)
+- **Wave 2:** Monitoring (depends on storage for PVCs)
+- **Wave 3:** Applications (depend on all infrastructure)
+- **Wave 4:** Pro features (depend on base applications)

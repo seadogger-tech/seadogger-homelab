@@ -2,6 +2,16 @@
 ![accent-divider.svg](images/accent-divider.svg)
 # Storage Architecture: Rook-Ceph
 
+---
+> **🌙 Diagram Viewing Recommendation**
+>
+> The interactive Mermaid diagrams below are **optimized for GitHub Dark Mode** to provide maximum readability and visual impact.
+>
+> **To enable Dark Mode:** GitHub Settings → Appearance → Theme → **Dark default**
+>
+> *Light mode users can still view the diagrams, though colors may appear less vibrant.*
+---
+
 The cluster's storage is managed by Rook-Ceph, providing both block and filesystem storage. The architecture is designed for a balance of performance, data redundancy, and storage efficiency.
 
 ![ceph-dashboard](images/ceph-dashboard.png)
@@ -79,3 +89,85 @@ This comprehensive update ensures the entire storage infrastructure is now corre
 **Related Issues:**
 - [#24 - Disaster Recovery](https://github.com/seadogger-tech/seadogger-homelab/issues/24) - S3 backup strategy for Ceph data
 - [#50 - Move infrastructure to ArgoCD](https://github.com/seadogger-tech/seadogger-homelab/issues/50) - Rook-Ceph GitOps migration
+
+![accent-divider.svg](images/accent-divider.svg)
+### Level 3: Storage Architecture
+
+Shows Rook-Ceph distributed storage with actual storage classes.
+
+```mermaid
+graph TB
+    subgraph RookCeph["🗄️ Rook-Ceph Cluster"]
+        Operator[Rook Operator<br/>Lifecycle Manager]
+
+        subgraph Daemons["Ceph Daemons"]
+            MON[MON × 3<br/>Cluster Monitors]
+            MGR[MGR × 1<br/>Management]
+            OSD[OSD × 3<br/>Storage Daemons]
+            MDS[MDS × 2<br/>Metadata Servers]
+        end
+    end
+
+    subgraph Storage["💾 Storage Classes"]
+        direction TB
+        Default[ceph-block-data<br/>RBD Replicated<br/>DEFAULT]
+        Bucket[ceph-bucket<br/>S3-compatible<br/>Object Storage]
+        FSEC[ceph-fs-data-ec<br/>CephFS Erasure Coded<br/>4+2 EC]
+        FSRep[ceph-fs-data-replicated<br/>CephFS Replicated<br/>3× Replica]
+        LocalPath[local-path<br/>K3s Local Storage<br/>Single Node]
+    end
+
+    subgraph Hardware["🖥️ Physical Hardware"]
+        NVMe1[yoda:/dev/nvme0n1<br/>4TB NVMe]
+        NVMe2[anakin:/dev/nvme0n1<br/>4TB NVMe]
+        NVMe3[obiwan:/dev/nvme0n1<br/>4TB NVMe]
+    end
+
+    subgraph AppsLayer["📦 Application Usage"]
+        PrometheusApp[Prometheus<br/>→ ceph-block-data]
+        NextcloudApp[Nextcloud<br/>→ ceph-fs-data-ec]
+        JellyfinApp[Jellyfin<br/>→ ceph-fs-data-ec]
+        N8NApp[N8N<br/>→ ceph-block-data]
+        OpenWebUIApp[OpenWebUI<br/>→ ceph-block-data]
+        JellyfinMedia[Jellyfin Media<br/>Read-Only]
+    end
+
+    Operator --> MON
+    Operator --> MGR
+    Operator --> OSD
+    Operator --> MDS
+
+    OSD --> NVMe1
+    OSD --> NVMe2
+    OSD --> NVMe3
+
+    Default --> OSD
+    Bucket --> OSD
+    FSEC --> MDS
+    FSRep --> MDS
+    MDS --> OSD
+
+    PrometheusApp --> Default
+    NextcloudApp --> FSEC
+    JellyfinApp --> FSEC
+    N8NApp --> Default
+    OpenWebUIApp --> Default
+
+    style RookCeph fill:#1e3a5f,stroke:#4a90e2,stroke-width:3px
+    style Storage fill:#7b1fa2,stroke:#9c27b0,stroke-width:3px
+    style Hardware fill:#8b4513,stroke:#d2691e,stroke-width:3px
+    style AppsLayer fill:#2d5016,stroke:#5a9216,stroke-width:3px
+    style Default fill:#2c5aa0,stroke:#4a90e2,stroke-width:2px,color:#fff
+```
+
+**Storage Classes Details:**
+- **ceph-block-data** (DEFAULT): Block storage with replication (RBD)
+  - Used by: N8N (n8n-main-persistence), OpenWebUI (open-webui)
+- **ceph-bucket**: S3-compatible object storage for backups
+- **ceph-fs-data-ec**: CephFS with erasure coding (4+2 EC) for large files
+  - Used by: Nextcloud (nextcloud-nextcloud), Jellyfin config/cache (jellyfin-config, jellyfin-cache)
+- **ceph-fs-data-replicated**: CephFS with 3× replication for high availability
+- **local-path**: K3s built-in, single-node local storage
+- **No storage class**: Read-only volume mounts (e.g., Jellyfin media library)
+
+**Reclaim Policy:** All Ceph storage classes use `Retain` policy to prevent accidental data loss
