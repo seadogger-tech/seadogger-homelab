@@ -1,257 +1,366 @@
 ![wiki-banner.svg](images/wiki-banner.svg)
 ![accent-divider.svg](images/accent-divider.svg)
-# C4 Architecture Diagrams
+# Architecture Diagrams
 
-These diagrams follow the C4 model (Context, Containers, Components, Code) to visualize the Seadogger Homelab architecture at different levels of abstraction.
+Visual representations of the Seadogger Homelab architecture at different levels of abstraction, following the C4 model principles.
 
-> **💡 Tip:** These diagrams are built with Mermaid and render interactively on GitHub. The diagrams may take a moment to load.
+> **💡 Tip:** These diagrams use Mermaid and render natively on GitHub. They work in both light and dark modes.
 
+![accent-divider.svg](images/accent-divider.svg)
 ## Level 1: System Context
 
-```mermaid
-C4Context
-    title System Context - Seadogger Homelab
-
-    Person(user, "Homelab User", "Access applications and services")
-    Person(admin, "Administrator", "Manages cluster infrastructure")
-
-    System_Boundary(homelab, "Seadogger Homelab") {
-        System(cluster, "K3s Cluster", "Raspberry Pi 5 cluster running containerized applications")
-    }
-
-    System_Ext(aws, "AWS Bedrock", "AI/ML models (Claude, Sonnet)")
-    System_Ext(github, "GitHub", "Git repository hosting")
-    System_Ext(s3, "AWS S3 Glacier", "Disaster recovery backup storage")
-    System_Ext(hdhomerun, "HDHomeRun", "Live TV tuner")
-    System_Ext(devices, "Home Network Devices", "Phones, tablets, computers, TVs")
-
-    Rel(user, cluster, "Uses", "HTTPS")
-    Rel(admin, cluster, "Manages", "kubectl, Ansible")
-    Rel(cluster, aws, "Calls AI models", "HTTPS/API")
-    Rel(cluster, github, "GitOps sync", "HTTPS/Git")
-    Rel(cluster, s3, "Backup data", "AWS SDK")
-    Rel(cluster, hdhomerun, "Stream TV", "HTTP/RTSP")
-    Rel(devices, cluster, "DNS queries", "UDP/53")
-```
-
-## Level 2: Container Diagram
+Shows the homelab system and its external interactions.
 
 ```mermaid
-C4Container
-    title Container Diagram - K3s Cluster Infrastructure
+graph TB
+    User([👤 Homelab User])
+    Admin([👤 Administrator])
 
-    Person(user, "User")
+    subgraph Homelab["🏠 Seadogger Homelab"]
+        K3s[K3s Cluster<br/>Raspberry Pi 5 Cluster]
+    end
 
-    Container_Boundary(k3s, "K3s Cluster") {
-        Container(traefik, "Traefik", "Ingress Controller", "Routes HTTPS traffic to services")
-        Container(pihole, "PiHole", "DNS", "Network DNS and ad-blocking")
-        Container(argocd, "ArgoCD", "GitOps", "Manages application deployments")
-        Container(prometheus, "Prometheus Stack", "Monitoring", "Metrics, alerts, dashboards")
-        Container(certmanager, "cert-manager", "PKI", "Issues and manages TLS certificates")
-        Container(ceph, "Rook-Ceph", "Storage", "Distributed block and file storage")
-        Container(metallb, "MetalLB", "Load Balancer", "Provides LoadBalancer IPs")
+    AWS[☁️ AWS Bedrock<br/>AI/ML Models]
+    GitHub[🔧 GitHub<br/>Git Repository]
+    S3[💾 AWS S3 Glacier<br/>Backup Storage]
+    HDHomeRun[📺 HDHomeRun<br/>Live TV Tuner]
+    Devices[📱 Home Devices<br/>Phones, Tablets, TVs]
 
-        Container_Boundary(apps, "Applications") {
-            Container(nextcloud, "Nextcloud", "File Storage", "Personal cloud storage")
-            Container(jellyfin, "Jellyfin", "Media", "Movies, music, live TV")
-            Container(openwebui, "OpenWebUI", "AI", "LLM chat interface")
-            Container(n8n, "N8N", "Automation", "Workflow automation")
-            Container(portal, "Portal", "Dashboard", "Single pane of glass")
-        }
-    }
+    User -->|HTTPS| K3s
+    Admin -->|kubectl/Ansible| K3s
+    K3s -->|AI API| AWS
+    K3s -->|GitOps Sync| GitHub
+    K3s -->|Backup| S3
+    K3s -->|Stream TV| HDHomeRun
+    Devices -->|DNS Queries| K3s
 
-    System_Ext(github, "GitHub")
-    System_Ext(aws, "AWS Bedrock")
-    System_Ext(s3, "AWS S3")
-
-    Rel(user, traefik, "HTTPS requests", "443")
-    Rel(user, pihole, "DNS queries", "53")
-    Rel(traefik, apps, "Routes to")
-    Rel(argocd, apps, "Deploys/manages")
-    Rel(argocd, github, "Syncs from")
-    Rel(apps, ceph, "Stores data")
-    Rel(certmanager, traefik, "Provides TLS certs")
-    Rel(metallb, traefik, "Assigns IP")
-    Rel(metallb, pihole, "Assigns IP")
-    Rel(prometheus, apps, "Scrapes metrics")
-    Rel(openwebui, aws, "AI requests")
-    Rel(nextcloud, s3, "Backup")
+    style Homelab fill:#1e3a5f,stroke:#4a90e2,stroke-width:3px
+    style K3s fill:#2c5aa0,stroke:#4a90e2,color:#fff
+    style AWS fill:#ff9900,stroke:#ff9900,color:#000
+    style GitHub fill:#24292e,stroke:#ffffff,color:#fff
+    style S3 fill:#569a31,stroke:#569a31,color:#fff
 ```
 
-## Level 3: Component Diagram - GitOps Pipeline
+![accent-divider.svg](images/accent-divider.svg)
+## Level 2: Container Diagram - K3s Infrastructure
+
+Shows the major services and applications within the K3s cluster.
 
 ```mermaid
-C4Component
-    title Component Diagram - GitOps Deployment Pipeline
+graph TB
+    User([👤 User])
 
-    Container_Boundary(git, "Git Repository") {
-        Component(manifests, "Kubernetes Manifests", "YAML", "Application definitions")
-        Component(kustomize, "Kustomize Overlays", "YAML", "Environment-specific configs")
-        Component(helm, "Helm Values", "YAML", "Chart configurations")
-    }
+    subgraph K3s["K3s Cluster"]
+        subgraph Infrastructure["🏗️ Infrastructure"]
+            Traefik[Traefik<br/>Ingress Controller]
+            MetalLB[MetalLB<br/>Load Balancer]
+            Ceph[Rook-Ceph<br/>Distributed Storage]
+            CertMgr[cert-manager<br/>TLS Certificates]
+            ArgoCD[ArgoCD<br/>GitOps Engine]
+            Prom[Prometheus Stack<br/>Monitoring]
+            PiHole[PiHole<br/>DNS & Ad-Blocking]
+        end
 
-    Container_Boundary(argocd, "ArgoCD") {
-        Component(appcontroller, "Application Controller", "Go", "Reconciles desired vs actual state")
-        Component(reposerver, "Repo Server", "Go", "Fetches and renders manifests")
-        Component(syncwaves, "Sync Waves", "Annotations", "Orders deployment dependencies")
-        Component(ui, "ArgoCD UI", "React", "Web dashboard")
-    }
+        subgraph Apps["📦 Applications"]
+            Nextcloud[Nextcloud<br/>File Storage]
+            Jellyfin[Jellyfin<br/>Media Server]
+            OpenWebUI[OpenWebUI<br/>AI Chat]
+            N8N[N8N<br/>Automation]
+            Portal[Portal<br/>Dashboard]
+        end
+    end
 
-    Container_Boundary(k3s, "K3s API Server") {
-        Component(crds, "Custom Resources", "CRDs", "Application, AppProject, ApplicationSet")
-        Component(controllers, "Controllers", "Go", "Watches and reconciles resources")
-    }
+    GitHub[🔧 GitHub]
+    AWS[☁️ AWS Bedrock]
+    S3[💾 S3 Glacier]
 
-    Container_Boundary(cluster, "Workloads") {
-        Component(infrastructure, "Infrastructure", "Pods", "MetalLB, Rook-Ceph, cert-manager")
-        Component(applications, "Applications", "Pods", "Nextcloud, Jellyfin, OpenWebUI")
-    }
+    User -->|HTTPS:443| Traefik
+    User -->|DNS:53| PiHole
 
-    Rel(reposerver, manifests, "Fetches")
-    Rel(reposerver, kustomize, "Renders")
-    Rel(reposerver, helm, "Templates")
-    Rel(appcontroller, reposerver, "Gets rendered manifests")
-    Rel(appcontroller, crds, "Creates/updates")
-    Rel(controllers, crds, "Watches")
-    Rel(controllers, infrastructure, "Deploys (wave 0-1)")
-    Rel(controllers, applications, "Deploys (wave 2+)")
-    Rel(syncwaves, controllers, "Orders deployment")
+    Traefik --> Nextcloud
+    Traefik --> Jellyfin
+    Traefik --> OpenWebUI
+    Traefik --> N8N
+    Traefik --> Portal
+    Traefik --> Prom
+
+    ArgoCD -->|Deploys| Apps
+    ArgoCD -->|Syncs| GitHub
+
+    MetalLB -->|Assigns IP| Traefik
+    MetalLB -->|Assigns IP| PiHole
+
+    CertMgr -->|TLS Certs| Traefik
+
+    Nextcloud --> Ceph
+    Jellyfin --> Ceph
+    Prom --> Ceph
+
+    Prom -->|Scrapes| Apps
+    OpenWebUI -->|AI API| AWS
+    Nextcloud -->|Backup| S3
+
+    style Infrastructure fill:#1e3a5f,stroke:#4a90e2,stroke-width:2px
+    style Apps fill:#2d5016,stroke:#5a9216,stroke-width:2px
+    style K3s fill:#0d1b2a,stroke:#4a90e2,stroke-width:3px
 ```
 
-## Level 3: Component Diagram - Storage Architecture
+![accent-divider.svg](images/accent-divider.svg)
+## Level 3: GitOps Deployment Pipeline
+
+Shows how ArgoCD deploys applications from Git to the cluster.
 
 ```mermaid
-C4Component
-    title Component Diagram - Rook-Ceph Storage Architecture
+graph LR
+    subgraph Git["📁 Git Repository"]
+        Manifests[Kubernetes<br/>Manifests]
+        Kustomize[Kustomize<br/>Overlays]
+        Helm[Helm<br/>Values]
+    end
 
-    Container_Boundary(rookceph, "Rook-Ceph") {
-        Component(operator, "Rook Operator", "Go", "Manages Ceph cluster lifecycle")
-        Component(mon, "MON Daemons", "Ceph", "Cluster monitors (3x)")
-        Component(mgr, "MGR Daemon", "Ceph", "Cluster management")
-        Component(osd, "OSD Daemons", "Ceph", "Object Storage Daemons on NVMe")
-        Component(mds, "MDS Daemons", "Ceph", "Metadata servers for CephFS")
-    }
+    subgraph ArgoCD["🔄 ArgoCD"]
+        RepoServer[Repo Server<br/>Fetch & Render]
+        AppController[Application<br/>Controller]
+        SyncWaves[Sync Waves<br/>Wave 0→1→2+]
+    end
 
-    Container_Boundary(storage, "Storage Classes") {
-        Component(block, "ceph-block", "RBD", "Block storage for databases")
-        Component(blockdata, "ceph-block-data", "RBD EC", "Erasure coded block storage")
-        Component(fs, "ceph-filesystem", "CephFS", "Shared filesystem storage")
-    }
+    subgraph K3s["☸️ K3s API"]
+        CRDs[Custom Resources<br/>Application CRDs]
+        Controllers[K8s Controllers<br/>Reconcile]
+    end
 
-    Container_Boundary(apps, "Applications") {
-        Component(prometheus, "Prometheus", "Pod", "Uses ceph-block-data PVC")
-        Component(nextcloud, "Nextcloud", "Pod", "Uses ceph-filesystem PVC")
-        Component(jellyfin, "Jellyfin", "Pod", "Uses ceph-filesystem PVC")
-    }
+    subgraph Cluster["🚀 Running Workloads"]
+        Infra[Infrastructure<br/>Wave 0-1]
+        Applications[Applications<br/>Wave 2+]
+    end
 
-    Container_Boundary(hardware, "Hardware") {
-        Component(nvme1, "yoda:/dev/nvme0n1", "4TB NVMe", "Physical storage")
-        Component(nvme2, "anakin:/dev/nvme0n1", "4TB NVMe", "Physical storage")
-        Component(nvme3, "obiwan:/dev/nvme0n1", "4TB NVMe", "Physical storage")
-    }
+    Manifests --> RepoServer
+    Kustomize --> RepoServer
+    Helm --> RepoServer
 
-    Rel(operator, mon, "Manages")
-    Rel(operator, mgr, "Manages")
-    Rel(operator, osd, "Manages")
-    Rel(osd, nvme1, "Uses")
-    Rel(osd, nvme2, "Uses")
-    Rel(osd, nvme3, "Uses")
-    Rel(block, osd, "Backed by")
-    Rel(blockdata, osd, "Backed by (erasure coded)")
-    Rel(fs, mds, "Backed by")
-    Rel(mds, osd, "Stores metadata on")
-    Rel(prometheus, block, "Mounts PVC")
-    Rel(nextcloud, fs, "Mounts PVC")
-    Rel(jellyfin, fs, "Mounts PVC")
+    RepoServer --> AppController
+    AppController --> CRDs
+
+    CRDs --> Controllers
+    SyncWaves -.->|Orders| Controllers
+
+    Controllers -->|Deploy| Infra
+    Controllers -->|Deploy| Applications
+
+    style Git fill:#24292e,stroke:#ffffff,stroke-width:2px,color:#fff
+    style ArgoCD fill:#ef7b4d,stroke:#ef7b4d,stroke-width:2px
+    style K3s fill:#326ce5,stroke:#326ce5,stroke-width:2px
+    style Cluster fill:#2d5016,stroke:#5a9216,stroke-width:2px
 ```
 
-## Level 3: Component Diagram - Network & Security
+![accent-divider.svg](images/accent-divider.svg)
+## Level 3: Storage Architecture
+
+Shows Rook-Ceph distributed storage with 3×4TB NVMe drives.
 
 ```mermaid
-C4Component
-    title Component Diagram - Network & Security Architecture
+graph TB
+    subgraph RookCeph["🗄️ Rook-Ceph Cluster"]
+        Operator[Rook Operator<br/>Lifecycle Manager]
 
-    Person(user, "User")
+        subgraph Daemons["Ceph Daemons"]
+            MON[MON × 3<br/>Cluster Monitors]
+            MGR[MGR × 1<br/>Management]
+            OSD[OSD × 3<br/>Storage Daemons]
+            MDS[MDS × 2<br/>Metadata Servers]
+        end
+    end
 
-    Container_Boundary(metallb, "MetalLB") {
-        Component(speaker, "Speaker DaemonSet", "Go", "Announces IPs via L2")
-        Component(controller, "Controller", "Go", "Assigns IPs from pool")
-        Component(ippool, "IP Address Pool", "CRD", "192.168.1.241-254")
-    }
+    subgraph Storage["💾 Storage Classes"]
+        Block[ceph-block<br/>RBD Replicated]
+        BlockEC[ceph-block-data<br/>RBD Erasure Coded]
+        FS[ceph-filesystem<br/>CephFS Shared]
+    end
 
-    Container_Boundary(traefik, "Traefik") {
-        Component(entrypoints, "EntryPoints", "HTTP/HTTPS", "Ports 80/443")
-        Component(routers, "IngressRoutes", "CRD", "Routing rules")
-        Component(middleware, "Middlewares", "CRD", "HTTP→HTTPS redirect")
-        Component(tlsstore, "TLS Store", "Secrets", "Certificate storage")
-    }
+    subgraph Hardware["🖥️ Physical Hardware"]
+        NVMe1[yoda<br/>4TB NVMe]
+        NVMe2[anakin<br/>4TB NVMe]
+        NVMe3[obiwan<br/>4TB NVMe]
+    end
 
-    Container_Boundary(certmgr, "cert-manager") {
-        Component(controller2, "Controller", "Go", "Issues/renews certificates")
-        Component(issuer, "ClusterIssuer", "CRD", "internal-local-issuer")
-        Component(rootca, "Root CA", "Secret", "Self-signed CA")
-        Component(intermediateca, "Intermediate CA", "Secret", "Signs app certs")
-    }
+    subgraph AppsLayer["📦 Applications"]
+        PrometheusApp[Prometheus]
+        NextcloudApp[Nextcloud]
+        JellyfinApp[Jellyfin]
+    end
 
-    Container_Boundary(apps, "Applications") {
-        Component(nextcloud, "Nextcloud", "Pod", "Receives HTTPS traffic")
-        Component(prometheus, "Prometheus", "Pod", "Receives HTTPS traffic")
-    }
+    Operator --> MON
+    Operator --> MGR
+    Operator --> OSD
+    Operator --> MDS
 
-    Rel(user, entrypoints, "HTTPS", "443")
-    Rel(controller, ippool, "Assigns from")
-    Rel(speaker, entrypoints, "Announces IP")
-    Rel(entrypoints, routers, "Routes via")
-    Rel(routers, middleware, "Applies")
-    Rel(middleware, nextcloud, "Forwards to")
-    Rel(middleware, prometheus, "Forwards to")
-    Rel(routers, tlsstore, "Uses cert")
-    Rel(controller2, issuer, "Uses")
-    Rel(issuer, intermediateca, "Signs with")
-    Rel(intermediateca, rootca, "Chained to")
-    Rel(controller2, tlsstore, "Stores cert in")
+    OSD --> NVMe1
+    OSD --> NVMe2
+    OSD --> NVMe3
+
+    Block --> OSD
+    BlockEC --> OSD
+    FS --> MDS
+    MDS --> OSD
+
+    PrometheusApp -->|PVC| BlockEC
+    NextcloudApp -->|PVC| FS
+    JellyfinApp -->|PVC| FS
+
+    style RookCeph fill:#1e3a5f,stroke:#4a90e2,stroke-width:2px
+    style Storage fill:#5a4e8f,stroke:#9b8ac4,stroke-width:2px
+    style Hardware fill:#8b4513,stroke:#d2691e,stroke-width:2px
+    style AppsLayer fill:#2d5016,stroke:#5a9216,stroke-width:2px
 ```
 
-## Legend
+![accent-divider.svg](images/accent-divider.svg)
+## Level 3: Network & Security
 
-- **Person**: External users or administrators
-- **System**: External systems (AWS, GitHub, etc.)
-- **Container**: High-level technology/service (applications, databases, etc.)
-- **Component**: Lower-level building blocks within containers
-- **Boundary**: Logical grouping of related elements
+Shows traffic flow through MetalLB, Traefik, and cert-manager.
 
+```mermaid
+graph TB
+    User([👤 User])
+
+    subgraph MetalLB["⚖️ MetalLB"]
+        Speaker[Speaker<br/>DaemonSet]
+        Controller[Controller<br/>IP Assignment]
+        IPPool[IP Pool<br/>192.168.1.241-254]
+    end
+
+    subgraph Traefik["🔀 Traefik Ingress"]
+        EntryPoint[EntryPoints<br/>:80 :443]
+        Router[IngressRoutes<br/>Routing Rules]
+        Middleware[Middlewares<br/>HTTP→HTTPS]
+        TLSStore[TLS Store<br/>Certificates]
+    end
+
+    subgraph CertManager["🔐 cert-manager"]
+        CMController[Controller<br/>Issue Certs]
+        Issuer[ClusterIssuer<br/>internal-local-issuer]
+        RootCA[Root CA<br/>Self-Signed]
+        IntermediateCA[Intermediate CA<br/>Signs App Certs]
+    end
+
+    subgraph Apps["📦 Applications"]
+        Nextcloud[Nextcloud]
+        Prometheus[Prometheus]
+        Jellyfin[Jellyfin]
+    end
+
+    User -->|HTTPS:443| EntryPoint
+
+    Controller --> IPPool
+    Speaker --> EntryPoint
+
+    EntryPoint --> Router
+    Router --> Middleware
+    Middleware --> Nextcloud
+    Middleware --> Prometheus
+    Middleware --> Jellyfin
+
+    Router --> TLSStore
+
+    CMController --> Issuer
+    Issuer --> IntermediateCA
+    IntermediateCA --> RootCA
+    CMController --> TLSStore
+
+    style MetalLB fill:#1565c0,stroke:#1976d2,stroke-width:2px
+    style Traefik fill:#0d47a1,stroke:#1976d2,stroke-width:2px
+    style CertManager fill:#2e7d32,stroke:#43a047,stroke-width:2px
+    style Apps fill:#2d5016,stroke:#5a9216,stroke-width:2px
+```
+
+![accent-divider.svg](images/accent-divider.svg)
+## Deployment Order (Sync Waves)
+
+Shows the order in which components are deployed via ArgoCD sync waves.
+
+```mermaid
+graph TD
+    subgraph Wave0["🌊 Wave 0: Operators & Base"]
+        MetalLB[MetalLB]
+        RookOp[Rook-Ceph<br/>Operator]
+        CertMgr[cert-manager]
+    end
+
+    subgraph Wave1["🌊 Wave 1: Clusters & PKI"]
+        RookCluster[Rook-Ceph<br/>Cluster]
+        PKI[Internal PKI<br/>CA + ClusterIssuer]
+    end
+
+    subgraph Wave2["🌊 Wave 2: Monitoring"]
+        Prometheus[Prometheus<br/>Stack]
+    end
+
+    subgraph Wave3["🌊 Wave 3+: Applications"]
+        Apps[Nextcloud, Jellyfin<br/>OpenWebUI, N8N<br/>Portal, PiHole]
+    end
+
+    Wave0 --> Wave1
+    Wave1 --> Wave2
+    Wave2 --> Wave3
+
+    style Wave0 fill:#1e3a5f,stroke:#4a90e2,stroke-width:2px
+    style Wave1 fill:#2c5aa0,stroke:#4a90e2,stroke-width:2px
+    style Wave2 fill:#3d70b2,stroke:#4a90e2,stroke-width:2px
+    style Wave3 fill:#2d5016,stroke:#5a9216,stroke-width:2px
+```
+
+![accent-divider.svg](images/accent-divider.svg)
+## Diagram Legend
+
+| Symbol | Meaning |
+|--------|---------|
+| 👤 | User or Administrator |
+| ☁️ | External Cloud Service |
+| 🔧 | External Tool/Platform |
+| 🏠 | System Boundary |
+| 📦 | Application/Container |
+| 🗄️ | Storage System |
+| ⚖️ | Load Balancer |
+| 🔀 | Ingress/Router |
+| 🔐 | Security/Certificates |
+| 🌊 | Deployment Wave |
+
+![accent-divider.svg](images/accent-divider.svg)
 ## Notes
 
-- All diagrams can be viewed on GitHub as it renders Mermaid natively
-- These diagrams represent the **target architecture** after GitOps migration (see [[21-Deployment-Dependencies]])
-- Current state still has some infrastructure deployed via Ansible (being migrated)
-- Sync waves enforce deployment order: Wave 0 (operators) → Wave 1 (clusters) → Wave 2+ (applications)
+- **Dark Mode Compatible:** All diagrams use colors that work in both light and dark themes
+- **Target Architecture:** These represent the architecture after full GitOps migration (see [[21-Deployment-Dependencies]])
+- **Current State:** Some infrastructure still deployed via Ansible during migration
+- **Sync Waves:** ArgoCD uses wave annotations to enforce deployment order automatically
+
 ![accent-divider.svg](images/accent-divider.svg)
 ## How to View These Diagrams
 
-### On GitHub Wiki
-1. Navigate to this page on GitHub: https://github.com/seadogger-tech/seadogger-homelab/wiki/22-C4-Architecture-Diagrams
-2. GitHub automatically renders Mermaid diagrams
-3. Diagrams may take 5-10 seconds to render (be patient!)
+### On GitHub Wiki (Recommended)
+1. Navigate to: https://github.com/seadogger-tech/seadogger-homelab/wiki/22-C4-Architecture-Diagrams
+2. Diagrams render automatically (may take 2-3 seconds)
+3. Works in both light and dark mode
 
 ### In VS Code
-1. Install the "Markdown Preview Mermaid Support" extension
-2. Open this file and press `Cmd+Shift+V` (macOS) or `Ctrl+Shift+V` (Windows/Linux)
-3. Diagrams render inline
+1. Install "Markdown Preview Mermaid Support" extension
+2. Open this file: `22-C4-Architecture-Diagrams.md`
+3. Press `Cmd+Shift+V` (macOS) or `Ctrl+Shift+V` (Windows/Linux)
+4. Diagrams render inline
 
 ### Online Mermaid Editor
-If diagrams don't render, you can view/edit them at:
-- https://mermaid.live/
-- Copy any `mermaid` code block and paste into the editor
+For editing or troubleshooting:
+1. Visit https://mermaid.live/
+2. Copy any diagram code block
+3. Paste and edit interactively
+4. Export as PNG/SVG if needed
 
 ![accent-divider.svg](images/accent-divider.svg)
 ## See Also
 
-- **[[02-Architecture]]** - High-level architecture overview
-- **[[21-Deployment-Dependencies]]** - Deployment order and dependencies
+- **[[02-Architecture]]** - Architecture overview and design decisions
+- **[[21-Deployment-Dependencies]]** - Detailed dependency analysis
 - **[[13-ADR-Index]]** - Architecture Decision Records
 - **[[14-Design-Deep-Dives]]** - Technical deep dives
 
 **Related Issues:**
-- [#48 - Deployment Dependencies Refactor](https://github.com/seadogger-tech/seadogger-homelab/issues/48) - GitOps migration to match target architecture
-- [#50 - Move infrastructure to ArgoCD](https://github.com/seadogger-tech/seadogger-homelab/issues/50) - Implementing sync waves shown in diagrams
+- [#48 - Deployment Dependencies Refactor](https://github.com/seadogger-tech/seadogger-homelab/issues/48) - GitOps migration progress
+- [#50 - Move infrastructure to ArgoCD](https://github.com/seadogger-tech/seadogger-homelab/issues/50) - Implementing sync waves
