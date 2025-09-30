@@ -62,7 +62,9 @@
 ## 🎯 Quick Start
 
 ### Prerequisites
-- **Hardware:** 3× Raspberry Pi 5 (8GB RAM, 4TB NVMe storage)
+- **Hardware:** 4× Raspberry Pi 5 (8GB RAM) - 1 control plane + 3 workers
+  - Control plane: 500GB NVMe storage
+  - Workers: 4TB NVMe storage each (for Rook-Ceph)
 - **Network:** Static IPs, MetalLB range (192.168.1.240-254)
 - **Software:** Ansible, kubectl, AWS account (for Bedrock)
 
@@ -144,8 +146,8 @@ Comprehensive guides available in the **[GitHub Wiki](https://github.com/seadogg
 **Data Managed:** ~4TB (Nextcloud, Jellyfin media)
 
 ### ✅ What Works
-- Core K3s cluster with 3-node HA
-- Rook-Ceph distributed storage (erasure coding + replication)
+- K3s cluster (1 control plane + 3 workers)
+- Rook-Ceph distributed storage (3-node, erasure coding 4+2 EC + replication)
 - ArgoCD GitOps deployment pipeline
 - All applications deployed and operational
 - Internal PKI with automatic TLS certificates
@@ -162,6 +164,7 @@ See **[Refactoring Roadmap](https://github.com/seadogger-tech/seadogger-homelab/
 **Priority 1:**
 - [#48](https://github.com/seadogger-tech/seadogger-homelab/issues/48) Pure GitOps refactor (eliminate deployment dependencies)
 - Keycloak SSO integration (Pro)
+- K3s HA control plane (3 control plane nodes) (Pro)
 
 ---
 
