@@ -8,8 +8,14 @@ This document provides a comprehensive analysis of the Seadogger Homelab codebas
 
 **Current Maturity:** 6/10 - Functional homelab with good automation foundation
 **Target Maturity:** 9/10 - Enterprise-grade, production-ready homelab
-**Estimated Timeline:** 5 weeks for core improvements
-**Primary Focus Areas:** Security, Ansible Architecture, K3s Best Practices, GitOps Consistency
+**Estimated Timeline:** 6-8 weeks for core improvements
+**Primary Focus Areas:**
+1. 🔴 **CRITICAL:** Disaster Recovery & Backup (S3 Glacier for 4TB data)
+2. 🔴 **CRITICAL:** Staging Environment (Virtual ARM64 testing)
+3. 🟠 **HIGH:** Ansible Architecture Improvements
+4. 🟡 **MEDIUM:** K3s Best Practices & GitOps Standardization
+
+**⚠️ PRODUCTION STATUS:** Homelab is now in production use. Data loss prevention and safe testing environments are top priorities.
 
 ![accent-divider.svg](images/accent-divider.svg)
 ## Current State Analysis
@@ -24,6 +30,49 @@ This document provides a comprehensive analysis of the Seadogger Homelab codebas
 - **Working System:** Fully functional deployment completing in ~30 minutes
 
 ### Critical Issues ⚠️
+
+#### 0. **NO DISASTER RECOVERY FOR PRODUCTION DATA** 🔴 **CRITICAL**
+
+**Issue:** 4TB of critical production data (movies, photos, music, files) with no offsite backup
+
+**Current State:**
+- ❌ No automated backup of Nextcloud PVC
+- ❌ No backup for other critical PVCs (Jellyfin, N8N, etc.)
+- ❌ No disaster recovery plan for Rook-Ceph storage failure
+- ❌ Data loss risk on hardware failure, accidental deletion, or cluster corruption
+
+**Impact:**
+- **CATASTROPHIC DATA LOSS** if Rook-Ceph cluster fails
+- No recovery from ransomware/corruption
+- No point-in-time restore capability
+- 4TB of irreplaceable personal data at risk
+
+**Business Impact:**
+- Production homelab cannot tolerate data loss
+- Users rely on this data daily
+- Recovery time objective (RTO): Hours, not days
+- Recovery point objective (RPO): <24 hours
+
+#### 0b. **NO SAFE TESTING ENVIRONMENT** 🔴 **CRITICAL**
+
+**Issue:** Cannot test deployments without risking production data and services
+
+**Current State:**
+- ❌ All testing done on production cluster
+- ❌ Failed deployments can corrupt PVCs and lose data
+- ❌ No ARM64/Raspberry Pi staging environment
+- ❌ GitLab CI/CD not configured for virtual ARM64 testing
+
+**Impact:**
+- Production outages during testing
+- Data loss from failed experiments
+- Slow iteration due to fear of breaking production
+- Cannot validate changes before deployment
+
+**Examples of Recent Issues:**
+- PVC data loss during app redeployments
+- Service disruptions testing new configurations
+- Unable to test major infrastructure changes safely
 
 #### 1. **Secrets Management (MEDIUM PRIORITY)**
 
@@ -179,6 +228,672 @@ obiwan.local ansible_host=192.168.1.96 ip_host_octet=96
 
 ![accent-divider.svg](images/accent-divider.svg)
 ## Prioritized Recommendations
+
+### Priority 0A: Disaster Recovery & Backup Strategy (CRITICAL) 🔴
+
+**Timeline:** Week 1-2 (IMMEDIATE)
+**Impact:** CRITICAL - Prevents catastrophic data loss
+
+#### 0A.1 Implement S3 Glacier Backup for Nextcloud PVC (Priority 1)
+
+**Solution Overview:** Automated nightly rsync of Nextcloud PVC to AWS S3 with lifecycle policy to Glacier Deep Archive
+
+**Implementation:**
+
+**Step 1: Create S3 Bucket with Lifecycle Policy**
+
+```bash
+# Create S3 bucket for backups
+aws s3 mb s3://seadogger-homelab-backups --region us-east-1
+
+# Create lifecycle policy for automatic transition to Glacier Deep Archive
+cat > lifecycle-policy.json <<EOF
+{
+  "Rules": [
+    {
+      "Id": "MoveToGlacierAfter7Days",
+      "Status": "Enabled",
+      "Transitions": [
+        {
+          "Days": 1,
+          "StorageClass": "STANDARD_IA"
+        },
+        {
+          "Days": 7,
+          "StorageClass": "GLACIER_IR"
+        },
+        {
+          "Days": 30,
+          "StorageClass": "DEEP_ARCHIVE"
+        }
+      ],
+      "NoncurrentVersionTransitions": [
+        {
+          "NoncurrentDays": 7,
+          "StorageClass": "DEEP_ARCHIVE"
+        }
+      ]
+    }
+  ]
+}
+EOF
+
+aws s3api put-bucket-lifecycle-configuration \
+  --bucket seadogger-homelab-backups \
+  --lifecycle-configuration file://lifecycle-policy.json
+
+# Enable versioning for point-in-time recovery
+aws s3api put-bucket-versioning \
+  --bucket seadogger-homelab-backups \
+  --versioning-configuration Status=Enabled
+```
+
+**Step 2: Deploy Backup CronJob in Kubernetes**
+
+Create `core/deployments/backup/nextcloud-s3-backup.yaml`:
+
+```yaml
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: aws-backup-credentials
+  namespace: nextcloud
+type: Opaque
+stringData:
+  AWS_ACCESS_KEY_ID: "AKIA..."
+  AWS_SECRET_ACCESS_KEY: "..."
+  AWS_DEFAULT_REGION: "us-east-1"
+
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: nextcloud-s3-backup
+  namespace: nextcloud
+spec:
+  schedule: "0 2 * * *"  # 2 AM daily
+  successfulJobsHistoryLimit: 7
+  failedJobsHistoryLimit: 3
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+          - name: backup
+            image: amazon/aws-cli:2.13.0
+            envFrom:
+            - secretRef:
+                name: aws-backup-credentials
+            command:
+            - /bin/bash
+            - -c
+            - |
+              set -euo pipefail
+
+              TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+              BACKUP_PATH="s3://seadogger-homelab-backups/nextcloud/${TIMESTAMP}"
+
+              echo "Starting Nextcloud backup at ${TIMESTAMP}"
+              echo "Target: ${BACKUP_PATH}"
+
+              # Sync Nextcloud data to S3
+              aws s3 sync /nextcloud-data ${BACKUP_PATH} \
+                --storage-class STANDARD_IA \
+                --delete \
+                --exclude "*.log" \
+                --exclude "*.tmp" \
+                --exclude "cache/*" \
+                --exclude "appdata_*/preview/*"
+
+              # Create marker file with backup metadata
+              cat > /tmp/backup-info.json <<EOF
+              {
+                "timestamp": "${TIMESTAMP}",
+                "hostname": "$(hostname)",
+                "pvc": "nextcloud-data",
+                "backup_size_gb": "$(du -sh /nextcloud-data | awk '{print $1}')"
+              }
+              EOF
+
+              aws s3 cp /tmp/backup-info.json ${BACKUP_PATH}/backup-info.json
+
+              echo "Backup completed successfully"
+              echo "Total size: $(du -sh /nextcloud-data | awk '{print $1}')"
+
+              # List recent backups
+              echo "Recent backups:"
+              aws s3 ls s3://seadogger-homelab-backups/nextcloud/ | tail -5
+
+            volumeMounts:
+            - name: nextcloud-data
+              mountPath: /nextcloud-data
+              readOnly: true
+            resources:
+              requests:
+                memory: "512Mi"
+                cpu: "500m"
+              limits:
+                memory: "2Gi"
+                cpu: "2000m"
+          volumes:
+          - name: nextcloud-data
+            persistentVolumeClaim:
+              claimName: nextcloud-data
+              readOnly: true
+
+---
+# Manual job for immediate backup
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: nextcloud-s3-backup-manual
+  namespace: nextcloud
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: backup
+        image: amazon/aws-cli:2.13.0
+        envFrom:
+        - secretRef:
+            name: aws-backup-credentials
+        command:
+        - /bin/bash
+        - -c
+        - |
+          set -euo pipefail
+          TIMESTAMP=$(date +%Y%m%d-%H%M%S)-manual
+          BACKUP_PATH="s3://seadogger-homelab-backups/nextcloud/${TIMESTAMP}"
+          echo "Manual backup to ${BACKUP_PATH}"
+          aws s3 sync /nextcloud-data ${BACKUP_PATH} --storage-class STANDARD_IA
+        volumeMounts:
+        - name: nextcloud-data
+          mountPath: /nextcloud-data
+          readOnly: true
+      volumes:
+      - name: nextcloud-data
+        persistentVolumeClaim:
+          claimName: nextcloud-data
+          readOnly: true
+```
+
+**Step 3: Add Monitoring & Alerts**
+
+Create `core/deployments/backup/backup-monitoring.yaml`:
+
+```yaml
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backup-monitor-script
+  namespace: nextcloud
+data:
+  check-backup.sh: |
+    #!/bin/bash
+    # Check if backup completed in last 25 hours
+    LAST_BACKUP=$(aws s3 ls s3://seadogger-homelab-backups/nextcloud/ | tail -1 | awk '{print $1" "$2}')
+    LAST_BACKUP_EPOCH=$(date -d "$LAST_BACKUP" +%s)
+    NOW_EPOCH=$(date +%s)
+    HOURS_AGO=$(( (NOW_EPOCH - LAST_BACKUP_EPOCH) / 3600 ))
+
+    if [ $HOURS_AGO -gt 25 ]; then
+      echo "ERROR: Last backup was ${HOURS_AGO} hours ago!"
+      exit 1
+    fi
+    echo "OK: Last backup was ${HOURS_AGO} hours ago"
+
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: backup-alerts
+  namespace: monitoring
+spec:
+  groups:
+  - name: backup
+    interval: 30m
+    rules:
+    - alert: NextcloudBackupFailed
+      expr: kube_job_status_failed{namespace="nextcloud",job_name=~"nextcloud-s3-backup.*"} > 0
+      for: 1h
+      annotations:
+        summary: "Nextcloud S3 backup job failed"
+        description: "The automated Nextcloud backup to S3 has failed. Check logs immediately."
+
+    - alert: NextcloudBackupMissing
+      expr: time() - kube_job_status_completion_time{namespace="nextcloud",job_name=~"nextcloud-s3-backup.*"} > 86400
+      for: 2h
+      annotations:
+        summary: "Nextcloud backup has not run in 24+ hours"
+        description: "No successful Nextcloud backup detected in the last 24 hours."
+```
+
+**Step 4: Create Restore Procedure**
+
+Create `docs/wiki/24-Backup-and-Restore.md`:
+
+```markdown
+# Backup and Restore Procedures
+
+## Nextcloud Data Restore from S3
+
+### List Available Backups
+```bash
+aws s3 ls s3://seadogger-homelab-backups/nextcloud/
+```
+
+### Restore Full Backup
+```bash
+# 1. Scale down Nextcloud
+kubectl scale deployment nextcloud -n nextcloud --replicas=0
+
+# 2. Launch restore pod
+kubectl run nextcloud-restore -n nextcloud \
+  --image=amazon/aws-cli:2.13.0 \
+  --restart=Never \
+  --overrides='
+  {
+    "spec": {
+      "containers": [{
+        "name": "restore",
+        "image": "amazon/aws-cli:2.13.0",
+        "command": ["sleep", "3600"],
+        "env": [
+          {"name": "AWS_ACCESS_KEY_ID", "valueFrom": {"secretKeyRef": {"name": "aws-backup-credentials", "key": "AWS_ACCESS_KEY_ID"}}},
+          {"name": "AWS_SECRET_ACCESS_KEY", "valueFrom": {"secretKeyRef": {"name": "aws-backup-credentials", "key": "AWS_SECRET_ACCESS_KEY"}}}
+        ],
+        "volumeMounts": [{
+          "name": "data",
+          "mountPath": "/nextcloud-data"
+        }]
+      }],
+      "volumes": [{
+        "name": "data",
+        "persistentVolumeClaim": {"claimName": "nextcloud-data"}
+      }]
+    }
+  }'
+
+# 3. Restore data
+kubectl exec -n nextcloud nextcloud-restore -- bash -c "
+  aws s3 sync s3://seadogger-homelab-backups/nextcloud/YYYYMMDD-HHMMSS/ /nextcloud-data/
+"
+
+# 4. Verify restore
+kubectl exec -n nextcloud nextcloud-restore -- ls -lah /nextcloud-data
+
+# 5. Scale up Nextcloud
+kubectl scale deployment nextcloud -n nextcloud --replicas=1
+
+# 6. Cleanup
+kubectl delete pod nextcloud-restore -n nextcloud
+```
+
+### Point-in-Time Recovery
+Due to S3 versioning, you can recover any file version within retention period.
+
+```bash
+# List all versions of a file
+aws s3api list-object-versions \
+  --bucket seadogger-homelab-backups \
+  --prefix nextcloud/20250101-020000/path/to/file.jpg
+
+# Download specific version
+aws s3api get-object \
+  --bucket seadogger-homelab-backups \
+  --key nextcloud/20250101-020000/path/to/file.jpg \
+  --version-id <VERSION_ID> \
+  file.jpg
+```
+```
+
+#### 0A.2 Extend Backup to All Critical PVCs
+
+**Additional PVCs to backup (in priority order):**
+
+1. **Nextcloud** (Priority 1 - DONE above)
+2. **Jellyfin metadata** (Priority 2 - media libraries config)
+3. **N8N workflows** (Priority 3 - automation data)
+4. **PiHole config** (Priority 4 - DNS config)
+5. **Prometheus metrics** (Priority 5 - historical data)
+
+**Create generic backup CronJob template:**
+
+`core/deployments/backup/generic-pvc-backup-cronjob.yaml`:
+
+```yaml
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: ${APP_NAME}-s3-backup
+  namespace: ${NAMESPACE}
+spec:
+  schedule: "0 3 * * *"  # 3 AM daily (stagger from Nextcloud)
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+          - name: backup
+            image: amazon/aws-cli:2.13.0
+            envFrom:
+            - secretRef:
+                name: aws-backup-credentials
+            command:
+            - /bin/bash
+            - -c
+            - |
+              TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+              BACKUP_PATH="s3://seadogger-homelab-backups/${APP_NAME}/${TIMESTAMP}"
+              aws s3 sync /data ${BACKUP_PATH} --storage-class STANDARD_IA
+            volumeMounts:
+            - name: data
+              mountPath: /data
+              readOnly: true
+          volumes:
+          - name: data
+            persistentVolumeClaim:
+              claimName: ${PVC_NAME}
+              readOnly: true
+```
+
+#### 0A.3 Backup Cost Estimation
+
+**S3 Storage Costs (us-east-1):**
+
+| Tier | Days | Storage Cost/TB | 4TB Monthly Cost |
+|------|------|-----------------|------------------|
+| Standard-IA | 1-7 | $0.0125/GB | $51.20 |
+| Glacier Instant Retrieval | 7-30 | $0.004/GB | $16.38 |
+| Glacier Deep Archive | 30+ | $0.00099/GB | $4.05 |
+
+**Estimated Monthly Cost:**
+- Daily backups (7 days in Standard-IA): $51.20
+- Weekly backups (1 month in Glacier IR): $16.38
+- Monthly backups (kept forever in Deep Archive): $4.05/month growing
+- **Total first month: ~$72**
+- **Ongoing (after 30 days): ~$20/month + ($4/month × months)**
+
+**Data Transfer Costs:**
+- Upload to S3: FREE
+- Retrieval from Deep Archive: $0.02/GB ($81.92 for full 4TB restore)
+- Standard retrieval time: 12-48 hours
+
+**Optimizations:**
+- Use `--exclude` patterns to skip cache/temp files
+- Enable S3 Intelligent-Tiering for automatic cost optimization
+- Consider compression before upload (trade CPU for storage cost)
+
+---
+
+### Priority 0B: Staging Environment for Safe Testing (CRITICAL) 🔴
+
+**Timeline:** Week 2-3
+**Impact:** CRITICAL - Enables safe iteration without production risk
+
+#### 0B.1 Local Virtual ARM64 Staging Cluster
+
+**Solution:** Use QEMU + Multipass or Lima to run ARM64 VMs locally for testing
+
+**Option 1: Multipass with QEMU ARM64 (macOS)**
+
+```bash
+# Install Multipass
+brew install multipass
+
+# Launch ARM64 Ubuntu VM
+multipass launch --cpus 4 --memory 8G --disk 50G --name k3s-staging
+
+# Install K3s
+multipass exec k3s-staging -- bash -c "
+  curl -sfL https://get.k3s.io | sh -s - server --write-kubeconfig-mode 644 --disable servicelb
+"
+
+# Get kubeconfig
+multipass exec k3s-staging -- sudo cat /etc/rancher/k3s/k3s.yaml > ~/.kube/k3s-staging.conf
+
+# Update server IP in kubeconfig
+STAGING_IP=$(multipass info k3s-staging | grep IPv4 | awk '{print $2}')
+sed -i.bak "s/127.0.0.1/$STAGING_IP/g" ~/.kube/k3s-staging.conf
+
+# Test
+export KUBECONFIG=~/.kube/k3s-staging.conf
+kubectl get nodes
+```
+
+**Option 2: Kind with ARM64 emulation**
+
+```bash
+# Install Kind
+brew install kind
+
+# Create ARM64 cluster (uses QEMU emulation)
+cat > kind-arm64-config.yaml <<EOF
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+- role: control-plane
+  image: kindest/node:v1.31.0
+  extraMounts:
+  - hostPath: /tmp/staging-data
+    containerPath: /data
+EOF
+
+kind create cluster --name staging --config kind-arm64-config.yaml
+```
+
+**Option 3: Lima (lighterweight than Multipass)**
+
+```bash
+brew install lima
+
+# Create ARM64 VM with K3s
+limactl start --name=k3s-staging template://k3s
+
+# Access
+limactl shell k3s-staging
+```
+
+#### 0B.2 GitLab CI/CD for Automated ARM64 Testing
+
+**Challenge:** GitLab shared runners don't support ARM64 natively
+
+**Solutions:**
+
+**Option A: Self-hosted GitLab Runner on Mac Mini (Recommended)**
+
+```bash
+# Install GitLab Runner on your Mac
+brew install gitlab-runner
+
+# Register runner for your project
+gitlab-runner register \
+  --url https://gitlab.com/ \
+  --token YOUR_RUNNER_TOKEN \
+  --executor shell \
+  --description "homelab-arm64-runner" \
+  --tag-list "arm64,macos,k3s"
+
+# Start runner
+gitlab-runner start
+```
+
+**Create `.gitlab-ci.yml` in repo:**
+
+```yaml
+stages:
+  - test
+  - deploy-staging
+  - deploy-production
+
+variables:
+  STAGING_KUBECONFIG: ~/.kube/k3s-staging.conf
+
+# Run linting and validation
+lint:
+  stage: test
+  tags:
+    - arm64
+  script:
+    - ansible-lint core/ansible/
+    - yamllint core/deployments/
+    - kubectl apply --dry-run=client -f core/deployments/
+
+# Deploy to staging VM
+deploy-staging:
+  stage: deploy-staging
+  tags:
+    - arm64
+  script:
+    # Start staging VM if not running
+    - multipass start k3s-staging || true
+
+    # Deploy to staging
+    - export KUBECONFIG=$STAGING_KUBECONFIG
+    - cd core/ansible
+    - ansible-playbook -i staging-hosts.ini main.yml --tags validate
+
+    # Run smoke tests
+    - kubectl get nodes
+    - kubectl get pods -A
+    - kubectl run test-nginx --image=nginx --restart=Never
+    - kubectl wait --for=condition=Ready pod/test-nginx --timeout=60s
+    - kubectl delete pod test-nginx
+  only:
+    - branches
+  except:
+    - main
+
+# Deploy to production (manual gate)
+deploy-production:
+  stage: deploy-production
+  tags:
+    - arm64
+  script:
+    - cd core/ansible
+    - ansible-playbook -i production-hosts.ini main.yml
+  when: manual
+  only:
+    - main
+  environment:
+    name: production
+    url: https://portal.seadogger-homelab
+```
+
+**Option B: Use GitLab SaaS with Docker executor + QEMU**
+
+```yaml
+# .gitlab-ci.yml with QEMU emulation
+test-arm64:
+  image: docker:latest
+  services:
+    - docker:dind
+  tags:
+    - docker
+  before_script:
+    # Setup QEMU for ARM64 emulation
+    - docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+  script:
+    # Test ARM64 image
+    - docker build --platform linux/arm64 -t test-arm64 .
+    - docker run --platform linux/arm64 test-arm64 uname -m  # Should output "aarch64"
+```
+
+**Option C: Use Actuated (ARM64 CI runners as a service)**
+
+Cost: ~$100/month for dedicated ARM64 runners
+URL: https://actuated.dev/
+
+```yaml
+# .gitlab-ci.yml with Actuated
+test-arm64:
+  tags:
+    - actuated-arm64
+  script:
+    - k3d cluster create staging
+    - kubectl apply -f deployments/
+```
+
+#### 0B.3 Create Staging Inventory
+
+**Create `core/ansible/inventory/staging/hosts.ini`:**
+
+```ini
+[control_plane]
+localhost ansible_connection=local ansible_host=127.0.0.1
+
+[nodes]
+# No workers in staging - single node cluster
+
+[cluster:children]
+control_plane
+
+[cluster:vars]
+ansible_user=ubuntu
+ipv4_subnet_prefix="10.0.2"
+metallb_ip_range="10.0.2.240-10.0.2.250"
+staging_mode=true
+```
+
+**Create `core/ansible/inventory/staging/group_vars/all.yml`:**
+
+```yaml
+---
+# Staging environment overrides
+enable_rook_ceph: false  # Use local storage in staging
+enable_prometheus: false  # Skip heavy monitoring
+enable_jellyfin: false    # Skip media server
+
+# Use smaller resource limits
+staging_resource_limits:
+  memory: "512Mi"
+  cpu: "500m"
+
+# Fast deployments - skip long waits
+staging_mode: true
+wait_timeout: 60s  # vs 600s in production
+```
+
+#### 0B.4 Testing Workflow
+
+**New Development Workflow:**
+
+1. **Develop locally** → Make changes to Ansible/manifests
+2. **Test in staging VM** → Run playbook against local VM
+3. **Automated CI/CD** → GitLab runs tests on every commit
+4. **Manual production deploy** → Approve deployment to real cluster
+
+**Example testing command:**
+
+```bash
+# Test new deployment in staging
+export KUBECONFIG=~/.kube/k3s-staging.conf
+
+cd core/ansible
+ansible-playbook -i inventory/staging/hosts.ini main.yml \
+  --tags=pihole \
+  --check  # Dry-run first
+
+# Actually apply
+ansible-playbook -i inventory/staging/hosts.ini main.yml --tags=pihole
+
+# Validate
+kubectl get pods -n pihole
+kubectl logs -n pihole -l app=pihole --tail=50
+
+# If good, deploy to production
+ansible-playbook -i inventory/production/hosts.ini main.yml --tags=pihole
+```
+
+---
 
 ### Priority 1: Secrets Management (OPTIONAL) 🟡
 
@@ -1379,6 +2094,80 @@ spec:
 ![accent-divider.svg](images/accent-divider.svg)
 ## Implementation Roadmap
 
+### Phase 0: Disaster Recovery & Staging (CRITICAL) 🔴
+**Timeline:** Weeks 1-3 (IMMEDIATE)
+**Status:** CRITICAL - Production data at risk
+
+#### Week 1: S3 Backup Implementation
+- [ ] Create S3 bucket with Glacier lifecycle policy
+- [ ] Deploy Nextcloud S3 backup CronJob
+- [ ] Configure AWS credentials secret
+- [ ] Test manual backup
+- [ ] Verify automated nightly backup runs
+- [ ] Set up Prometheus alerts for backup failures
+- [ ] Document restore procedures
+- [ ] Test full restore in staging (once staging exists)
+
+**Success Criteria:**
+- Automated nightly backups running successfully
+- Backups visible in S3 console
+- Prometheus alerts configured
+- Restore procedure documented and tested
+
+**Testing:**
+```bash
+# Trigger manual backup
+kubectl create job --from=cronjob/nextcloud-s3-backup nextcloud-backup-test -n nextcloud
+
+# Watch backup progress
+kubectl logs -n nextcloud -l job-name=nextcloud-backup-test --follow
+
+# Verify in S3
+aws s3 ls s3://seadogger-homelab-backups/nextcloud/
+
+# Test restore (in staging!)
+# Follow procedures in docs/wiki/24-Backup-and-Restore.md
+```
+
+#### Week 2-3: Staging Environment Setup
+- [ ] Install Multipass on Mac
+- [ ] Create K3s staging VM
+- [ ] Configure staging Ansible inventory
+- [ ] Test basic deployment in staging
+- [ ] Set up GitLab runner on Mac (if using Option A)
+- [ ] Create `.gitlab-ci.yml` with staging pipeline
+- [ ] Test automated deployment to staging
+- [ ] Document staging workflow
+
+**Success Criteria:**
+- Local staging VM running K3s
+- Can deploy apps to staging without affecting production
+- GitLab CI/CD running tests automatically
+- Development workflow documented
+
+**Testing:**
+```bash
+# Deploy to staging
+export KUBECONFIG=~/.kube/k3s-staging.conf
+cd core/ansible
+ansible-playbook -i inventory/staging/hosts.ini main.yml --tags=test-app
+
+# Verify
+kubectl get pods -A
+
+# Run smoke tests via GitLab CI (triggered on commit)
+git commit -m "test: verify staging pipeline"
+git push origin feature-branch
+```
+
+**Deliverables:**
+1. 4TB of data backed up to S3 Glacier (ongoing)
+2. Safe testing environment operational
+3. CI/CD pipeline preventing production breaks
+4. Documented backup/restore and staging procedures
+
+---
+
 ### Phase 1: Secrets Hardening (Optional)
 **Status:** 🟡 OPTIONAL - Already gitignored properly
 
@@ -1408,8 +2197,9 @@ ansible-playbook main.yml --ask-vault-pass
 
 ---
 
-### Phase 2: Ansible Restructure (Week 1-2)
+### Phase 2: Ansible Restructure (Weeks 4-5)
 **Status:** 🟠 HIGH - Foundation for improvements
+**Prerequisites:** Phase 0 complete (can test safely in staging)
 
 - [ ] Create roles directory structure
 - [ ] Convert `raspberry_pi_config.yml` to role
@@ -1440,8 +2230,9 @@ ansible-playbook playbooks/cluster-install.yml --check
 
 ---
 
-### Phase 3: K3s Best Practices (Week 2-3)
+### Phase 3: K3s Best Practices (Weeks 5-6)
 **Status:** 🟠 HIGH - Reliability improvement
+**Prerequisites:** Phase 2 complete (role-based structure ready)
 
 - [ ] Provision 2 additional control plane nodes (hardware)
 - [ ] Update inventory with 3 control plane nodes
@@ -1479,8 +2270,9 @@ ansible-playbook playbooks/rollback.yml
 
 ---
 
-### Phase 4: GitOps Consistency (Week 3-4)
+### Phase 4: GitOps Consistency (Weeks 6-7)
 **Status:** 🟡 MEDIUM - Standardization
+**Prerequisites:** Phase 3 complete (HA cluster ready)
 
 - [ ] Create infrastructure ApplicationSet
 - [ ] Migrate MetalLB to ArgoCD
@@ -1516,8 +2308,9 @@ kubectl delete deployment pihole -n pihole
 
 ---
 
-### Phase 5: Operational Excellence (Week 4-5)
+### Phase 5: Operational Excellence (Weeks 7-8)
 **Status:** 🟡 MEDIUM - Maturity improvement
+**Prerequisites:** Phase 4 complete (GitOps fully operational)
 
 - [ ] Create pre-flight validation role
 - [ ] Add to all playbooks
