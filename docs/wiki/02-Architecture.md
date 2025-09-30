@@ -49,13 +49,13 @@ graph TB
     K3s -->|Stream TV| HDHomeRun
     Devices -->|DNS:53| K3s
 
-    style UDM fill:#b3d9ff,stroke:#0066cc,stroke-width:3px
-    style Homelab fill:#b3e0b3,stroke:#2d7a2d,stroke-width:3px
-    style K3s fill:#d9d9d9,stroke:#2d7a2d,stroke-width:2px
-    style AWS_Cloud fill:#ffd699,stroke:#cc6600,stroke-width:3px
-    style Bedrock fill:#d9d9d9,stroke:#cc6600,stroke-width:2px
-    style S3 fill:#d9d9d9,stroke:#cc6600,stroke-width:2px
-    style GitHub fill:#cccccc,stroke:#333333,stroke-width:2px
+    style UDM fill:#1e3a5f,stroke:#4a90e2,stroke-width:3px
+    style Homelab fill:#2d5016,stroke:#5a9216,stroke-width:3px
+    style K3s fill:#2c5aa0,stroke:#4a90e2,stroke-width:2px,color:#fff
+    style AWS_Cloud fill:#ff9900,stroke:#ff9900,stroke-width:3px
+    style Bedrock fill:#2c5aa0,stroke:#4a90e2,stroke-width:2px,color:#fff
+    style S3 fill:#2c5aa0,stroke:#4a90e2,stroke-width:2px,color:#fff
+    style GitHub fill:#24292e,stroke:#ffffff,stroke-width:2px,color:#fff
 ```
 
 **Key Access Patterns:**
@@ -139,11 +139,11 @@ graph TB
     Bedrock_GW -->|HTTPS + TLS 1.3| AWS
     Nextcloud -->|Encrypted| S3
 
-    style Infrastructure fill:#b3d9ff,stroke:#0066cc,stroke-width:3px
-    style Apps fill:#b3e0b3,stroke:#2d7a2d,stroke-width:3px
-    style Pro fill:#d8b3ff,stroke:#6600cc,stroke-width:3px,stroke-dasharray: 5 5
-    style K3s fill:#b3d9ff,stroke:#0066cc,stroke-width:3px
-    style Secrets fill:#d8b3ff,stroke:#6600cc,stroke-width:2px
+    style Infrastructure fill:#1e3a5f,stroke:#4a90e2,stroke-width:3px
+    style Apps fill:#2d5016,stroke:#5a9216,stroke-width:3px
+    style Pro fill:#7b1fa2,stroke:#9c27b0,stroke-width:3px,stroke-dasharray: 5 5
+    style K3s fill:#1e3a5f,stroke:#4a90e2,stroke-width:3px
+    style Secrets fill:#7b1fa2,stroke:#9c27b0,stroke-width:2px
 ```
 
 **Legend:**
@@ -207,10 +207,10 @@ graph LR
     Controllers -->|Deploy| Infra
     Controllers -->|Deploy| Applications
 
-    style Git fill:#cccccc,stroke:#333333,stroke-width:2px
-    style ArgoCD fill:#ffd699,stroke:#cc6600,stroke-width:2px
-    style K3s fill:#b3d9ff,stroke:#0066cc,stroke-width:2px
-    style Cluster fill:#b3e0b3,stroke:#2d7a2d,stroke-width:2px
+    style Git fill:#24292e,stroke:#ffffff,stroke-width:2px,color:#fff
+    style ArgoCD fill:#ff9900,stroke:#ff9900,stroke-width:2px
+    style K3s fill:#1e3a5f,stroke:#4a90e2,stroke-width:2px
+    style Cluster fill:#2d5016,stroke:#5a9216,stroke-width:2px
 ```
 
 ![accent-divider.svg](images/accent-divider.svg)
@@ -276,11 +276,11 @@ graph TB
     N8NApp --> Default
     OpenWebUIApp --> Default
 
-    style RookCeph fill:#b3d9ff,stroke:#0066cc,stroke-width:3px
-    style Storage fill:#d8b3ff,stroke:#6600cc,stroke-width:3px
-    style Hardware fill:#ffd699,stroke:#cc6600,stroke-width:3px
-    style AppsLayer fill:#b3e0b3,stroke:#2d7a2d,stroke-width:3px
-    style Default fill:#d9d9d9,stroke:#2d7a2d,stroke-width:2px
+    style RookCeph fill:#1e3a5f,stroke:#4a90e2,stroke-width:3px
+    style Storage fill:#7b1fa2,stroke:#9c27b0,stroke-width:3px
+    style Hardware fill:#8b4513,stroke:#d2691e,stroke-width:3px
+    style AppsLayer fill:#2d5016,stroke:#5a9216,stroke-width:3px
+    style Default fill:#2c5aa0,stroke:#4a90e2,stroke-width:2px,color:#fff
 ```
 
 **Storage Classes Details:**
@@ -363,13 +363,13 @@ graph TB
     BG -->|Reads| Secret
     BG -->|HTTPS + TLS 1.3| AWS
 
-    style UDM fill:#b3d9ff,stroke:#0066cc,stroke-width:3px
-    style MetalLB fill:#b3d9ff,stroke:#0066cc,stroke-width:3px
-    style Traefik fill:#b3d9ff,stroke:#0066cc,stroke-width:3px
-    style CertManager fill:#b3e0b3,stroke:#2d7a2d,stroke-width:3px
-    style Apps fill:#b3e0b3,stroke:#2d7a2d,stroke-width:3px
-    style Encryption fill:#d8b3ff,stroke:#6600cc,stroke-width:2px
-    style Note1 fill:#ffffb3,stroke:#cccc00,stroke-width:2px,stroke-dasharray: 5 5
+    style UDM fill:#1e3a5f,stroke:#4a90e2,stroke-width:3px
+    style MetalLB fill:#1e3a5f,stroke:#4a90e2,stroke-width:3px
+    style Traefik fill:#1e3a5f,stroke:#4a90e2,stroke-width:3px
+    style CertManager fill:#2d5016,stroke:#5a9216,stroke-width:3px
+    style Apps fill:#2d5016,stroke:#5a9216,stroke-width:3px
+    style Encryption fill:#7b1fa2,stroke:#9c27b0,stroke-width:2px
+    style Note1 fill:#ffeb3b,stroke:#fbc02d,stroke-width:2px,stroke-dasharray: 5 5
 ```
 
 **Security Features:**
@@ -413,11 +413,11 @@ graph TD
     Wave2 --> Wave3
     Wave3 --> WavePro
 
-    style Wave0 fill:#b3d9ff,stroke:#0066cc,stroke-width:3px
-    style Wave1 fill:#99ccff,stroke:#0066cc,stroke-width:3px
-    style Wave2 fill:#80bfff,stroke:#0066cc,stroke-width:3px
-    style Wave3 fill:#b3e0b3,stroke:#2d7a2d,stroke-width:3px
-    style WavePro fill:#d8b3ff,stroke:#6600cc,stroke-width:3px,stroke-dasharray: 5 5
+    style Wave0 fill:#1e3a5f,stroke:#4a90e2,stroke-width:3px
+    style Wave1 fill:#1e3a5f,stroke:#4a90e2,stroke-width:3px
+    style Wave2 fill:#1e3a5f,stroke:#4a90e2,stroke-width:3px
+    style Wave3 fill:#2d5016,stroke:#5a9216,stroke-width:3px
+    style WavePro fill:#7b1fa2,stroke:#9c27b0,stroke-width:3px,stroke-dasharray: 5 5
 ```
 
 **Wave Ordering Rationale:**
