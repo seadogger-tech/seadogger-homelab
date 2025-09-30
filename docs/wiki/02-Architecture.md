@@ -9,7 +9,15 @@ This document describes the system architecture, key technical decisions, and de
 
 Visual representations at different levels of abstraction, following C4 model principles.
 
-> **💡 Tip:** All diagrams use Mermaid and render natively on GitHub. They work in both light and dark modes.
+---
+> **🌙 Diagram Viewing Recommendation**
+>
+> The interactive Mermaid diagrams below are **optimized for GitHub Dark Mode** to provide maximum readability and visual impact.
+>
+> **To enable Dark Mode:** GitHub Settings → Appearance → Theme → **Dark default**
+>
+> *Light mode users can still view the diagrams, though colors may appear less vibrant.*
+---
 
 ### Level 1: System Context
 

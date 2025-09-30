@@ -5,6 +5,17 @@
 This repository uses two main GitHub Actions workflows for automation: **Publish Wiki** (syncs documentation on every push) and **Upstream Bedrock Gateway Rebuild** (keeps AWS gateway up-to-date every 6 hours).
 
 ![accent-divider](images/accent-divider.svg)
+
+---
+> **🌙 Diagram Viewing Recommendation**
+>
+> The interactive Mermaid diagrams below are **optimized for GitHub Dark Mode** to provide maximum readability and visual impact.
+>
+> **To enable Dark Mode:** GitHub Settings → Appearance → Theme → **Dark default**
+>
+> *Light mode users can still view the diagrams, though colors may appear less vibrant.*
+---
+
 ## Overview Diagram
 
 ```mermaid
