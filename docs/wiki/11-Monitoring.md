@@ -1,4 +1,5 @@
 ![wiki-banner.svg](images/wiki-banner.svg)
+![accent-divider.svg](images/accent-divider.svg)
 # Monitoring with Prometheus, Alertmanager, Grafana
 
 The Prometheus monitoring stack has been successfully deployed and verified in the k3s cluster. The deployment includes Prometheus, Grafana, and Alertmanager.

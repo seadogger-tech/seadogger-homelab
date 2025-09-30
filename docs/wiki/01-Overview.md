@@ -125,7 +125,7 @@ The homelab is fully functional and serving production workloads. Core infrastru
 
 ![accent-divider.svg](images/accent-divider.svg)
 ## Hardware Requirements
-- Raspberry Pi5 nodes (1 server node and 3 worker nodes)
+- Raspberry Pi 5 nodes (1 control plane + 3 workers)
 - POE switch (recommended: Ubiquiti Dream @Machine SE)
   - Powers Raspberry Pis via POE HAT
   - Simplifies the wiring and setup, but not totally necessary.  

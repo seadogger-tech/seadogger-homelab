@@ -26,7 +26,7 @@ graph TB
     end
 
     subgraph Homelab["🏠 Seadogger Homelab"]
-        K3s[K3s Cluster<br/>Raspberry Pi 5 × 3]
+        K3s[K3s Cluster<br/>Raspberry Pi 5 × 4]
     end
 
     subgraph AWS_Cloud["☁️ AWS"]

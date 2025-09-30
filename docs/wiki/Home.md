@@ -103,7 +103,7 @@ See **[[19-Refactoring-Roadmap]]** for complete roadmap and **[GitHub Issues](ht
 ## 🏗️ Tech Stack
 
 **Platform:**
-- **Compute:** 3× Raspberry Pi 5 (8GB) with 4TB NVMe storage
+- **Compute:** 4× Raspberry Pi 5 (8GB) - 1 control plane (500GB NVMe) + 3 workers (4TB NVMe each)
 - **OS:** Raspberry Pi OS (Bookworm, ARM64)
 - **Kubernetes:** K3s (lightweight Kubernetes)
 
