@@ -46,11 +46,12 @@ This document analyzes the "spider web" of deployment dependencies in the Seadog
          │                         │
          │                         │
 Required by:                Required by:
-- Prometheus LB             - Prometheus PVC
-- Grafana LB                - Grafana PVC
-- Alertmanager LB           - Nextcloud PVC
-- PiHole DNS LB             - Jellyfin PVC
-- ArgoCD Service (optional) - All app PVCs
+- Traefik (ingress entry)   - Prometheus PVC
+- PiHole DNS LB             - Grafana PVC
+                            - Alertmanager PVC
+                            - Nextcloud PVC
+                            - Jellyfin PVC
+                            - All app PVCs
 ```
 
 ### Layer 2: GitOps & PKI
@@ -92,22 +93,26 @@ Required by:
 
 ### 1. **MetalLB Dependencies**
 
-**What depends on MetalLB:**
-- ✅ **Prometheus/Grafana/Alertmanager** - Uses LoadBalancer IPs
-  - `prometheus_deploy.yml:90` - `loadBalancerIP: "192.168.1.244"`
-  - `prometheus_deploy.yml:111` - `loadBalancerIP: "192.168.1.245"`
-  - `prometheus_deploy.yml:131` - `loadBalancerIP: "192.168.1.246"`
-
-- ✅ **PiHole** - DNS service needs LoadBalancer
+**What ACTUALLY needs MetalLB:**
+- ✅ **Traefik** - Ingress controller entry point (LoadBalancer for HTTP/HTTPS)
+- ✅ **PiHole** - DNS service needs LoadBalancer IP for network DNS
   - `pihole-values.yaml` - `serviceDns.loadBalancerIP: 192.168.1.250`
 
-- ⚠️ **ArgoCD** - Could use LoadBalancer (currently uses Ingress)
+**What SHOULD NOT use MetalLB (use Ingress instead):**
+- ❌ **Prometheus/Grafana/Alertmanager** - Currently uses LoadBalancer IPs (wasteful)
+  - `prometheus_deploy.yml:90` - `loadBalancerIP: "192.168.1.244"` ← Should use Ingress
+  - `prometheus_deploy.yml:111` - `loadBalancerIP: "192.168.1.245"` ← Should use Ingress
+  - `prometheus_deploy.yml:131` - `loadBalancerIP: "192.168.1.246"` ← Should use Ingress
+  - **Recommendation:** Use Traefik IngressRoute + cert-manager certificates instead
+  - **Benefit:** Unified access pattern, automatic TLS, fewer IPs consumed
 
 **What MetalLB depends on:**
 - K3s cluster (API server, CNI)
 - Nothing else!
 
-**Current ordering:** ✅ **CORRECT** - MetalLB deployed before Prometheus/apps
+**Current ordering:** ✅ **CORRECT** - MetalLB deployed before Traefik/PiHole
+
+**Action Required:** Refactor Prometheus stack to use Ingress instead of LoadBalancer services
 
 ---
 

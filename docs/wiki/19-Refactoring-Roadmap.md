@@ -8,12 +8,13 @@ This document provides a comprehensive analysis of the Seadogger Homelab codebas
 
 **Current Maturity:** 6/10 - Functional homelab with good automation foundation
 **Target Maturity:** 9/10 - Enterprise-grade, production-ready homelab
-**Estimated Timeline:** 6-8 weeks for core improvements
+**Estimated Timeline:** 8-10 weeks for core improvements
 **Primary Focus Areas:**
 1. 🔴 **CRITICAL:** Disaster Recovery & Backup (S3 Glacier for 4TB data)
 2. 🔴 **CRITICAL:** Staging Environment (Virtual ARM64 testing)
-3. 🟠 **HIGH:** Ansible Architecture Improvements
-4. 🟡 **MEDIUM:** K3s Best Practices & GitOps Standardization
+3. 🟠 **HIGH:** Deployment Dependencies Refactor (Untangle spider web, GitOps everything)
+4. 🟡 **MEDIUM:** Ansible Architecture Improvements
+5. 🟡 **MEDIUM:** K3s Best Practices & GitOps Standardization
 
 **⚠️ PRODUCTION STATUS:** Homelab is now in production use. Data loss prevention and safe testing environments are top priorities.
 
@@ -1021,7 +1022,266 @@ gitleaks detect --source . --verbose
 **Note:** Since `config.yml` has always been gitignored, this is precautionary.
 
 ![accent-divider.svg](images/accent-divider.svg)
-### Priority 2: Ansible Restructure (HIGH) 🟠
+### Priority 1.5: Deployment Dependencies Refactor (HIGH) 🟠
+
+**Timeline:** Week 2-3
+**Impact:** High - Simplifies deployment, enables GitOps consistency
+**Reference:** See [25-Deployment-Dependencies.md](25-Deployment-Dependencies.md) for detailed analysis
+
+#### Overview
+
+The current deployment has a "spider web" of implicit dependencies that make it fragile and difficult to maintain. This priority focuses on untangling those dependencies and moving to a pure GitOps model.
+
+#### 1.5.1 Convert Prometheus Stack to Ingress (Remove LoadBalancer Dependencies)
+
+**Current Issue:**
+- Prometheus, Grafana, and Alertmanager each use dedicated MetalLB LoadBalancer IPs
+- Wastes 3 IPs (192.168.1.244, 192.168.1.245, 192.168.1.246)
+- Inconsistent access pattern vs other apps
+
+**Solution:**
+```yaml
+# Instead of LoadBalancer services, use Traefik IngressRoutes
+---
+apiVersion: traefik.containo.us/v1alpha1
+kind: IngressRoute
+metadata:
+  name: prometheus
+  namespace: monitoring
+spec:
+  entryPoints: [websecure]
+  routes:
+  - match: Host(`prometheus.seadogger.internal`)
+    kind: Rule
+    services:
+    - name: prometheus-k8s
+      port: 9090
+  tls:
+    secretName: prometheus-tls  # ← Cert-manager certificate
+---
+# Repeat for Grafana and Alertmanager
+```
+
+**Benefits:**
+- ✅ Reduces MetalLB to only Traefik and PiHole (the only services that truly need LoadBalancer)
+- ✅ Unified access pattern via Traefik
+- ✅ Automatic TLS via cert-manager
+- ✅ Simplified dependency: Prometheus only needs Rook-Ceph (storage), not MetalLB
+
+**Files to modify:**
+- `core/ansible/tasks/prometheus_deploy.yml` (remove LoadBalancer services)
+- `core/deployments/prometheus/prometheus-values.yaml` (set service type to ClusterIP)
+- Create: `core/certificates/prometheus-certificate.yml`
+- Create: `core/certificates/grafana-certificate.yml`
+- Create: `core/certificates/alertmanager-certificate.yml`
+- Update: `core/deployments/prometheus/ingress.yaml` (create IngressRoutes)
+
+#### 1.5.2 Document and Validate All Dependencies
+
+**Problem:** Tasks don't validate prerequisites before execution (see Problem 1 & 5 in dependency analysis)
+
+**Solution:** Add pre-flight checks to all deployment tasks:
+
+```yaml
+# Example: prometheus_deploy.yml
+- name: Pre-flight - Validate Rook-Ceph StorageClass exists
+  kubernetes.core.k8s_info:
+    kind: StorageClass
+    name: ceph-block-data
+  register: storage_class
+  failed_when: storage_class.resources | length == 0
+
+- name: Pre-flight - Validate cert-manager ready
+  kubernetes.core.k8s_info:
+    kind: Deployment
+    name: cert-manager
+    namespace: cert-manager
+  register: cert_manager
+  failed_when: >
+    cert_manager.resources | length == 0 or
+    cert_manager.resources[0].status.readyReplicas < 1
+```
+
+**Apply to:**
+- All Prometheus deployment tasks
+- All application deployment tasks
+- Rook-Ceph cluster (validate operator ready)
+- Internal PKI (validate cert-manager ready)
+
+#### 1.5.3 Move Everything to ArgoCD Apps with Kustomize
+
+**Vision:** Everything except K3s itself should be an ArgoCD Application with Kustomize structure (like the portal in Pro repo)
+
+**Current State:**
+| Component | Method | Status |
+|-----------|--------|--------|
+| MetalLB | Ansible + Helm | ❌ Not GitOps |
+| Rook-Ceph | Ansible + Helm | ❌ Not GitOps |
+| Cert-Manager | ArgoCD Application | ✅ GitOps |
+| Internal PKI | Ansible + OpenSSL | ❌ Not GitOps |
+| Prometheus | ArgoCD Application | ✅ GitOps |
+| Apps | ArgoCD Application | ✅ GitOps |
+
+**Target Structure:**
+```
+seadogger-homelab/core/
+├── deployments/
+│   ├── infrastructure/
+│   │   ├── base/
+│   │   │   ├── metallb/
+│   │   │   ├── rook-ceph-operator/
+│   │   │   ├── rook-ceph-cluster/
+│   │   │   ├── cert-manager/
+│   │   │   ├── internal-pki/
+│   │   │   └── prometheus/
+│   │   └── overlays/
+│   │       ├── production/
+│   │       └── staging/
+│   ├── apps/
+│   │   ├── base/
+│   │   └── overlays/
+│   └── argocd/
+│       ├── root-app.yaml  # App-of-apps
+│       └── infrastructure-appset.yaml  # Sync waves
+```
+
+**Implementation Phases:**
+
+**Phase 1: Convert MetalLB to Kustomize**
+```yaml
+# deployments/infrastructure/base/metallb/kustomization.yaml
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: metallb-system
+resources:
+  - namespace.yaml
+  - ipaddresspool.yaml
+helmCharts:
+  - name: metallb
+    repo: https://metallb.github.io/metallb
+    version: 0.13.12
+```
+
+**Phase 2: Convert Rook-Ceph to Kustomize with Sync Waves**
+```yaml
+# argocd/infrastructure-appset.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: infrastructure
+spec:
+  generators:
+  - list:
+      elements:
+      # Wave 0: Operators
+      - name: metallb
+        wave: "0"
+      - name: rook-ceph-operator
+        wave: "0"
+      - name: cert-manager
+        wave: "0"
+      # Wave 1: Clusters
+      - name: rook-ceph-cluster
+        wave: "1"
+      - name: internal-pki
+        wave: "1"
+      # Wave 2: Monitoring
+      - name: prometheus
+        wave: "2"
+  template:
+    metadata:
+      name: '{{name}}'
+      annotations:
+        argocd.argoproj.io/sync-wave: "{{wave}}"
+```
+
+**Phase 3: Simplify Internal PKI**
+Options:
+1. Use cert-manager's CA Injector to generate CA in-cluster
+2. Use Sealed Secrets to store CA in Git (encrypted)
+3. Use External Secrets Operator with local file backend
+
+**Phase 4: Minimal Ansible Bootstrap**
+After conversion, Ansible only does:
+1. Install K3s cluster
+2. Bootstrap ArgoCD (Helm install)
+3. Apply root app-of-apps
+4. Done! ArgoCD manages everything else
+
+```yaml
+# ansible/playbooks/bootstrap.yml (minimal)
+---
+- name: Bootstrap Homelab
+  hosts: cluster
+  tasks:
+    - import_role: name=k3s
+    - import_role: name=argocd-bootstrap
+    - name: Deploy root app
+      kubernetes.core.k8s:
+        definition: "{{ lookup('file', '../deployments/argocd/root-app.yaml') }}"
+```
+
+#### 1.5.4 Fix Default Configuration Conflicts
+
+**Current Issue:** `enable_rook_ceph_part1: default(false)` but apps require it
+
+**Solution:**
+- Change all infrastructure defaults to `true`
+- Add validation that fails fast if required components disabled
+- Document which components are required vs optional
+
+```yaml
+# ansible/group_vars/all.yml
+enable_metallb_native: true        # Required
+enable_rook_ceph_part1: true       # Required (changed from false)
+enable_rook_ceph_part2: true       # Required
+enable_internal_pki: true          # Required
+enable_prometheus: true            # Optional (monitoring)
+```
+
+#### 1.5.5 Remove External URL Dependencies
+
+**Current Issue:** Manifests downloaded from GitHub during deployment
+
+**Solution:** Move all manifests to Git repo
+
+```bash
+# Create local manifest directory
+mkdir -p core/deployments/{prometheus,argocd}/crds
+
+# Download and commit CRDs
+kubectl apply --dry-run=client -f https://raw.githubusercontent.com/.../crd.yaml -o yaml \
+  > core/deployments/prometheus/crds/servicemonitor.yaml
+
+# Update tasks to use local files
+- name: Apply Prometheus CRDs
+  kubernetes.core.k8s:
+    definition: "{{ lookup('file', '../../deployments/prometheus/crds/' + item) }}"
+  loop:
+    - servicemonitor.yaml
+    - prometheusrule.yaml
+```
+
+#### Success Metrics
+
+- ✅ Prometheus stack accessible via Ingress (no LoadBalancer IPs)
+- ✅ MetalLB only serves Traefik and PiHole
+- ✅ All infrastructure visible in ArgoCD UI
+- ✅ Pre-flight checks prevent deployment failures
+- ✅ No external URL dependencies
+- ✅ Ansible playbook < 100 lines (only bootstrap)
+- ✅ All config in Git with Kustomize overlays
+
+#### Estimated Timeline
+
+- Week 2 Day 1-2: Convert Prometheus to Ingress
+- Week 2 Day 3-4: Add pre-flight checks
+- Week 3 Day 1-3: Convert MetalLB + Rook-Ceph to Kustomize
+- Week 3 Day 4-5: ApplicationSet with sync waves
+- Week 3 Day 5: Testing and validation
+
+![accent-divider.svg](images/accent-divider.svg)
+### Priority 2: Ansible Restructure (MEDIUM) 🟡
 
 **Timeline:** Week 2
 **Impact:** High - Improves maintainability and reusability
