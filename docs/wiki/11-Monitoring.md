@@ -92,3 +92,15 @@ The stack is deployed through ArgoCD using the kube-prometheus manifests, with a
 
 ### btop
 ![btop-Dashboard.png](images/btop-Dashboard.png)
+
+![accent-divider.svg](images/accent-divider.svg)
+## See Also
+
+- **[[10-Benchmarking]]** - Performance testing and metrics
+- **[[12-Troubleshooting]]** - Using metrics for debugging
+- **[[02-Architecture]]** - C4 Container diagram with monitoring
+- **[[21-Deployment-Dependencies]]** - Prometheus deployment dependencies
+
+**Related Issues:**
+- [#49 - Convert Prometheus to Ingress](https://github.com/seadogger-tech/seadogger-homelab/issues/49) - Remove LoadBalancer IPs
+- [#24 - Disaster Recovery](https://github.com/seadogger-tech/seadogger-homelab/issues/24) - Backup monitoring alerts

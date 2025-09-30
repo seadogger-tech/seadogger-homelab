@@ -32,3 +32,16 @@ Note: Prefer exposing application UIs via Ingress + TLS (cert-manager) at the Tr
 - `pihole.seadogger-homelab`
 - `jellyfin.seadogger-homelab`
 - `n8n.seadogger-homelab`
+
+![accent-divider.svg](images/accent-divider.svg)
+## See Also
+
+- **[[03-Hardware-and-Network]]** - Network topology and IP addressing
+- **[[08-Security-and-Certificates]]** - TLS certificates for Traefik
+- **[[02-Architecture]]** - C4 Network & Security diagram
+- **[[21-Deployment-Dependencies]]** - MetalLB dependency analysis
+
+**Related Issues:**
+- [#49 - Convert Prometheus to Ingress](https://github.com/seadogger-tech/seadogger-homelab/issues/49) - Remove unnecessary LoadBalancer IPs
+- [#41 - Centralize subnet config](https://github.com/seadogger-tech/seadogger-homelab/issues/41) - Network configuration management
+- [#1 (Pro) - HTTP to HTTPS redirect](https://github.com/seadogger-tech/seadogger-homelab-pro/issues/1) - Traefik middleware

@@ -353,3 +353,16 @@ sequenceDiagram
     Keycloak-->>OAuth2Proxy: Logout successful
     OAuth2Proxy-->>User: Redirect to a post-logout page
 ```
+
+![accent-divider.svg](images/accent-divider.svg)
+## See Also
+
+- **[[07-Networking-and-Ingress]]** - Traefik TLS termination
+- **[[04-Bootstrap-and-Cold-Start]]** - Internal PKI deployment
+- **[[02-Architecture]]** - C4 Network & Security diagram
+- **[[21-Deployment-Dependencies]]** - Cert-manager dependency analysis
+
+**Related Issues:**
+- [#42 - Document encryption strategy](https://github.com/seadogger-tech/seadogger-homelab/issues/42) - Encryption ADR
+- [#25 - Encryption verification](https://github.com/seadogger-tech/seadogger-homelab/issues/25) - End-to-end encryption checks
+- [#48 - Deployment Dependencies](https://github.com/seadogger-tech/seadogger-homelab/issues/48) - Simplify PKI bootstrap

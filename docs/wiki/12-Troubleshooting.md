@@ -161,3 +161,15 @@ The definitive plan is to manage the `CephNFS` resource declaratively within the
 3.  **Deploy and Verify:** Run the updated Ansible playbook and verify that the NFS share is accessible.
 
 
+
+![accent-divider.svg](images/accent-divider.svg)
+## See Also
+
+- **[[04-Bootstrap-and-Cold-Start]]** - Deployment procedures and common issues
+- **[[11-Monitoring]]** - Using Prometheus/Grafana for debugging
+- **[[17-Runbooks]]** - Operational procedures
+- **[[21-Deployment-Dependencies]]** - Understanding deployment failures
+
+**Related Issues:**
+- [#43 - Fix "latest" versions](https://github.com/seadogger-tech/seadogger-homelab/issues/43) - Version pinning
+- [#31 - NVMe boot fragility](https://github.com/seadogger-tech/seadogger-homelab/issues/31) - Boot issues

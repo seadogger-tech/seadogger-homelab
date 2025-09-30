@@ -119,3 +119,15 @@ For CI/CD automation and repo workflows, see [[15-CI-CD-and-GitHub-Actions]].
 5) Verify reinstall
    - Entire cluster and apps are back online
 
+
+![accent-divider.svg](images/accent-divider.svg)
+## See Also
+
+- **[[04-Bootstrap-and-Cold-Start]]** - Initial cluster deployment procedures
+- **[[15-CI-CD-and-GitHub-Actions]]** - Automated CI/CD workflows
+- **[[21-Deployment-Dependencies]]** - GitOps migration and dependency analysis
+- **[[02-Architecture]]** - GitOps architectural decisions
+
+**Related Issues:**
+- [#48 - Deployment Dependencies Refactor](https://github.com/seadogger-tech/seadogger-homelab/issues/48) - Pure GitOps migration
+- [#50 - Move infrastructure to ArgoCD](https://github.com/seadogger-tech/seadogger-homelab/issues/50) - Converting all to Kustomize

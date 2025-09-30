@@ -1033,7 +1033,7 @@ gitleaks detect --source . --verbose
 
 **Timeline:** Week 2-3
 **Impact:** High - Simplifies deployment, enables GitOps consistency
-**Reference:** See [25-Deployment-Dependencies.md](25-Deployment-Dependencies.md) for detailed analysis
+**Reference:** See [21-Deployment-Dependencies.md](21-Deployment-Dependencies.md) for detailed analysis
 
 #### Overview
 

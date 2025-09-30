@@ -109,7 +109,7 @@ The homelab is fully functional and serving production workloads. Core infrastru
 ### 🟡 Medium Priority
 5. **Single Sign On (Pro)** ([#3](https://github.com/seadogger-tech/seadogger-homelab-pro/issues/3)) - SSO integration for unified authentication
 
-**Full details:** [[19-Refactoring-Roadmap]] | **Dependency Analysis:** [[25-Deployment-Dependencies]]
+**Full details:** [[19-Refactoring-Roadmap]] | **Dependency Analysis:** [[21-Deployment-Dependencies]]
 
 ![accent-divider.svg](images/accent-divider.svg)
 ## Known Issues & Limitations

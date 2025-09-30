@@ -67,3 +67,15 @@ The new architecture was implemented by making the following changes to the `sea
     *   A new `nextcloud-values.yaml` was created to ensure it uses the correct storage class.
 
 This comprehensive update ensures the entire storage infrastructure is now correctly defined in code, leading to a reliable and repeatable deployment process.
+
+![accent-divider.svg](images/accent-divider.svg)
+## See Also
+
+- **[[03-Hardware-and-Network]]** - NVMe hardware setup for Rook-Ceph
+- **[[04-Bootstrap-and-Cold-Start]]** - Rook-Ceph deployment procedures
+- **[[02-Architecture]]** - C4 Storage Architecture diagram
+- **[[12-Troubleshooting]]** - Rook-Ceph troubleshooting
+
+**Related Issues:**
+- [#24 - Disaster Recovery](https://github.com/seadogger-tech/seadogger-homelab/issues/24) - S3 backup strategy for Ceph data
+- [#50 - Move infrastructure to ArgoCD](https://github.com/seadogger-tech/seadogger-homelab/issues/50) - Rook-Ceph GitOps migration

@@ -75,3 +75,19 @@ The script lives in `seadogger-homelab-pro/core/useful_scripts/fetch_hdhomerun_g
 - Hardware-accelerated transcoding via FFmpeg when available.
 - 100% free—no tracking and no premium tiers.
 ![JellyFin](images/jellyfin-dashboard.png)
+
+![accent-divider.svg](images/accent-divider.svg)
+## See Also
+
+- **[[18-Setting-Up-n8n-Connections]]** - N8N configuration guide
+- **[[20-HDHomeRun-Guide]]** - Jellyfin live TV setup
+- **[[06-Storage-Rook-Ceph]]** - Application storage backends
+- **[[08-Security-and-Certificates]]** - Application TLS certificates
+
+**Setup Guides:**
+- [#34 - Get passwords](https://github.com/seadogger-tech/seadogger-homelab/issues/34)
+- [#35 - PiHole whitelist](https://github.com/seadogger-tech/seadogger-homelab/issues/35)
+- [#36 - OpenWebUI Bedrock](https://github.com/seadogger-tech/seadogger-homelab/issues/36)
+- [#37 - Jellyfin XMLTV](https://github.com/seadogger-tech/seadogger-homelab/issues/37)
+- [#38 - Nextcloud setup](https://github.com/seadogger-tech/seadogger-homelab/issues/38)
+- [#39 - N8N workflows](https://github.com/seadogger-tech/seadogger-homelab/issues/39)
