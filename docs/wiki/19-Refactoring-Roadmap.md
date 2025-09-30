@@ -25,29 +25,34 @@ This document provides a comprehensive analysis of the Seadogger Homelab codebas
 
 ### Critical Issues ⚠️
 
-#### 1. **Security Vulnerabilities (CRITICAL)**
+#### 1. **Secrets Management (MEDIUM PRIORITY)**
 
-**Issue:** Hardcoded secrets in version-controlled configuration files
+**Issue:** Secrets stored in local `config.yml` files without encryption
+
+**Current State:**
+- ✅ `config.yml` is properly gitignored (not in version control)
+- ✅ `example.config.yml` uses placeholder values
+- ⚠️ Local `config.yml` contains plaintext secrets on deployment machines
 
 **Locations:**
-- `ansible/config.yml:27` - GitHub Personal Access Token exposed
-- `core/ansible/config.yml:34-36` - Dashboard passwords and AWS credentials in plaintext
+- `ansible/config.yml:27` - GitHub Personal Access Token (local only)
+- `core/ansible/config.yml:34-36` - Dashboard passwords and AWS credentials (local only)
 
 **Impact:**
-- Credential compromise risk
-- Unauthorized repository access
-- AWS resource exploitation potential
+- Risk if deployment machine is compromised
+- Secrets visible in plain text during playbook execution
+- No audit trail for secret access
 
-**Evidence:**
+**Example (from local config.yml - NOT in Git):**
 ```yaml
-# ansible/config.yml (line 27)
-argo_repo_token: "github_pat_11ABUVH2I0EVQCH8ohoAXP_..." # REDACTED
-
-# core/ansible/config.yml (lines 34-36)
-dashboard_password: "REDACTED"
-aws_bedrock_api_key_id: "AKIA****************"  # REDACTED
-aws_bedrock_api_access_key: "************************************"  # REDACTED
+# Local config.yml files contain plaintext secrets
+argo_repo_token: "github_pat_..."
+dashboard_password: "your-password"
+aws_bedrock_api_key_id: "AKIA..."
+aws_bedrock_api_access_key: "secret-key"
 ```
+
+**Note:** These are **not** committed to Git (proper `.gitignore` in place), but should still be encrypted using Ansible Vault for defense-in-depth.
 
 #### 2. **Ansible Architecture Anti-Patterns**
 
@@ -175,14 +180,16 @@ obiwan.local ansible_host=192.168.1.96 ip_host_octet=96
 ![accent-divider.svg](images/accent-divider.svg)
 ## Prioritized Recommendations
 
-### Priority 1: Security (IMMEDIATE) 🔴
+### Priority 1: Secrets Management (OPTIONAL) 🟡
 
-**Timeline:** Week 1
-**Impact:** Critical - Prevents credential compromise
+**Timeline:** Week 1 (if desired)
+**Impact:** Medium - Adds defense-in-depth for local secrets
 
-#### 1.1 Implement Ansible Vault
+**Note:** Secrets are already properly excluded from Git via `.gitignore`. This is an optional hardening step.
 
-**Action:** Encrypt all sensitive variables
+#### 1.1 Implement Ansible Vault (Optional)
+
+**Action:** Encrypt local config files for additional security
 
 ```bash
 # Encrypt the config file
@@ -239,39 +246,39 @@ spec:
 - Centralized secret rotation
 - Audit trail for secret access
 
-#### 1.3 Update .gitignore
+#### 1.3 Verify .gitignore (Already Done ✅)
 
-**Add to `.gitignore`:**
+**Current `.gitignore` properly excludes:**
 ```gitignore
-# Ansible secrets
-config.yml
-hosts.ini
+# Already in place:
+config.yml      ✅
+hosts.ini       ✅
+
+# Recommended additions:
 *.vault
 .vault_pass
-
-# PKI materials
 *.key
 *.crt
 *.csr
 *.pem
-
-# Kubernetes configs
 kubeconfig
 .kube/
-
-# Environment files
 .env
 .env.local
 ```
 
-#### 1.4 Rotate Exposed Credentials
+#### 1.4 Secret Scanning (Optional)
 
-**Immediate Actions:**
-1. Rotate GitHub PAT token in `ansible/config.yml:27`
-2. Change dashboard password
-3. Rotate AWS access keys
-4. Review Git history for other exposed secrets
-5. Consider using [git-secrets](https://github.com/awslabs/git-secrets) or [gitleaks](https://github.com/gitleaks/gitleaks)
+**Optional: Scan Git history for any historical secret leaks:**
+```bash
+# Install gitleaks
+brew install gitleaks
+
+# Scan repository
+gitleaks detect --source . --verbose
+```
+
+**Note:** Since `config.yml` has always been gitignored, this is precautionary.
 
 ![accent-divider.svg](images/accent-divider.svg)
 ### Priority 2: Ansible Restructure (HIGH) 🟠
@@ -1372,34 +1379,36 @@ spec:
 ![accent-divider.svg](images/accent-divider.svg)
 ## Implementation Roadmap
 
-### Phase 1: Security Hardening (Week 1)
-**Status:** 🔴 CRITICAL - Start immediately
+### Phase 1: Secrets Hardening (Optional)
+**Status:** 🟡 OPTIONAL - Already gitignored properly
 
-- [ ] Rotate exposed GitHub PAT token
-- [ ] Rotate AWS credentials
-- [ ] Change dashboard passwords
-- [ ] Implement Ansible Vault encryption
-- [ ] Update `.gitignore` to exclude secrets
-- [ ] Review Git history with `git-secrets` or `gitleaks`
-- [ ] Document vault usage in README
+**Current State:**
+- ✅ Secrets already excluded from Git via `.gitignore`
+- ✅ `example.config.yml` uses placeholders
+- ⚠️ Local secrets in plaintext (acceptable for homelab)
+
+**Optional Improvements (if desired):**
+- [ ] Implement Ansible Vault for local `config.yml` encryption
+- [ ] Add External Secrets Operator for K8s secrets
+- [ ] Scan Git history with `gitleaks` (precautionary)
+- [ ] Document vault usage if implemented
 
 **Success Criteria:**
-- No plaintext secrets in Git
-- All credentials rotated
-- Vault properly configured
+- Config files remain gitignored ✅ (already done)
+- Optional: Vault encryption works if implemented
 
 **Testing:**
 ```bash
-# Verify no secrets in repo
+# Verify secrets not in repo (should pass already)
 gitleaks detect --source . --verbose
 
-# Test vault works
+# If vault implemented, test:
 ansible-playbook main.yml --ask-vault-pass
 ```
 
 ---
 
-### Phase 2: Ansible Restructure (Week 2)
+### Phase 2: Ansible Restructure (Week 1-2)
 **Status:** 🟠 HIGH - Foundation for improvements
 
 - [ ] Create roles directory structure
@@ -1431,7 +1440,7 @@ ansible-playbook playbooks/cluster-install.yml --check
 
 ---
 
-### Phase 3: K3s Best Practices (Week 3)
+### Phase 3: K3s Best Practices (Week 2-3)
 **Status:** 🟠 HIGH - Reliability improvement
 
 - [ ] Provision 2 additional control plane nodes (hardware)
@@ -1470,7 +1479,7 @@ ansible-playbook playbooks/rollback.yml
 
 ---
 
-### Phase 4: GitOps Consistency (Week 4)
+### Phase 4: GitOps Consistency (Week 3-4)
 **Status:** 🟡 MEDIUM - Standardization
 
 - [ ] Create infrastructure ApplicationSet
@@ -1507,7 +1516,7 @@ kubectl delete deployment pihole -n pihole
 
 ---
 
-### Phase 5: Operational Excellence (Week 5)
+### Phase 5: Operational Excellence (Week 4-5)
 **Status:** 🟡 MEDIUM - Maturity improvement
 
 - [ ] Create pre-flight validation role
