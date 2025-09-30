@@ -246,30 +246,22 @@ obiwan.local ansible_host=192.168.1.96 ip_host_octet=96
 # Create S3 bucket for backups
 aws s3 mb s3://seadogger-homelab-backups --region us-east-1
 
-# Create lifecycle policy for automatic transition to Glacier Deep Archive
+# Create lifecycle policy - move directly to Deep Archive for cost savings
 cat > lifecycle-policy.json <<EOF
 {
   "Rules": [
     {
-      "Id": "MoveToGlacierAfter7Days",
+      "Id": "MoveToDeepArchiveImmediately",
       "Status": "Enabled",
       "Transitions": [
         {
-          "Days": 1,
-          "StorageClass": "STANDARD_IA"
-        },
-        {
-          "Days": 7,
-          "StorageClass": "GLACIER_IR"
-        },
-        {
-          "Days": 30,
+          "Days": 0,
           "StorageClass": "DEEP_ARCHIVE"
         }
       ],
       "NoncurrentVersionTransitions": [
         {
-          "NoncurrentDays": 7,
+          "NoncurrentDays": 1,
           "StorageClass": "DEEP_ARCHIVE"
         }
       ]
@@ -340,9 +332,10 @@ spec:
               echo "Starting Nextcloud backup at ${TIMESTAMP}"
               echo "Target: ${BACKUP_PATH}"
 
-              # Sync Nextcloud data to S3
+              # Sync Nextcloud data directly to S3 Deep Archive
+              # Note: Initial upload goes to STANDARD, lifecycle moves to DEEP_ARCHIVE
               aws s3 sync /nextcloud-data ${BACKUP_PATH} \
-                --storage-class STANDARD_IA \
+                --storage-class STANDARD \
                 --delete \
                 --exclude "*.log" \
                 --exclude "*.tmp" \
@@ -410,7 +403,7 @@ spec:
           TIMESTAMP=$(date +%Y%m%d-%H%M%S)-manual
           BACKUP_PATH="s3://seadogger-homelab-backups/nextcloud/${TIMESTAMP}"
           echo "Manual backup to ${BACKUP_PATH}"
-          aws s3 sync /nextcloud-data ${BACKUP_PATH} --storage-class STANDARD_IA
+          aws s3 sync /nextcloud-data ${BACKUP_PATH} --storage-class STANDARD
         volumeMounts:
         - name: nextcloud-data
           mountPath: /nextcloud-data
@@ -593,7 +586,7 @@ spec:
             - |
               TIMESTAMP=$(date +%Y%m%d-%H%M%S)
               BACKUP_PATH="s3://seadogger-homelab-backups/${APP_NAME}/${TIMESTAMP}"
-              aws s3 sync /data ${BACKUP_PATH} --storage-class STANDARD_IA
+              aws s3 sync /data ${BACKUP_PATH} --storage-class STANDARD
             volumeMounts:
             - name: data
               mountPath: /data
@@ -605,32 +598,64 @@ spec:
               readOnly: true
 ```
 
-#### 0A.3 Backup Cost Estimation
+#### 0A.3 Backup Cost Estimation (Direct to Deep Archive)
 
-**S3 Storage Costs (us-east-1):**
+**S3 Glacier Deep Archive Pricing (us-east-1):**
 
-| Tier | Days | Storage Cost/TB | 4TB Monthly Cost |
-|------|------|-----------------|------------------|
-| Standard-IA | 1-7 | $0.0125/GB | $51.20 |
-| Glacier Instant Retrieval | 7-30 | $0.004/GB | $16.38 |
-| Glacier Deep Archive | 30+ | $0.00099/GB | $4.05 |
+| Storage Tier | Cost per GB/month | Cost per TB/month |
+|--------------|-------------------|-------------------|
+| Glacier Deep Archive | $0.00099/GB | **$0.99/TB** |
 
-**Estimated Monthly Cost:**
-- Daily backups (7 days in Standard-IA): $51.20
-- Weekly backups (1 month in Glacier IR): $16.38
-- Monthly backups (kept forever in Deep Archive): $4.05/month growing
-- **Total first month: ~$72**
-- **Ongoing (after 30 days): ~$20/month + ($4/month × months)**
+**Your 4-6TB estimate: ~$4-6/month** ✅
+
+**Why Deep Archive?**
+- ✅ Lowest cost storage ($0.99/TB/month)
+- ✅ This is disaster recovery only - 12-48hr retrieval is acceptable
+- ✅ No need for expensive Standard-IA or Glacier IR tiers
+- ✅ Lifecycle policy moves data to Deep Archive immediately (0 days)
+
+**How `aws s3 sync` Works (Incremental):**
+- First backup: Uploads full 4TB
+- Subsequent backups: **Only uploads changed files**
+- Each nightly backup creates a new timestamped folder, but:
+  - If a file hasn't changed, S3 just references the existing object (no duplicate storage)
+  - Only new/modified files consume additional storage
+
+**Realistic Storage Consumption:**
+- **Initial full backup:** 4TB = $3.96/month
+- **Daily changes (photos, files added):** ~10GB/day average = 300GB/month
+- **Monthly growth in S3:** 300GB × $0.00099 = **$0.30/month additional**
+- **After 1 year of daily backups:** 4TB + (300GB × 12) = ~7.6TB = **$7.52/month**
+
+**Nightly vs Weekly Backups:**
+
+Since `aws s3 sync` is incremental, the storage cost difference between nightly and weekly is minimal:
+
+| Frequency | Year 1 Storage | Monthly Cost |
+|-----------|----------------|--------------|
+| Nightly (365 backups) | ~7.6TB | **$7.52** |
+| Weekly (52 backups) | ~7.6TB | **$7.52** (same!) |
+
+**The difference:** Weekly gives you 52 restore points vs 365 restore points for the same cost!
+
+**Recommendation:**
+- ✅ **Run nightly backups** - no extra cost vs weekly
+- Set retention policy to keep backups for 30 days (or whatever you prefer)
+- After 30 days, old backup folders are auto-deleted
+- Steady-state cost: **~$5-8/month** for 4-6TB with daily changes
 
 **Data Transfer Costs:**
-- Upload to S3: FREE
-- Retrieval from Deep Archive: $0.02/GB ($81.92 for full 4TB restore)
-- Standard retrieval time: 12-48 hours
+- ✅ Upload to S3: **FREE**
+- Retrieval from Deep Archive: $0.02/GB
+  - Full 4TB restore: **$81.92** (one-time, disaster only)
+  - Standard retrieval time: **12-48 hours** (acceptable for DR)
+  - Bulk retrieval: **48 hours**, only $0.0025/GB ($10.24 for 4TB)
 
-**Optimizations:**
-- Use `--exclude` patterns to skip cache/temp files
-- Enable S3 Intelligent-Tiering for automatic cost optimization
-- Consider compression before upload (trade CPU for storage cost)
+**Bottom Line:**
+- **Your original estimate was correct:** ~$5/month for 4-6TB ✅
+- Nightly backups with 30-day retention
+- Storage only grows as your data grows
+- `aws s3 sync` handles deduplication automatically
 
 ---
 
