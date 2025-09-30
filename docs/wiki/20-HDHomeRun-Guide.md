@@ -2,25 +2,32 @@
 ![accent-divider.svg](images/accent-divider.svg)
 # HDHomeRun Guide Utility
 
-A Python utility that fetches the HDHomeRun XMLTV guide using the network device's DeviceAuth code to query the HDHomeRun API. The guide is saved locally for use with Jellyfin or other media applications.
+A Python utility that fetches the HDHomeRun XMLTV guide using the network device's DeviceAuth code to query the HDHomeRun API. The guide is saved to Nextcloud storage for use with Jellyfin.
+
+> **⚠️ Important:** The guide file **must** be written to Nextcloud storage (not `/media`). Jellyfin's `/media` mount is **read-only**. Use the Kubernetes CronJob method below for automated updates.
 
 ![accent-divider.svg](images/accent-divider.svg)
 ## Overview
 
-This script automates the process of downloading EPG (Electronic Program Guide) data from HDHomeRun devices, making it easy to integrate live TV guide information into your homelab media server.
+This script automates the process of downloading EPG (Electronic Program Guide) data from HDHomeRun devices, making it easy to integrate live TV guide information into Jellyfin via Nextcloud.
 
 **Use Cases:**
 - Jellyfin live TV guide integration
 - Automated EPG updates for media servers
 - Offline TV guide storage
 
+**Storage Architecture:**
+- **Nextcloud** owns the data at `/media/data/HomeMedia/files/Live_TV_Guide/xmltv.xml` (www-data UID:33)
+- **Jellyfin** reads the file via read-only `/media` mount
+- **Updates** must write to Nextcloud namespace with proper permissions
+
 ![accent-divider.svg](images/accent-divider.svg)
 ## Features
 
 - **Configurable discovery endpoint** – Point the script at any HDHomeRun device on your network
-- **Configurable target** – Write the XML to any local file path
+- **Configurable target** – Write the XML to any writable file path
 - **No external dependencies** – Uses only Python standard library (`urllib`, `argparse`)
-- **Automated scheduling** – Can be run as a cron job for regular updates
+- **Kubernetes CronJob ready** – Designed for automated scheduling in the cluster
 
 ![accent-divider.svg](images/accent-divider.svg)
 ## Location
@@ -37,85 +44,10 @@ seadogger-homelab-pro/core/useful_scripts/fetch_hdhomerun_guide.py
 - Python 3.8+ (uses `urllib` and `argparse` from stdlib)
 - HDHomeRun device on your network
 - Network access to HDHomeRun device
+- Write access to Nextcloud storage (for automated updates)
 
 ![accent-divider.svg](images/accent-divider.svg)
-## Installation
-
-### Manual Installation
-
-```bash
-# Copy the script to your preferred location
-cp fetch_hdhomerun_guide.py /usr/local/bin/
-
-# Make it executable
-chmod +x /usr/local/bin/fetch_hdhomerun_guide.py
-```
-
-### For Jellyfin Integration via Nextcloud
-
-The guide data is stored in Nextcloud and shared read-only with Jellyfin:
-
-```bash
-# Data is stored in Nextcloud at:
-# /media/data/HomeMedia/files/Live_TV_Guide/xmltv.xml
-# Owner: www-data (UID:33, GID:33) - Nextcloud user
-# Jellyfin has read-only access to /media mount
-```
-
-![accent-divider.svg](images/accent-divider.svg)
-## Usage
-
-### Basic Usage (Default Output)
-
-The simplest usage saves the guide as `xmltv.xml` in the current directory:
-
-```bash
-./fetch_hdhomerun_guide.py \
-    --discover-url http://192.168.1.70/discover.json
-```
-
-**Output:** Guide saved to `./xmltv.xml`
-
-### Custom Output Path
-
-Specify a custom location for the guide file:
-
-```bash
-./fetch_hdhomerun_guide.py \
-    --discover-url http://192.168.1.70/discover.json \
-    --target /media/data/HomeMedia/files/Live_TV_Guide/xmltv.xml
-```
-
-### For Jellyfin
-
-Configure Jellyfin to use the downloaded guide:
-
-```bash
-# Fetch guide to Jellyfin's expected location
-./fetch_hdhomerun_guide.py \
-    --discover-url http://192.168.1.70/discover.json \
-    --target /media/data/HomeMedia/files/Live_TV_Guide/xmltv.xml
-```
-
-Then in Jellyfin:
-1. Navigate to **Dashboard** → **Live TV** → **TV Guide Data Providers**
-2. Select **XMLTV**
-3. Point to: `/media/data/HomeMedia/files/Live_TV_Guide/xmltv.xml`
-
-![accent-divider.svg](images/accent-divider.svg)
-## Automated Updates
-
-### Using Cron
-
-Set up automatic guide updates every 6 hours:
-
-```bash
-# Edit crontab
-crontab -e
-
-# Add this line (update every 6 hours)
-0 */6 * * * /usr/local/bin/fetch_hdhomerun_guide.py --discover-url http://192.168.1.70/discover.json --target /media/data/HomeMedia/files/Live_TV_Guide/xmltv.xml
-```
+## Automated Updates (Recommended)
 
 ### Using Kubernetes CronJob
 
@@ -162,31 +94,87 @@ spec:
           restartPolicy: OnFailure
 ```
 
-**Important Notes:**
-- CronJob runs in `nextcloud` namespace with write access to Nextcloud PVC
-- Runs as user/group 33 (www-data) to match Nextcloud file permissions
-- Writes to `/nextcloud/data/HomeMedia/files/Live_TV_Guide/xmltv.xml`
-- Jellyfin can read this file via its read-only `/media` mount
-- Script must be stored in a ConfigMap first (see example below)
+**Key Configuration:**
+- **Namespace:** `nextcloud` (has write access to Nextcloud PVC)
+- **User/Group:** `33` (www-data) to match Nextcloud file permissions
+- **Mount Path:** `/nextcloud/data` (Nextcloud PVC root)
+- **Target File:** `/nextcloud/data/HomeMedia/files/Live_TV_Guide/xmltv.xml`
+- **PVC:** `nextcloud-nextcloud` (Nextcloud's storage)
 
 ### Creating the ConfigMap
 
 Before deploying the CronJob, create a ConfigMap with the script:
 
 ```bash
-# Create ConfigMap from the script file
+# From the repository root
 kubectl create configmap hdhomerun-script \
   --from-file=fetch_hdhomerun_guide.py=./useful_scripts/fetch_hdhomerun_guide.py \
   -n nextcloud
 
 # Verify it was created
-kubectl get configmap hdhomerun-script -n nextcloud
+kubectl get configmap hdhomerun-script -n nextcloud -o yaml
+```
+
+### Deploying the CronJob
+
+```bash
+# Save the CronJob manifest to a file
+kubectl apply -f hdhomerun-cronjob.yaml
+
+# Verify it's scheduled
+kubectl get cronjob -n nextcloud
+
+# Check job execution
+kubectl get jobs -n nextcloud
+
+# View logs from most recent job
+kubectl logs -n nextcloud -l job-name=hdhomerun-guide-fetch-<id>
 ```
 
 ![accent-divider.svg](images/accent-divider.svg)
-## Command-Line Options
+## Jellyfin Configuration
 
-Run with `--help` to see all available options:
+Once the CronJob is running and updating the guide file, configure Jellyfin to use it:
+
+### In Jellyfin UI:
+1. Navigate to **Dashboard** → **Live TV** → **TV Guide Data Providers**
+2. Select **XMLTV**
+3. Set the guide path to: `/media/data/HomeMedia/files/Live_TV_Guide/xmltv.xml`
+4. Set refresh interval: **6 hours** (to match CronJob schedule)
+
+**Path Explanation:**
+- Jellyfin sees path as: `/media/data/HomeMedia/files/Live_TV_Guide/xmltv.xml` (read-only mount)
+- CronJob writes to: `/nextcloud/data/HomeMedia/files/Live_TV_Guide/xmltv.xml` (Nextcloud PVC)
+- They're the same file on the underlying CephFS storage
+
+![accent-divider.svg](images/accent-divider.svg)
+## Manual Testing (Local Development Only)
+
+For local testing outside the cluster:
+
+### Basic Usage
+
+```bash
+# Test script locally (saves to current directory)
+./fetch_hdhomerun_guide.py \
+    --discover-url http://192.168.1.70/discover.json
+```
+
+**Output:** Guide saved to `./xmltv.xml`
+
+### Custom Output Path (Local Testing)
+
+```bash
+# Specify custom local path
+./fetch_hdhomerun_guide.py \
+    --discover-url http://192.168.1.70/discover.json \
+    --target /tmp/xmltv.xml
+```
+
+> **Note:** These manual commands are for **testing only**. For production updates in the cluster, use the Kubernetes CronJob method above.
+
+![accent-divider.svg](images/accent-divider.svg)
+## Command-Line Options
 
 ```bash
 ./fetch_hdhomerun_guide.py --help
@@ -198,6 +186,28 @@ Run with `--help` to see all available options:
 
 ![accent-divider.svg](images/accent-divider.svg)
 ## Troubleshooting
+
+### CronJob Not Running
+
+**Check CronJob status:**
+```bash
+kubectl get cronjob -n nextcloud hdhomerun-guide-fetch
+kubectl describe cronjob -n nextcloud hdhomerun-guide-fetch
+```
+
+**Check recent jobs:**
+```bash
+kubectl get jobs -n nextcloud
+```
+
+**View job logs:**
+```bash
+# Get the most recent job pod
+kubectl get pods -n nextcloud -l job-name --sort-by=.metadata.creationTimestamp
+
+# View logs
+kubectl logs -n nextcloud <pod-name>
+```
 
 ### Cannot Connect to HDHomeRun Device
 
@@ -215,39 +225,69 @@ Run with `--help` to see all available options:
    curl http://192.168.1.70/discover.json
    ```
 
-3. Check network connectivity:
+3. Check network connectivity from cluster:
    ```bash
-   ping 192.168.1.70
+   kubectl run -n nextcloud test-curl --rm -it --restart=Never \
+     --image=curlimages/curl -- curl http://192.168.1.70/discover.json
    ```
 
-### Permission Denied Writing Output File
+### Permission Denied Writing File
 
 **Error:** `PermissionError: [Errno 13] Permission denied`
 
-**Solutions:**
-```bash
-# Check directory permissions
-ls -la /media/data/HomeMedia/files/Live_TV_Guide/
+**Cause:** CronJob not running as correct user/group
 
-# Fix permissions
-sudo chown $USER:$USER /media/data/HomeMedia/files/Live_TV_Guide/
-
-# Or run with sudo (not recommended)
-sudo ./fetch_hdhomerun_guide.py --discover-url ...
+**Solution:** Verify `securityContext` in CronJob manifest:
+```yaml
+securityContext:
+  runAsUser: 33      # www-data
+  runAsGroup: 33     # www-data
+  fsGroup: 33
 ```
+
+**Check file ownership:**
+```bash
+kubectl exec -n nextcloud deploy/nextcloud -- \
+  ls -la /var/www/html/data/HomeMedia/files/Live_TV_Guide/
+```
+
+Should show owner as `www-data` (UID:33).
 
 ### Guide Not Updating in Jellyfin
 
 **Solutions:**
-1. Refresh guide data in Jellyfin:
+
+1. **Verify file exists and is readable:**
+   ```bash
+   kubectl exec -n jellyfin deploy/jellyfin -- \
+     ls -la /media/data/HomeMedia/files/Live_TV_Guide/xmltv.xml
+   ```
+
+2. **Check file modification time:**
+   ```bash
+   kubectl exec -n jellyfin deploy/jellyfin -- \
+     stat /media/data/HomeMedia/files/Live_TV_Guide/xmltv.xml
+   ```
+   Should update every 6 hours based on CronJob schedule.
+
+3. **Force refresh in Jellyfin:**
    - **Dashboard** → **Scheduled Tasks** → **Live TV Guide** → **Run Now**
 
-2. Verify file path in Jellyfin matches script output
-
-3. Check Jellyfin logs:
+4. **Check Jellyfin logs:**
    ```bash
-   kubectl logs -n jellyfin deploy/jellyfin --tail=100 | grep -i "guide"
+   kubectl logs -n jellyfin deploy/jellyfin --tail=100 | grep -i "guide\|xmltv"
    ```
+
+### ConfigMap Not Found
+
+**Error:** `configmap "hdhomerun-script" not found`
+
+**Solution:** Create the ConfigMap first:
+```bash
+kubectl create configmap hdhomerun-script \
+  --from-file=fetch_hdhomerun_guide.py=./useful_scripts/fetch_hdhomerun_guide.py \
+  -n nextcloud
+```
 
 ![accent-divider.svg](images/accent-divider.svg)
 ## Script Details
@@ -257,7 +297,7 @@ sudo ./fetch_hdhomerun_guide.py --discover-url ...
 1. **Discover Device:** Queries the HDHomeRun device's `/discover.json` endpoint
 2. **Extract DeviceAuth:** Parses the device's authentication code from the response
 3. **Fetch Guide:** Uses DeviceAuth to authenticate to HDHomeRun's API and download XMLTV data
-4. **Save Locally:** Writes the XML guide data to the specified file path
+4. **Save to Nextcloud:** Writes the XML guide data to Nextcloud storage (accessible to Jellyfin)
 
 ### Dependencies
 
@@ -269,10 +309,23 @@ sudo ./fetch_hdhomerun_guide.py --discover-url ...
 
 **No pip install required!**
 
+### Storage Flow
+
+```
+HDHomeRun Device (192.168.1.70)
+    ↓
+CronJob Pod (nextcloud namespace, UID:33)
+    ↓
+Nextcloud PVC: /nextcloud/data/HomeMedia/files/Live_TV_Guide/xmltv.xml
+    ↓ (same file, different mount)
+Jellyfin Pod (read-only): /media/data/HomeMedia/files/Live_TV_Guide/xmltv.xml
+```
+
 ![accent-divider.svg](images/accent-divider.svg)
 ## See Also
 
-- [[09-Apps]] - Applications deployed in the homelab
+- **[[09-Apps]]** - Jellyfin and Nextcloud application details
+- **[[06-Storage-Rook-Ceph]]** - CephFS storage architecture
 - [HDHomeRun Official Docs](https://www.silicondust.com/support/)
 - [Jellyfin Live TV Guide](https://jellyfin.org/docs/general/server/live-tv/)
 - [XMLTV Format Specification](http://wiki.xmltv.org/index.php/Main_Page)
