@@ -163,6 +163,7 @@ See **[Refactoring Roadmap](https://github.com/seadogger-tech/seadogger-homelab/
 
 **Priority 1:**
 - [#48](https://github.com/seadogger-tech/seadogger-homelab/issues/48) Pure GitOps refactor (eliminate deployment dependencies)
+- [Pro #6](https://github.com/seadogger-tech/seadogger-homelab-pro/issues/6) OAuth2 improvements for private firewalled systems
 - Keycloak SSO integration (Pro)
 
 **Future Enhancements:**
