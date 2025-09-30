@@ -112,7 +112,7 @@ graph TB
         direction TB
         Default[ceph-block-data<br/>RBD Replicated<br/>DEFAULT]
         Bucket[ceph-bucket<br/>S3-compatible<br/>Object Storage]
-        FSEC[ceph-fs-data-ec<br/>CephFS Erasure Coded<br/>4+2 EC]
+        FSEC[ceph-fs-data-ec<br/>CephFS Erasure Coded<br/>2+1 EC]
         FSRep[ceph-fs-data-replicated<br/>CephFS Replicated<br/>3× Replica]
         LocalPath[local-path<br/>K3s Local Storage<br/>Single Node]
     end
@@ -164,7 +164,7 @@ graph TB
 - **ceph-block-data** (DEFAULT): Block storage with replication (RBD)
   - Used by: N8N (n8n-main-persistence), OpenWebUI (open-webui)
 - **ceph-bucket**: S3-compatible object storage for backups
-- **ceph-fs-data-ec**: CephFS with erasure coding (4+2 EC) for large files
+- **ceph-fs-data-ec**: CephFS with erasure coding (2+1 EC) for large files
   - Used by: Nextcloud (nextcloud-nextcloud), Jellyfin config/cache (jellyfin-config, jellyfin-cache)
 - **ceph-fs-data-replicated**: CephFS with 3× replication for high availability
 - **local-path**: K3s built-in, single-node local storage
