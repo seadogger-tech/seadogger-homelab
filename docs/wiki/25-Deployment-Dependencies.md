@@ -1,6 +1,11 @@
 ![accent-divider.svg](images/accent-divider.svg)
 # Deployment Dependencies Analysis
 
+**GitHub Issues:**
+- [#48 - Parent Issue (Dependencies Refactor)](https://github.com/seadogger-tech/seadogger-homelab/issues/48)
+- [#49 - Convert Prometheus to Ingress](https://github.com/seadogger-tech/seadogger-homelab/issues/49)
+- [#50 - Move all infrastructure to ArgoCD + Kustomize](https://github.com/seadogger-tech/seadogger-homelab/issues/50)
+
 This document analyzes the "spider web" of deployment dependencies in the Seadogger Homelab and proposes solutions to untangle them.
 
 ![accent-divider.svg](images/accent-divider.svg)
@@ -113,6 +118,7 @@ Required by:
 **Current ordering:** ✅ **CORRECT** - MetalLB deployed before Traefik/PiHole
 
 **Action Required:** Refactor Prometheus stack to use Ingress instead of LoadBalancer services
+**GitHub Issue:** [#49](https://github.com/seadogger-tech/seadogger-homelab/issues/49)
 
 ---
 

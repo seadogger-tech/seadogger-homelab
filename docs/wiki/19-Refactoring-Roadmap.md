@@ -232,6 +232,7 @@ obiwan.local ansible_host=192.168.1.96 ip_host_octet=96
 
 ### Priority 0A: Disaster Recovery & Backup Strategy (CRITICAL) 🔴
 
+**GitHub Issue:** [#24](https://github.com/seadogger-tech/seadogger-homelab/issues/24)
 **Timeline:** Week 1-2 (IMMEDIATE)
 **Impact:** CRITICAL - Prevents catastrophic data loss
 
@@ -662,6 +663,7 @@ Since `aws s3 sync` is incremental, the storage cost difference between nightly 
 
 ### Priority 0B: Staging Environment for Safe Testing (CRITICAL) 🔴
 
+**GitHub Issue:** [#47](https://github.com/seadogger-tech/seadogger-homelab/issues/47)
 **Timeline:** Week 2-3
 **Impact:** CRITICAL - Enables safe iteration without production risk
 
@@ -1024,6 +1026,11 @@ gitleaks detect --source . --verbose
 ![accent-divider.svg](images/accent-divider.svg)
 ### Priority 1.5: Deployment Dependencies Refactor (HIGH) 🟠
 
+**GitHub Issues:**
+- [#48 - Parent Issue (Dependencies Refactor)](https://github.com/seadogger-tech/seadogger-homelab/issues/48)
+- [#49 - Convert Prometheus to Ingress](https://github.com/seadogger-tech/seadogger-homelab/issues/49)
+- [#50 - Move all infrastructure to ArgoCD + Kustomize](https://github.com/seadogger-tech/seadogger-homelab/issues/50)
+
 **Timeline:** Week 2-3
 **Impact:** High - Simplifies deployment, enables GitOps consistency
 **Reference:** See [25-Deployment-Dependencies.md](25-Deployment-Dependencies.md) for detailed analysis
@@ -1283,6 +1290,8 @@ kubectl apply --dry-run=client -f https://raw.githubusercontent.com/.../crd.yaml
 ![accent-divider.svg](images/accent-divider.svg)
 ### Priority 2: Ansible Restructure (MEDIUM) 🟡
 
+**GitHub Issue:** [#32](https://github.com/seadogger-tech/seadogger-homelab/issues/32)
+**Related:** [#41 - Centralize subnet config](https://github.com/seadogger-tech/seadogger-homelab/issues/41)
 **Timeline:** Week 2
 **Impact:** High - Improves maintainability and reusability
 
