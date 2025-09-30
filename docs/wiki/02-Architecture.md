@@ -9,13 +9,16 @@ This document describes the system architecture, key technical decisions, and de
 
 Visual representations at different levels of abstraction, following C4 model principles.
 
-> **💡 Tip:** All diagrams use Mermaid and render natively on GitHub. They work in both light and dark modes.
+> **💡 Tip:** All diagrams use Mermaid and render natively on GitHub.
+>
+> **Note:** Mermaid diagrams use transparent backgrounds that adapt to GitHub's theme. For optimal dark mode viewing, consider viewing this wiki in dark mode (GitHub Settings → Appearance → Dark theme).
 
 ### Level 1: System Context
 
 Shows the homelab system, users, and external integrations.
 
 ```mermaid
+%%{init: {'theme':'dark','themeVariables': {'darkMode':'true'}}}%%
 graph TB
     LAN_User([👤 LAN User<br/>Local Network])
     VPN_User([👤 External User<br/>WireGuard VPN])
@@ -70,6 +73,7 @@ graph TB
 Shows major services and applications within the cluster.
 
 ```mermaid
+%%{init: {'theme':'dark','themeVariables': {'darkMode':'true'}}}%%
 graph TB
     User([👤 User<br/>LAN or VPN])
 
@@ -171,6 +175,7 @@ graph TB
 Shows how ArgoCD deploys applications from Git to cluster.
 
 ```mermaid
+%%{init: {'theme':'dark','themeVariables': {'darkMode':'true'}}}%%
 graph LR
     subgraph Git["📁 Git Repository"]
         Manifests[Kubernetes<br/>Manifests]
@@ -219,6 +224,7 @@ graph LR
 Shows Rook-Ceph distributed storage with actual storage classes.
 
 ```mermaid
+%%{init: {'theme':'dark','themeVariables': {'darkMode':'true'}}}%%
 graph TB
     subgraph RookCeph["🗄️ Rook-Ceph Cluster"]
         Operator[Rook Operator<br/>Lifecycle Manager]
@@ -301,6 +307,7 @@ graph TB
 Shows traffic flow and TLS encryption paths.
 
 ```mermaid
+%%{init: {'theme':'dark','themeVariables': {'darkMode':'true'}}}%%
 graph TB
     LAN([👤 LAN User])
     VPN([👤 VPN User])
@@ -384,6 +391,7 @@ graph TB
 Shows ArgoCD sync wave deployment sequence.
 
 ```mermaid
+%%{init: {'theme':'dark','themeVariables': {'darkMode':'true'}}}%%
 graph TD
     subgraph Wave0["🌊 Wave 0: Operators & Base"]
         MetalLB[MetalLB]
