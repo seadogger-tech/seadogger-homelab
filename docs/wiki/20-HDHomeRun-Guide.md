@@ -51,14 +51,15 @@ cp fetch_hdhomerun_guide.py /usr/local/bin/
 chmod +x /usr/local/bin/fetch_hdhomerun_guide.py
 ```
 
-### For Jellyfin Integration
+### For Jellyfin Integration via Nextcloud
+
+The guide data is stored in Nextcloud and shared read-only with Jellyfin:
 
 ```bash
-# Create directory for guide data
-mkdir -p /media/data/HomeMedia/files/Live_TV_Guide/
-
-# Set permissions
-chown -R jellyfin:jellyfin /media/data/HomeMedia/files/Live_TV_Guide/
+# Data is stored in Nextcloud at:
+# /media/data/HomeMedia/files/Live_TV_Guide/xmltv.xml
+# Owner: www-data (UID:33, GID:33) - Nextcloud user
+# Jellyfin has read-only access to /media mount
 ```
 
 ![accent-divider.svg](images/accent-divider.svg)
@@ -118,20 +119,24 @@ crontab -e
 
 ### Using Kubernetes CronJob
 
-Deploy as a CronJob in your cluster:
+Deploy as a CronJob that writes to Nextcloud storage (accessible to Jellyfin):
 
 ```yaml
 apiVersion: batch/v1
 kind: CronJob
 metadata:
   name: hdhomerun-guide-fetch
-  namespace: jellyfin
+  namespace: nextcloud
 spec:
   schedule: "0 */6 * * *"  # Every 6 hours
   jobTemplate:
     spec:
       template:
         spec:
+          securityContext:
+            runAsUser: 33      # www-data user
+            runAsGroup: 33     # www-data group
+            fsGroup: 33
           containers:
           - name: fetch-guide
             image: python:3.11-slim
@@ -141,20 +146,41 @@ spec:
             - --discover-url
             - http://192.168.1.70/discover.json
             - --target
-            - /data/xmltv.xml
+            - /nextcloud/data/HomeMedia/files/Live_TV_Guide/xmltv.xml
             volumeMounts:
-            - name: guide-data
-              mountPath: /data
+            - name: nextcloud-data
+              mountPath: /nextcloud/data
             - name: script
               mountPath: /scripts
           volumes:
-          - name: guide-data
+          - name: nextcloud-data
             persistentVolumeClaim:
-              claimName: jellyfin-media
+              claimName: nextcloud-nextcloud
           - name: script
             configMap:
               name: hdhomerun-script
           restartPolicy: OnFailure
+```
+
+**Important Notes:**
+- CronJob runs in `nextcloud` namespace with write access to Nextcloud PVC
+- Runs as user/group 33 (www-data) to match Nextcloud file permissions
+- Writes to `/nextcloud/data/HomeMedia/files/Live_TV_Guide/xmltv.xml`
+- Jellyfin can read this file via its read-only `/media` mount
+- Script must be stored in a ConfigMap first (see example below)
+
+### Creating the ConfigMap
+
+Before deploying the CronJob, create a ConfigMap with the script:
+
+```bash
+# Create ConfigMap from the script file
+kubectl create configmap hdhomerun-script \
+  --from-file=fetch_hdhomerun_guide.py=./useful_scripts/fetch_hdhomerun_guide.py \
+  -n nextcloud
+
+# Verify it was created
+kubectl get configmap hdhomerun-script -n nextcloud
 ```
 
 ![accent-divider.svg](images/accent-divider.svg)

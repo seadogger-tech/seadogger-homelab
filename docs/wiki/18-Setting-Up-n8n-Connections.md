@@ -2,14 +2,34 @@
 ![accent-divider](images/accent-divider.svg)
 # Setting Up n8n Connections to Google Services
 
-This page documents how we configured n8n in our Seadogger Homelab to work with Google APIs (Gmail, Drive, Docs, Sheets, Slides, etc.) from behind a firewall with a private k3s cluster.
+This guide documents how to configure n8n in the Seadogger Homelab to work with Google APIs (Gmail, Drive, Docs, Sheets, Slides, etc.) from behind a firewall with a private K3s cluster.
+
+> **⚠️ Current Limitation:** This process requires manual `kubectl port-forward` for each OAuth credential setup. See [Pro #6](https://github.com/seadogger-tech/seadogger-homelab-pro/issues/6) for planned improvements to simplify OAuth flows in firewalled environments.
 
 ![accent-divider](images/accent-divider.svg)
-## Key Lessons
+## Overview
 
-- n8n does not use one universal Google credential. Each Google service (Gmail, Drive, Docs, Sheets, Slides, Contacts, Calendar, etc.) requires its own credential.
-- OAuth setup works fine in a private cluster using the localhost loopback method with `kubectl port-forward`.
-- Once OAuth is finished, n8n stores a refresh token. Day-to-day use continues over the normal ingress at `https://n8n.seadogger-homelab`. No tunnels are required after the first setup.
+### How It Works
+
+**The Challenge:**
+- n8n requires OAuth2 redirect URIs to complete authentication
+- Google OAuth2 requires either:
+  - HTTPS with publicly trusted certificate, OR
+  - `http://localhost` (local development)
+- Our cluster is firewalled with self-signed internal PKI certificates
+
+**The Solution:**
+- Use `kubectl port-forward` to expose n8n on `localhost:5678`
+- Configure Google OAuth client with `http://localhost:5678/rest/oauth2-credential/callback`
+- Complete OAuth flow through localhost
+- n8n stores refresh tokens - no tunnel needed for day-to-day use
+
+### Key Points
+
+- **Separate credentials per service:** n8n requires individual credentials for each Google service (Gmail, Drive, Docs, Sheets, Slides, Contacts, Calendar, etc.)
+- **One-time port-forward:** Only needed during initial OAuth credential setup
+- **Automatic token refresh:** n8n handles token refresh in the background
+- **Normal access:** Day-to-day workflows use `https://n8n.seadogger-homelab` without any tunnels
 
 ![accent-divider](images/accent-divider.svg)
 ## Step-by-Step: Creating Google Credentials
@@ -103,6 +123,24 @@ Then re-sync. This only affects port-forward sessions — your ingress URL conti
 - If tokens stop refreshing (rare), re-run the port-forward OAuth flow to reconnect.
 
 ![accent-divider](images/accent-divider.svg)
-## Notes
-This recipe enables secure OAuth credential creation for n8n inside a private homelab without exposing the editor publicly.
+## Future Improvements
+
+This manual port-forward process works but is not ideal for frequent credential updates. Planned improvements tracked in [Pro #6](https://github.com/seadogger-tech/seadogger-homelab-pro/issues/6):
+
+**Potential Solutions:**
+- **Cloudflare Tunnel:** Temporary public endpoint with trusted certificate during OAuth setup
+- **Let's Encrypt + WireGuard:** oauth2-proxy with trusted cert accessible via VPN
+- **Portal Integration:** Automated OAuth flow management in Portal dashboard
+
+For now, the localhost port-forward method provides a secure, working solution for OAuth credential creation in a private homelab.
+
+![accent-divider](images/accent-divider.svg)
+## See Also
+
+- **[[09-Apps]]** - N8N application overview and features
+- **[[07-Networking-and-Ingress]]** - Traefik ingress configuration for n8n
+- **[[08-Security-and-Certificates]]** - Internal PKI and why self-signed certs don't work with Google OAuth
+
+**Related Issues:**
+- [Pro #6 - OAuth2 Improvements](https://github.com/seadogger-tech/seadogger-homelab-pro/issues/6) - Better OAuth flows for private firewalled systems
 
