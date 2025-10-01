@@ -1545,6 +1545,8 @@ helm_binary_sha256: "def456..."
 ![accent-divider.svg](images/accent-divider.svg)
 ### Priority 3: K3s Best Practices (HIGH) 🟠
 
+**GitHub Issue:** [#52](https://github.com/seadogger-tech/seadogger-homelab/issues/52)
+
 **Timeline:** Week 3
 **Impact:** High - Improves reliability and disaster recovery
 
@@ -1947,6 +1949,8 @@ core/argocd/apps/
 
 ![accent-divider.svg](images/accent-divider.svg)
 ### Priority 5: Operational Excellence (MEDIUM) 🟡
+
+**GitHub Issue:** [#53](https://github.com/seadogger-tech/seadogger-homelab/issues/53)
 
 **Timeline:** Week 5
 **Impact:** Medium - Improves observability and reliability
