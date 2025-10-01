@@ -1030,14 +1030,73 @@ gitleaks detect --source . --verbose
 - [#48 - Parent Issue (Dependencies Refactor)](https://github.com/seadogger-tech/seadogger-homelab/issues/48)
 - [#49 - Convert Prometheus to Ingress](https://github.com/seadogger-tech/seadogger-homelab/issues/49)
 - [#50 - Move all infrastructure to ArgoCD + Kustomize](https://github.com/seadogger-tech/seadogger-homelab/issues/50)
+- [#51 - Separate Raspberry Pi 5 from generic ARM64](https://github.com/seadogger-tech/seadogger-homelab/issues/51)
 
 **Timeline:** Week 2-3
-**Impact:** High - Simplifies deployment, enables GitOps consistency
+**Impact:** High - Simplifies deployment, enables GitOps consistency, enables staging on generic ARM64
 **Reference:** See [21-Deployment-Dependencies.md](21-Deployment-Dependencies.md) for detailed analysis
 
 #### Overview
 
 The current deployment has a "spider web" of implicit dependencies that make it fragile and difficult to maintain. This priority focuses on untangling those dependencies and moving to a pure GitOps model.
+
+#### 1.5.0 Separate Raspberry Pi 5 Hardware from Generic ARM64 Deployment
+
+**GitHub Issue:** [#51](https://github.com/seadogger-tech/seadogger-homelab/issues/51)
+
+**Problem:** Raspberry Pi 5 specific configuration (firmware updates, kernel tuning, PCIe settings, PoE HAT) is mixed with generic ARM64 Kubernetes deployment, limiting portability and preventing staging on generic ARM64 VMs.
+
+**Solution:** Extract hardware-specific configuration into separate Ansible role with conditional execution.
+
+**Proposed Structure:**
+```yaml
+ansible/
+├── roles/
+│   ├── k3s-base/              # Generic ARM64 - runs everywhere
+│   ├── metallb/               # Generic
+│   ├── rook-ceph/             # Generic
+│   └── raspberry-pi-5/        # Hardware-specific - conditional
+│       ├── tasks/
+│       │   ├── firmware.yml
+│       │   ├── kernel-tuning.yml
+│       │   ├── pcie-nvme.yml
+│       │   └── poe-hat.yml
+│       └── defaults/main.yml
+```
+
+**Configuration:**
+```yaml
+# ansible/config.yml or group_vars
+deployment:
+  generic_arm64: true       # Always runs
+  raspberry_pi_5: false     # Only on physical hardware
+```
+
+**Benefits:**
+- ✅ **Enables staging on Multipass/Lima/QEMU ARM64 VMs** (addresses #47)
+- ✅ **Hardware portability** - Easy to adapt to Rock 5, Odroid, other SBCs
+- ✅ **Faster iteration** - Develop on VMs, deploy to Pi hardware
+- ✅ **Clear separation** - Know what's hardware-specific vs. generic
+- ✅ **Wider test coverage** - Can test deployments without physical Pi hardware
+
+**Implementation Steps:**
+1. Audit current Ansible tasks for Raspberry Pi 5 specific code
+2. Create `raspberry-pi-5` role with hardware-specific tasks
+3. Extract firmware updates (`rpi-update`, kernel modules)
+4. Extract PCIe/NVMe configuration
+5. Extract PoE HAT settings
+6. Add hardware detection and conditional execution
+7. Test on Multipass ARM64 VM (macOS Apple Silicon)
+8. Test on physical Raspberry Pi 5 hardware
+9. Update documentation with hardware requirements
+
+**Acceptance Criteria:**
+- ✅ Full homelab stack deploys successfully on Multipass ARM64 VM
+- ✅ Raspberry Pi 5 features deploy only when hardware detected
+- ✅ Clear documentation of what works on generic ARM64 vs. RPi5 only
+- ✅ Staging environment validated before production deployment
+
+**Timeline:** Week 2 (parallel with other dependency work)
 
 #### 1.5.1 Convert Prometheus Stack to Ingress (Remove LoadBalancer Dependencies)
 
