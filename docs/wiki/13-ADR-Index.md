@@ -207,6 +207,41 @@ Since this is a protocol-level incompatibility and not a configuration error on 
     -   Future workarounds might involve using a different file sharing protocol for macOS (like Samba) or waiting for future updates to either the macOS client or the NFS-Ganesha server that might resolve the version mismatch.
 
 ![accent-divider](images/accent-divider.svg)
+### ADR-009: Migrate from K8up to Velero for Kubernetes Backup/Restore
+
+- **Status:** Accepted
+- **Date:** 2025-10-04
+
+#### Context
+
+The homelab requires a reliable backup and restore solution for Kubernetes persistent volumes. Initial implementation using K8up v2.13.1 with Restic and AWS S3 encountered numerous production-blocking issues including namespace deletion edge cases, complex restore orchestration, multi-attach PVC errors, extensive RBAC requirements, and post-restore application failures (n8n "Command start not found"). Restore success rate was < 50% and required manual intervention.
+
+#### Decision
+
+Migrate to Velero, a mature CNCF sandbox project with 6+ years of development, comprehensive namespace backup capabilities, established ArgoCD integration patterns, and proven restore reliability. Velero will back up entire namespaces (not just PVCs), use AWS S3 plugin, and provide both CLI and declarative management.
+
+#### Consequences
+
+- **Positive:**
+  - Industry-standard solution with proven reliability
+  - Backs up all Kubernetes resources, not just PVCs
+  - Better GitOps integration with ArgoCD
+  - Strong community support and documentation
+  - Deterministic restore outcomes
+
+- **Negative:**
+  - Migration effort required (deployment, schedules, testing, documentation)
+  - Team learning curve for Velero CLI
+  - New S3 bucket required
+
+- **Implementation:**
+  - 5-phase rollout: Setup (Week 1), Testing (Week 1-2), Production schedules (Week 2), Documentation (Week 2-3), K8up cleanup (Week 3)
+  - Daily backups for n8n, nextcloud, jellyfin (7 day retention)
+  - Weekly full cluster backups (4 week retention)
+
+See `.memory_bank/k8up_failure_analysis.md` for detailed technical analysis of K8up failures.
+
+![accent-divider](images/accent-divider.svg)
 ### ADR-003: NFS Client Incompatibility (macOS)
 
 - **Status:** Implemented & Verified
