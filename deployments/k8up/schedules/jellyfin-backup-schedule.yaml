@@ -1,0 +1,53 @@
+---
+apiVersion: k8up.io/v1
+kind: Schedule
+metadata:
+  name: jellyfin-backup-schedule
+  namespace: jellyfin
+spec:
+  # Backend configuration for S3 Deep Archive
+  backend:
+    s3:
+      endpoint: https://s3.amazonaws.com
+      bucket: seadogger-homelab-backup
+      accessKeyIDSecretRef:
+        name: k8up-s3-credentials
+        key: AWS_ACCESS_KEY_ID
+      secretAccessKeySecretRef:
+        name: k8up-s3-credentials
+        key: AWS_SECRET_ACCESS_KEY
+    repoPasswordSecretRef:
+      name: k8up-s3-credentials
+      key: RESTIC_PASSWORD
+
+  # Weekly backup on Sundays at 4 AM (config/metadata only, not media)
+  backup:
+    # Run weekly on Sundays at 4:00 AM Pacific Time
+    schedule: "0 4 * * 0"
+    # Keep last successful backup job for debugging
+    keepJobs: 3
+    failedJobsHistoryLimit: 3
+    successfulJobsHistoryLimit: 3
+    # Backup all PVCs in the namespace
+    # Note: Jellyfin media is large and not critical - only config/metadata backed up
+    podSecurityContext:
+      runAsUser: 0
+      fsGroup: 0
+
+  # Monthly integrity check on 1st Sunday at 5 AM
+  check:
+    schedule: "0 5 1-7 * 0"
+    keepJobs: 3
+    promURL: http://prometheus-kube-prometheus-prometheus.monitoring.svc:9090
+
+  # Monthly prune to apply retention policy on 1st Sunday at 6 AM
+  prune:
+    schedule: "0 6 1-7 * 0"
+    keepJobs: 3
+    retention:
+      # Keep 4 weekly backups (1 month)
+      keepWeekly: 4
+      # Keep 12 monthly backups (1 year)
+      keepMonthly: 12
+      # Keep last 12 backups
+      keepLast: 12

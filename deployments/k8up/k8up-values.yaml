@@ -1,0 +1,81 @@
+# K8up Helm Values for ARM64 Raspberry Pi K3s Cluster
+# K8up is a Kubernetes backup operator based on Restic
+
+# Image configuration - ensure ARM64 compatible images
+image:
+  repository: ghcr.io/k8up-io/k8up
+  tag: v2.14.0
+  pullPolicy: IfNotPresent
+
+# Resource limits appropriate for ARM64 Raspberry Pi
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+# Enable Prometheus metrics
+metrics:
+  enabled: true
+  port: 8080
+
+  serviceMonitor:
+    enabled: true
+    # Scrape interval for Prometheus
+    interval: 30s
+    # Additional labels for ServiceMonitor
+    labels:
+      prometheus: kube-prometheus
+    # Namespace where Prometheus is running
+    namespace: monitoring
+
+# Restic resource limits for backup jobs
+restic:
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+    requests:
+      cpu: 200m
+      memory: 256Mi
+
+# Timezone for scheduled backups
+timezone: America/Los_Angeles
+
+# Operator settings
+operator:
+  # Number of operator replicas
+  replicas: 1
+
+  # Security context
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    fsGroup: 1000
+
+# Enable leader election for HA (single replica for Pi cluster)
+leaderElection:
+  enabled: true
+
+# Annotations for pods
+podAnnotations: {}
+
+# Node selector - ensure deployment on appropriate nodes
+nodeSelector: {}
+
+# Tolerations for Pi cluster
+tolerations: []
+
+# Affinity rules
+affinity: {}
+
+# ServiceAccount configuration
+serviceAccount:
+  create: true
+  name: k8up-operator
+
+# RBAC configuration
+rbac:
+  create: true

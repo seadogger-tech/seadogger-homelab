@@ -1,0 +1,15 @@
+{
+  "Rules": [
+    {
+      "Id": "MoveToDeepArchiveAfter1Day",
+      "Status": "Enabled",
+      "Filter": {},
+      "Transitions": [
+        {
+          "Days": 1,
+          "StorageClass": "DEEP_ARCHIVE"
+        }
+      ]
+    }
+  ]
+}

@@ -79,15 +79,57 @@ The new architecture was implemented by making the following changes to the `sea
 This comprehensive update ensures the entire storage infrastructure is now correctly defined in code, leading to a reliable and repeatable deployment process.
 
 ![accent-divider.svg](images/accent-divider.svg)
+## Backup Strategy
+
+The cluster implements automated backup of all critical PVCs to AWS S3 Deep Archive using K8up (Kubernetes backup operator based on Restic).
+
+### Backup Architecture
+
+- **Operator**: K8up v2.14.0 deployed via ArgoCD
+- **Backend**: Restic (encrypted, deduplicated backups)
+- **Storage**: AWS S3 bucket `seadogger-homelab-backup` (us-east-1)
+- **Storage Class**: S3 Deep Archive (objects transition after 1 day)
+- **Encryption**: AES-256 via Restic password
+- **Monitoring**: Prometheus metrics + Grafana dashboard
+
+### Backup Schedule
+
+| Application | PVCs Backed Up | Frequency | Time (PT) | Retention |
+|------------|----------------|-----------|-----------|-----------|
+| **Nextcloud** | nextcloud-nextcloud (CephFS EC) | Daily | 2:00 AM | 7 daily, 4 weekly, 6 monthly |
+| **N8N** | n8n-main-persistence (RBD) | Daily | 3:00 AM | 14 daily, 8 weekly, 6 monthly |
+| **Jellyfin** | jellyfin-config, jellyfin-cache (CephFS EC) | Weekly (Sunday) | 4:00 AM | 4 weekly, 12 monthly |
+
+**Notes**:
+- Jellyfin media library (read-only mount) is NOT backed up due to size (media is replaceable)
+- All backups include weekly integrity checks and automated pruning
+- Prometheus alerts trigger on backup failures
+
+### Cost Estimate
+
+- **Storage**: $0.00099/GB/month ($1/TB/month)
+- **Estimated 1TB backups**: ~$1/month
+- **Restore cost** (Bulk retrieval): ~$0.02/GB + 12-48 hour wait
+- **Restore cost** (Expedited): ~$0.10/GB + 1-5 minutes wait
+
+### Restore Procedures
+
+**IMPORTANT**: S3 Deep Archive has 12-48 hour retrieval time. Plan disaster recovery operations accordingly.
+
+For complete restore procedures, see:
+- **[[23-Disaster-Recovery-Restore]]** - Full restore procedures and emergency recovery
+
+![accent-divider.svg](images/accent-divider.svg)
 ## See Also
 
 - **[[03-Hardware-and-Network]]** - NVMe hardware setup for Rook-Ceph
 - **[[04-Bootstrap-and-Cold-Start]]** - Rook-Ceph deployment procedures
 - **[[02-Architecture]]** - C4 Storage Architecture diagram
 - **[[12-Troubleshooting]]** - Rook-Ceph troubleshooting
+- **[[23-Disaster-Recovery-Restore]]** - Backup restore procedures
 
 **Related Issues:**
-- [#24 - Disaster Recovery](https://github.com/seadogger-tech/seadogger-homelab/issues/24) - S3 backup strategy for Ceph data
+- [#24 - Disaster Recovery](https://github.com/seadogger-tech/seadogger-homelab/issues/24) - K8up S3 backup implementation (RESOLVED)
 - [#50 - Move infrastructure to ArgoCD](https://github.com/seadogger-tech/seadogger-homelab/issues/50) - Rook-Ceph GitOps migration
 
 ![accent-divider.svg](images/accent-divider.svg)

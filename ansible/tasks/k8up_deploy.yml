@@ -1,0 +1,159 @@
+---
+- name: Set KUBECONFIG global
+  ansible.builtin.set_fact:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+  tags: k8up
+
+- name: Create K8up namespace
+  kubernetes.core.k8s:
+    kubeconfig: "{{ KUBECONFIG }}"
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: k8up
+  tags: k8up
+
+- name: Create K8up ArgoCD Application
+  kubernetes.core.k8s:
+    kubeconfig: "{{ KUBECONFIG }}"
+    state: present
+    definition:
+      apiVersion: argoproj.io/v1alpha1
+      kind: Application
+      metadata:
+        name: k8up
+        namespace: argocd
+        annotations:
+          argocd.argoproj.io/sync-wave: "2"
+      spec:
+        project: default
+        source:
+          repoURL: https://k8up-io.github.io/k8up
+          chart: k8up
+          targetRevision: "4.12.0"
+          helm:
+            valueFiles:
+              - https://raw.githubusercontent.com/seadogger/seadogger-homelab/master/deployments/k8up/k8up-values.yaml
+        destination:
+          server: https://kubernetes.default.svc
+          namespace: k8up
+        syncPolicy:
+          automated:
+            prune: true
+            selfHeal: true
+          syncOptions:
+            - CreateNamespace=true
+  tags: k8up
+
+- name: Poll until K8up operator pods are ready
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ KUBECONFIG }}"
+    kind: Pod
+    namespace: k8up
+    label_selectors:
+      - "app.kubernetes.io/name=k8up"
+  register: k8up_pods
+  until: k8up_pods is defined and k8up_pods.resources is defined and (k8up_pods.resources | selectattr('status.phase', 'equalto', 'Running') | list | length) > 0
+  retries: 30
+  delay: 10
+  delegate_to: "{{ inventory_hostname }}"
+  tags: k8up
+
+# Create S3 credentials secret for Nextcloud backups
+- name: Create k8up-s3-credentials secret in nextcloud namespace
+  kubernetes.core.k8s:
+    kubeconfig: "{{ KUBECONFIG }}"
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: k8up-s3-credentials
+        namespace: nextcloud
+      type: Opaque
+      stringData:
+        AWS_ACCESS_KEY_ID: "{{ k8up_aws_access_key }}"
+        AWS_SECRET_ACCESS_KEY: "{{ k8up_aws_secret_key }}"
+        RESTIC_PASSWORD: "{{ k8up_restic_password }}"
+  tags: k8up
+
+# Create S3 credentials secret for N8N backups
+- name: Create k8up-s3-credentials secret in n8n namespace
+  kubernetes.core.k8s:
+    kubeconfig: "{{ KUBECONFIG }}"
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: k8up-s3-credentials
+        namespace: n8n
+      type: Opaque
+      stringData:
+        AWS_ACCESS_KEY_ID: "{{ k8up_aws_access_key }}"
+        AWS_SECRET_ACCESS_KEY: "{{ k8up_aws_secret_key }}"
+        RESTIC_PASSWORD: "{{ k8up_restic_password }}"
+  tags: k8up
+
+# Create S3 credentials secret for Jellyfin backups
+- name: Create k8up-s3-credentials secret in jellyfin namespace
+  kubernetes.core.k8s:
+    kubeconfig: "{{ KUBECONFIG }}"
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: k8up-s3-credentials
+        namespace: jellyfin
+      type: Opaque
+      stringData:
+        AWS_ACCESS_KEY_ID: "{{ k8up_aws_access_key }}"
+        AWS_SECRET_ACCESS_KEY: "{{ k8up_aws_secret_key }}"
+        RESTIC_PASSWORD: "{{ k8up_restic_password }}"
+  tags: k8up
+
+# Download and apply backup schedules from GitHub
+- name: Download Nextcloud backup schedule manifest from GitHub
+  ansible.builtin.get_url:
+    url: "https://raw.githubusercontent.com/seadogger/seadogger-homelab/master/deployments/k8up/schedules/nextcloud-backup-schedule.yaml"
+    dest: "/tmp/nextcloud-backup-schedule.yaml"
+    mode: "0644"
+  tags: k8up
+
+- name: Apply Nextcloud backup schedule
+  kubernetes.core.k8s:
+    kubeconfig: "{{ KUBECONFIG }}"
+    state: present
+    src: "/tmp/nextcloud-backup-schedule.yaml"
+  tags: k8up
+
+- name: Download N8N backup schedule manifest from GitHub
+  ansible.builtin.get_url:
+    url: "https://raw.githubusercontent.com/seadogger/seadogger-homelab/master/deployments/k8up/schedules/n8n-backup-schedule.yaml"
+    dest: "/tmp/n8n-backup-schedule.yaml"
+    mode: "0644"
+  tags: k8up
+
+- name: Apply N8N backup schedule
+  kubernetes.core.k8s:
+    kubeconfig: "{{ KUBECONFIG }}"
+    state: present
+    src: "/tmp/n8n-backup-schedule.yaml"
+  tags: k8up
+
+- name: Download Jellyfin backup schedule manifest from GitHub
+  ansible.builtin.get_url:
+    url: "https://raw.githubusercontent.com/seadogger/seadogger-homelab/master/deployments/k8up/schedules/jellyfin-backup-schedule.yaml"
+    dest: "/tmp/jellyfin-backup-schedule.yaml"
+    mode: "0644"
+  tags: k8up
+
+- name: Apply Jellyfin backup schedule
+  kubernetes.core.k8s:
+    kubeconfig: "{{ KUBECONFIG }}"
+    state: present
+    src: "/tmp/jellyfin-backup-schedule.yaml"
+  tags: k8up
