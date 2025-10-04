@@ -14,7 +14,7 @@ rules:
   verbs: ["get", "list", "create", "watch"]
 - apiGroups: ["apps"]
   resources: ["deployments", "deployments/scale"]
-  verbs: ["get", "patch"]
+  verbs: ["get", "list", "patch"]
 - apiGroups: ["argoproj.io"]
   resources: ["applications"]
   verbs: ["get", "patch"]
