@@ -249,8 +249,8 @@ def index():
 @app.route('/api/snapshots/<namespace>')
 def get_snapshots(namespace):
     try:
-        # Get S3 credentials from secret
-        secret = core_api.read_namespaced_secret("k8up-s3-credentials", namespace)
+        # Get S3 credentials from secret (in portal namespace, centralized)
+        secret = core_api.read_namespaced_secret("k8up-s3-credentials", "portal")
         aws_access_key = secret.data.get("AWS_ACCESS_KEY_ID", "")
         aws_secret_key = secret.data.get("AWS_SECRET_ACCESS_KEY", "")
         restic_password = secret.data.get("RESTIC_PASSWORD", "")
