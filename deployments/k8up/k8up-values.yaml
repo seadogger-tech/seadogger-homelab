@@ -2,12 +2,9 @@
 # K8up is a Kubernetes backup operator based on Restic
 
 # Image configuration - ensure ARM64 compatible images
-# Note: repository should NOT include registry, just path
-image:
-  registry: ghcr.io
-  repository: k8up-io/k8up
-  tag: v2.14.0
-  pullPolicy: IfNotPresent
+k8up:
+  image: ghcr.io/k8up-io/k8up:v2.14.0
+  imagePullPolicy: IfNotPresent
 
 # Resource limits appropriate for ARM64 Raspberry Pi
 resources:
