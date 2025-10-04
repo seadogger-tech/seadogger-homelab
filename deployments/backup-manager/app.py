@@ -275,16 +275,24 @@ def create_restore(namespace, snapshot_id):
         deployment_name = None
 
         try:
-            # Find deployments in the namespace
+            # Find the deployment that uses the PVC we're trying to restore
+            target_pvc = PVC_MAP.get(namespace)
+            if not target_pvc:
+                raise Exception(f"No PVC mapping found for namespace {namespace}")
+
             deployments = apps_api.list_namespaced_deployment(namespace=namespace)
-            if deployments.items:
-                # Use the first deployment found
-                deployment = deployments.items[0]
-                deployment_name = deployment.metadata.name
-                original_replicas = deployment.spec.replicas or 1
+            for dep in deployments.items:
+                # Check if this deployment uses the target PVC
+                for volume in dep.spec.template.spec.volumes or []:
+                    if volume.persistent_volume_claim and volume.persistent_volume_claim.claim_name == target_pvc:
+                        deployment_name = dep.metadata.name
+                        original_replicas = dep.spec.replicas or 1
+                        break
+                if deployment_name:
+                    break
 
             if not deployment_name:
-                raise Exception(f"No deployment found in namespace {namespace}")
+                raise Exception(f"No deployment found using PVC {target_pvc} in namespace {namespace}")
 
             # Pause ArgoCD auto-sync to prevent it from reverting our changes
             try:
