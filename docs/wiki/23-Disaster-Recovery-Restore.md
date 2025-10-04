@@ -69,6 +69,108 @@ kubectl get secret k8up-s3-credentials -n nextcloud -o jsonpath='{.data.AWS_ACCE
 kubectl get secret k8up-s3-credentials -n nextcloud -o jsonpath='{.data.AWS_SECRET_ACCESS_KEY}' | base64 -d
 ```
 
+## Quick Reference: Common Restore Scenarios
+
+### Scenario 1: "I Deleted Something in N8N - Restore from Latest Backup"
+
+**Goal**: Restore N8N to most recent backup
+**Time**: 1-2 minutes for N8N (115MB)
+
+```bash
+# Step 1: See available backups
+kubectl get snapshots -n n8n
+
+# Step 2: Stop N8N (prevents conflicts)
+kubectl scale deployment n8n -n n8n --replicas=0
+
+# Step 3: Restore from latest snapshot (use NAME from step 1)
+kubectl apply -f - <<EOF
+apiVersion: k8up.io/v1
+kind: Restore
+metadata:
+  name: n8n-restore-$(date +%Y%m%d-%H%M%S)
+  namespace: n8n
+spec:
+  snapshot: "87583cda"
+  backend:
+    repoPasswordSecretRef: {name: k8up-s3-credentials, key: RESTIC_PASSWORD}
+    s3:
+      endpoint: https://s3.amazonaws.com
+      bucket: seadogger-homelab-backup
+      accessKeyIDSecretRef: {name: k8up-s3-credentials, key: AWS_ACCESS_KEY_ID}
+      secretAccessKeySecretRef: {name: k8up-s3-credentials, key: AWS_SECRET_ACCESS_KEY}
+  restoreMethod:
+    folder:
+      claimName: n8n-main-persistence
+  podSecurityContext: {runAsUser: 0, fsGroup: 0}
+EOF
+
+# Step 4: Watch restore progress
+kubectl get restore -n n8n -w
+
+# Step 5: Restart N8N when restore shows "Succeeded"
+kubectl scale deployment n8n -n n8n --replicas=1
+```
+
+### Scenario 2: "Test Restore Without Overwriting Production"
+
+**Goal**: Verify backup integrity without touching live data
+
+```bash
+# Create temporary test PVC
+kubectl apply -f - <<EOF
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata: {name: n8n-restore-test, namespace: n8n}
+spec:
+  accessModes: [ReadWriteOnce]
+  resources: {requests: {storage: 1Gi}}
+  storageClassName: ceph-block-data
+EOF
+
+# Restore to test PVC (not production!)
+kubectl apply -f - <<EOF
+apiVersion: k8up.io/v1
+kind: Restore
+metadata: {name: n8n-restore-test, namespace: n8n}
+spec:
+  snapshot: "87583cda"
+  backend:
+    repoPasswordSecretRef: {name: k8up-s3-credentials, key: RESTIC_PASSWORD}
+    s3:
+      endpoint: https://s3.amazonaws.com
+      bucket: seadogger-homelab-backup
+      accessKeyIDSecretRef: {name: k8up-s3-credentials, key: AWS_ACCESS_KEY_ID}
+      secretAccessKeySecretRef: {name: k8up-s3-credentials, key: AWS_SECRET_ACCESS_KEY}
+  restoreMethod:
+    folder: {claimName: n8n-restore-test}
+  podSecurityContext: {runAsUser: 0, fsGroup: 0}
+EOF
+
+# Browse restored files in temporary pod
+kubectl run -it verify --rm --image=busybox -n n8n --restart=Never -- sh -c "ls -lah /data" \
+  --overrides='{"spec":{"containers":[{"name":"verify","image":"busybox","command":["sh"],"volumeMounts":[{"name":"data","mountPath":"/data"}]}],"volumes":[{"name":"data","persistentVolumeClaim":{"claimName":"n8n-restore-test"}}]}}'
+
+# Cleanup when done
+kubectl delete pvc n8n-restore-test -n n8n
+```
+
+### Scenario 3: "Which Snapshots Are Available?"
+
+**Goal**: List all backups with dates to choose specific restore point
+
+```bash
+# List all snapshots for a namespace
+kubectl get snapshots -n nextcloud
+kubectl get snapshots -n n8n
+kubectl get snapshots -n jellyfin
+
+# Get detailed snapshot info
+kubectl get snapshots -n nextcloud -o custom-columns=NAME:.metadata.name,DATE:.spec.date,SIZE:.status.size
+```
+
+Output shows which snapshot to use in `spec.snapshot` field.
+
 ## Restore Procedures
 
 ### Method 1: Restore Entire PVC (Full Restore)
