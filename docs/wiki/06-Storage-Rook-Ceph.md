@@ -105,6 +105,46 @@ The cluster implements automated backup of all critical PVCs to AWS S3 Deep Arch
 - All backups include weekly integrity checks and automated pruning
 - Prometheus alerts trigger on backup failures
 
+### S3 Bucket Structure
+
+All namespaces share a single S3 bucket (`seadogger-homelab-backup`) because Restic deduplicates data automatically. The bucket uses Restic's encrypted repository format:
+
+```
+seadogger-homelab-backup/
+├── config              # Repository configuration (encrypted)
+├── keys/               # Encryption keys
+├── data/               # Backup data chunks (encrypted, deduplicated)
+├── index/              # Index files for fast searches (encrypted)
+└── snapshots/          # Snapshot metadata (encrypted)
+```
+
+**All data is encrypted** with the Restic password before upload. Even identical files across namespaces are stored only once (deduplication).
+
+### Viewing Backups by Namespace
+
+**Method 1 - Kubernetes Snapshots** (easiest):
+```bash
+kubectl get snapshots -A
+```
+
+**Method 2 - Restic CLI** (most detailed):
+```bash
+# Install on Mac
+brew install restic
+
+# Set credentials from config.yml
+export AWS_ACCESS_KEY_ID="<k8up_aws_access_key>"
+export AWS_SECRET_ACCESS_KEY="<k8up_aws_secret_key>"
+export RESTIC_PASSWORD="<k8up_restic_password>"
+export RESTIC_REPOSITORY="s3:https://s3.amazonaws.com/seadogger-homelab-backup"
+
+# View snapshots (Host column = namespace)
+restic snapshots
+
+# Browse files in snapshot
+restic ls <snapshot-id>
+```
+
 ### Cost Estimate
 
 - **Storage**: $0.00099/GB/month ($1/TB/month)
