@@ -4,10 +4,6 @@ service:
   port: 5678
   name: http
 
-scaling:
-  enabled: true
-  replicas: 0
-
 main:
   persistence:
     enabled: true
