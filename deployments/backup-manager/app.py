@@ -8,6 +8,8 @@ from kubernetes import client, config
 from datetime import datetime
 import os
 import time
+import subprocess
+import json
 
 app = Flask(__name__)
 
@@ -247,19 +249,46 @@ def index():
 @app.route('/api/snapshots/<namespace>')
 def get_snapshots(namespace):
     try:
-        snapshots = custom_api.list_namespaced_custom_object(
-            group="k8up.io",
-            version="v1",
-            namespace=namespace,
-            plural="snapshots"
+        # Get S3 credentials from secret
+        secret = core_api.read_namespaced_secret("k8up-s3-credentials", namespace)
+        aws_access_key = secret.data.get("AWS_ACCESS_KEY_ID", "")
+        aws_secret_key = secret.data.get("AWS_SECRET_ACCESS_KEY", "")
+        restic_password = secret.data.get("RESTIC_PASSWORD", "")
+
+        # Decode base64
+        import base64
+        aws_access_key = base64.b64decode(aws_access_key).decode('utf-8')
+        aws_secret_key = base64.b64decode(aws_secret_key).decode('utf-8')
+        restic_password = base64.b64decode(restic_password).decode('utf-8')
+
+        # Query S3 directly using restic
+        env = os.environ.copy()
+        env.update({
+            "RESTIC_REPOSITORY": f"s3:s3.amazonaws.com/seadogger-homelab-backup/{namespace}",
+            "AWS_ACCESS_KEY_ID": aws_access_key,
+            "AWS_SECRET_ACCESS_KEY": aws_secret_key,
+            "RESTIC_PASSWORD": restic_password
+        })
+
+        result_cmd = subprocess.run(
+            ["restic", "snapshots", "--json"],
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=30
         )
 
+        if result_cmd.returncode != 0:
+            return jsonify({"error": f"Restic error: {result_cmd.stderr}"}), 500
+
+        snapshots = json.loads(result_cmd.stdout) if result_cmd.stdout else []
+
         result = []
-        for snap in snapshots.get("items", []):
+        for snap in snapshots:
             result.append({
-                "id": snap["metadata"]["name"],
-                "date": snap["spec"].get("date", "Unknown"),
-                "paths": snap["spec"].get("paths", []),
+                "id": snap.get("short_id", snap.get("id", ""))[:8],
+                "date": snap.get("time", "Unknown"),
+                "paths": snap.get("paths", []),
             })
 
         result.sort(key=lambda x: x["date"], reverse=True)
