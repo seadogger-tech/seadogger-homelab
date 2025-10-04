@@ -1,0 +1,80 @@
+---
+- name: Set KUBECONFIG global
+  ansible.builtin.set_fact:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+
+- name: Create Portal ArgoCD Application
+  kubernetes.core.k8s:
+    kubeconfig: "{{ KUBECONFIG }}"
+    state: present
+    definition:
+      apiVersion: argoproj.io/v1alpha1
+      kind: Application
+      metadata:
+        name: portal
+        namespace: argocd
+      spec:
+        project: default
+        source:
+          repoURL: https://github.com/seadogger/seadogger-homelab.git
+          targetRevision: master
+          path: deployments/portal
+        destination:
+          server: https://kubernetes.default.svc
+          namespace: portal
+        syncPolicy:
+          automated:
+            prune: true
+            selfHeal: true
+          syncOptions:
+            - CreateNamespace=true
+
+- name: Wait for Portal pods to be ready
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ KUBECONFIG }}"
+    kind: Pod
+    namespace: portal
+  register: portal_pods
+  retries: 30
+  delay: 10
+  until: portal_pods is defined and 'resources' in portal_pods and (portal_pods.resources | selectattr('status.phase', 'equalto', 'Running') | list | length > 0)
+
+- name: Download Portal IngressRoutes manifest from GitHub
+  ansible.builtin.get_url:
+    url: "https://raw.githubusercontent.com/seadogger/seadogger-homelab/master/ingress/traefik-portal-ingress.yml"
+    dest: "/tmp/traefik-portal-ingress.yml"
+    mode: "0644"
+
+- name: Apply Portal IngressRoutes
+  kubernetes.core.k8s:
+    kubeconfig: "{{ KUBECONFIG }}"
+    state: present
+    src: "/tmp/traefik-portal-ingress.yml"
+
+- name: Create Portal Certificate
+  kubernetes.core.k8s:
+    kubeconfig: "{{ KUBECONFIG }}"
+    state: present
+    definition:
+      apiVersion: cert-manager.io/v1
+      kind: Certificate
+      metadata:
+        name: portal-certificate
+        namespace: portal
+      spec:
+        dnsNames:
+          - portal.seadogger-homelab
+        duration: 2160h
+        isCA: false
+        issuerRef:
+          kind: ClusterIssuer
+          name: internal-local-issuer
+        privateKey:
+          algorithm: RSA
+          encoding: PKCS1
+          size: 2048
+        renewBefore: 360h
+        secretName: portal-local-tls
+        subject:
+          organizations:
+            - SeaDogger Homelab

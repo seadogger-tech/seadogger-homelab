@@ -1,0 +1,181 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: portal-html
+  namespace: portal
+data:
+  index.html: |
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8" />
+      <meta name="viewport" content="width=device-width, initial-scale=1" />
+      <title>SeaDogger Homelab — Portal</title>
+      <meta name="description" content="One-page portal for SeaDogger Homelab dashboards." />
+      <style>
+        :root {
+          --bg: #0b2533;
+          --bg-2: #0e2e40;
+          --card: rgba(255, 255, 255, 0.06);
+          --card-hover: rgba(255, 255, 255, 0.12);
+          --text: #3A83B9;
+          --muted: #8fbcd4;
+          --accent: #38bdf8;
+          --ring: #7dd3fc;
+          --success: #22c55e;
+          --shadow: 0 10px 30px rgba(0,0,0,0.35);
+          --radius: 18px;
+        }
+        * { box-sizing: border-box; }
+        html, body { height: 100%; }
+        body {
+          margin: 0;
+          font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+          color: var(--text);
+          background: radial-gradient(1200px 800px at 10% -10%, #153b52 0%, transparent 60%),
+                      radial-gradient(900px 700px at 100% 0%, #0f3649 0%, transparent 55%),
+                      linear-gradient(180deg, var(--bg), var(--bg-2));
+          background-attachment: fixed;
+        }
+        .wrap { max-width: 1200px; margin: 0 auto; padding: 14px 18px 56px; }
+        header.hero {
+          position: relative;
+          border-radius: 28px;
+          overflow: hidden;
+          box-shadow: var(--shadow);
+          margin: 12px 0 24px;
+          background: #0f2b3b;
+        }
+        .hero img { display: block; width: 100%; height: auto; }
+        .hero .overlay { position: absolute; inset: 0; pointer-events: none; background: linear-gradient(180deg, rgba(5,16,24,0.1) 0%, rgba(5,16,24,0.35) 60%, rgba(5,16,24,0.6) 100%); }
+
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 18px; margin-top: 10px; }
+        a.app-card {
+          position: relative; display: flex; align-items: center; gap: 14px;
+          padding: 16px 18px; text-decoration: none; color: var(--text);
+          background: linear-gradient(145deg, rgba(255,255,255,0.06), rgba(255,255,255,0.03));
+          border: 1px solid rgba(255,255,255,0.09); border-radius: var(--radius);
+          backdrop-filter: blur(6px); box-shadow: var(--shadow);
+          transition: transform .18s ease, background .18s ease, border-color .18s ease; isolation: isolate;
+        }
+        a.app-card:hover { transform: translateY(-2px); background: var(--card-hover); border-color: rgba(255,255,255,0.18); }
+        a.app-card:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--ring); }
+
+        .logo { width: 46px; height: 46px; border-radius: 12px; flex: 0 0 auto; background: rgba(255,255,255,0.1); display: grid; place-items: center; overflow: hidden; border: 1px solid rgba(255,255,255,0.12); }
+        .logo img { width: 84%; height: 84%; object-fit: contain; display: block; filter: drop-shadow(0 2px 1px rgba(0,0,0,0.35)); }
+
+        .meta { display: grid; gap: 2px; min-width: 0; }
+        .name { font-weight: 800; letter-spacing: .2px; font-size: 1.06rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text); }
+
+        footer { margin-top: 28px; color: var(--muted); text-align: center; font-size: 0.9rem; }
+
+        @media (prefers-reduced-motion: reduce) { a.app-card { transition: none; } a.app-card:hover { transform: none; } }
+      </style>
+    </head>
+    <body>
+      <div class="wrap">
+        <header class="hero" aria-label="SeaDogger Homelab banner">
+          <img src="https://raw.githubusercontent.com/seadogger-tech/seadogger-homelab/refs/heads/master/assets/branding/wiki-banner-with-logo-pro.svg" alt="SeaDogger Homelab — Keep Your Data to Yourself" />
+          <div class="overlay"></div>
+        </header>
+
+        <main class="grid" id="appGrid" aria-label="Application shortcuts"></main>
+
+        <footer>
+          © <span id="year"></span> SeaDogger Homelab · Keep Your Data to Yourself
+        </footer>
+      </div>
+
+      <script>
+        const APPS = [
+          { name: "JellyFin", url: "https://jellyfin.seadogger-homelab/web", logo: "https://raw.githubusercontent.com/seadogger-tech/seadogger-homelab/refs/heads/master/assets/logos/jellyfin.svg" },
+          { name: "Nextcloud", url: "https://nextcloud.seadogger-homelab/login", logo: "https://raw.githubusercontent.com/seadogger-tech/seadogger-homelab/refs/heads/master/assets/logos/nextcloud.svg" },
+          { name: "n8n", url: "https://n8n.seadogger-homelab/signin", logo: "https://raw.githubusercontent.com/seadogger-tech/seadogger-homelab/refs/heads/master/assets/logos/n8n.svg" },
+          { name: "OpenWebUI", url: "https://openwebui.seadogger-homelab/auth", logo: "https://raw.githubusercontent.com/seadogger-tech/seadogger-homelab/refs/heads/master/assets/logos/openwebui.svg" },
+          { name: "Pi‑hole", url: "https://pihole.seadogger-homelab/admin/login", logo: "https://raw.githubusercontent.com/seadogger-tech/seadogger-homelab/refs/heads/master/assets/logos/pi-hole.svg" },
+          { name: "Ceph Dashboard", url: "https://ceph.seadogger-homelab/#/login", logo: "https://raw.githubusercontent.com/seadogger-tech/seadogger-homelab/refs/heads/master/assets/logos/ceph.svg" },
+          { name: "Argo CD", url: "https://argocd.seadogger-homelab/login", logo: "https://raw.githubusercontent.com/seadogger-tech/seadogger-homelab/refs/heads/master/assets/logos/argocd.svg" },
+          { name: "Bedrock API", url: "http://192.168.1.242:6880/docs", logo: "https://raw.githubusercontent.com/seadogger-tech/seadogger-homelab/refs/heads/master/assets/logos/bedrock-color.svg" },
+          { name: "Prometheus", url: "http://192.168.1.244:9090", logo: "https://raw.githubusercontent.com/seadogger-tech/seadogger-homelab/refs/heads/master/assets/logos/prometheus.svg" },
+          { name: "Grafana", url: "http://192.168.1.245:3000", logo: "https://raw.githubusercontent.com/seadogger-tech/seadogger-homelab/refs/heads/master/assets/logos/grafana.svg" },
+          { name: "Alertmanager", url: "http://192.168.1.246:9093", logo: "https://raw.githubusercontent.com/seadogger-tech/seadogger-homelab/refs/heads/master/assets/logos/alertmanager.svg" },
+          { name: "Ubiquiti DM", url: "http://192.168.1.1", logo: "https://raw.githubusercontent.com/seadogger-tech/seadogger-homelab/refs/heads/master/assets/logos/ubiquiti.svg" }
+        ];
+
+        const grid = document.getElementById('appGrid');
+        const frag = document.createDocumentFragment();
+
+        APPS.forEach(({name, url, logo}) => {
+          const a = document.createElement('a');
+          a.className = 'app-card';
+          a.href = url; a.target = '_blank'; a.rel = 'noopener noreferrer';
+          a.setAttribute('aria-label', `${name} — opens in a new tab`);
+
+          const logoWrap = document.createElement('div');
+          logoWrap.className = 'logo';
+
+          const img = document.createElement('img');
+          img.alt = `${name} logo`;
+          img.referrerPolicy = 'no-referrer';
+          img.src = logo;
+          img.onerror = () => { img.remove(); logoWrap.textContent = name[0]; logoWrap.style.fontWeight = '800'; logoWrap.style.fontSize = '1.1rem'; };
+
+          const meta = document.createElement('div'); meta.className = 'meta';
+          const title = document.createElement('div'); title.className = 'name'; title.textContent = name;
+
+          logoWrap.appendChild(img);
+          meta.appendChild(title);
+          a.appendChild(logoWrap); a.appendChild(meta);
+          frag.appendChild(a);
+        });
+
+        grid.appendChild(frag);
+        document.getElementById('year').textContent = new Date().getFullYear();
+      </script>
+    </body>
+    </html>
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: portal
+  namespace: portal
+  labels:
+    app: portal
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: portal
+  template:
+    metadata:
+      labels:
+        app: portal
+    spec:
+      containers:
+      - name: caddy
+        image: caddy:2-alpine
+        ports:
+        - containerPort: 80
+        volumeMounts:
+        - name: html
+          mountPath: /usr/share/caddy
+      volumes:
+      - name: html
+        configMap:
+          name: portal-html
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: portal
+  namespace: portal
+spec:
+  selector:
+    app: portal
+  ports:
+  - port: 80
+    targetPort: 80
