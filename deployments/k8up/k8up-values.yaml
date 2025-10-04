@@ -1,7 +1,12 @@
 # K8up Helm Values for ARM64 Raspberry Pi K3s Cluster
 # K8up is a Kubernetes backup operator based on Restic
 
-# Using default image from Helm chart (ARM64 compatible)
+# Image configuration (ARM64 compatible)
+image:
+  registry: ghcr.io
+  repository: k8up-io/k8up
+  tag: v2.13.1
+  pullPolicy: IfNotPresent
 
 # Resource limits appropriate for ARM64 Raspberry Pi
 resources:
