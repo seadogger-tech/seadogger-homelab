@@ -4,9 +4,8 @@ service:
   port: 5678
   name: http
 
-replicaCount: 0
-
 main:
+  replicaCount: 0
   persistence:
     enabled: true
     storageClass: ceph-block-data
