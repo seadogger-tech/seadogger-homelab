@@ -261,10 +261,10 @@ def get_snapshots(namespace):
         aws_secret_key = base64.b64decode(aws_secret_key).decode('utf-8')
         restic_password = base64.b64decode(restic_password).decode('utf-8')
 
-        # Query S3 directly using restic
+        # Query S3 directly using restic (all namespaces share one repository)
         env = os.environ.copy()
         env.update({
-            "RESTIC_REPOSITORY": f"s3:s3.amazonaws.com/seadogger-homelab-backup/{namespace}",
+            "RESTIC_REPOSITORY": "s3:s3.amazonaws.com/seadogger-homelab-backup",
             "AWS_ACCESS_KEY_ID": aws_access_key,
             "AWS_SECRET_ACCESS_KEY": aws_secret_key,
             "RESTIC_PASSWORD": restic_password
@@ -283,13 +283,18 @@ def get_snapshots(namespace):
 
         snapshots = json.loads(result_cmd.stdout) if result_cmd.stdout else []
 
+        # Filter snapshots by namespace's PVC
+        target_pvc = PVC_MAP.get(namespace)
         result = []
         for snap in snapshots:
-            result.append({
-                "id": snap.get("short_id", snap.get("id", ""))[:8],
-                "date": snap.get("time", "Unknown"),
-                "paths": snap.get("paths", []),
-            })
+            # Check if this snapshot contains the target PVC path
+            paths = snap.get("paths", [])
+            if any(target_pvc in path for path in paths):
+                result.append({
+                    "id": snap.get("short_id", snap.get("id", ""))[:8],
+                    "date": snap.get("time", "Unknown"),
+                    "paths": snap.get("paths", []),
+                })
 
         result.sort(key=lambda x: x["date"], reverse=True)
         return jsonify(result)
