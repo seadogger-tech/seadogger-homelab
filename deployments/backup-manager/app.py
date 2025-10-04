@@ -7,6 +7,7 @@ from flask import Flask, render_template_string, request, jsonify
 from kubernetes import client, config
 from datetime import datetime
 import os
+import time
 
 app = Flask(__name__)
 
@@ -27,6 +28,9 @@ PVC_MAP = {
     "nextcloud": "nextcloud-nextcloud",
     "jellyfin": "jellyfin-config"
 }
+
+# Store original replica counts during restore
+REPLICA_COUNT_STORE = {}
 
 HTML_TEMPLATE = '''
 <!DOCTYPE html>
@@ -146,40 +150,48 @@ HTML_TEMPLATE = '''
         }
 
         async function restore(namespace, snapshotId) {
-            if (!confirm(`Are you sure you want to restore ${namespace} from snapshot ${snapshotId}?\n\nThis will:\n1. Stop ${namespace}\n2. Overwrite current data\n3. Restart ${namespace}\n\nThis cannot be undone!`)) {
+            if (!confirm(`Are you sure you want to restore ${namespace} from snapshot ${snapshotId}?\n\nThis will:\n1. Pause ArgoCD auto-sync\n2. Stop ${namespace}\n3. Overwrite current data\n4. Restart ${namespace}\n5. Re-enable ArgoCD auto-sync\n\nThis cannot be undone!`)) {
                 return;
             }
 
             const statusDiv = document.getElementById(`${namespace}-status`);
-            statusDiv.innerHTML = '<div class="alert">⏳ Restore in progress... Please wait.</div>';
+            statusDiv.innerHTML = '<div class="alert">⏳ Step 1/5: Pausing ArgoCD auto-sync...</div>';
 
-            try {
-                const response = await fetch(`/api/restore/${namespace}/${snapshotId}`, { method: 'POST' });
-                const result = await response.json();
-
-                if (response.ok) {
-                    statusDiv.innerHTML = `<div class="alert" style="background: rgba(34, 197, 94, 0.1); color: #22c55e; border-color: #22c55e;">
-                        ✅ Restore job created: ${result.restore_name}<br>
-                        Check status: <code>kubectl get restore ${result.restore_name} -n ${namespace}</code>
-                    </div>`;
-
-                    // Poll for status
-                    pollRestoreStatus(namespace, result.restore_name);
-                } else {
+            // Start the restore (this will take a while)
+            fetch(`/api/restore/${namespace}/${snapshotId}`, { method: 'POST' })
+                .then(response => response.json())
+                .then(result => {
+                    if (result.restore_name) {
+                        // Poll for status
+                        pollRestoreStatus(namespace, result.restore_name);
+                    } else {
+                        statusDiv.innerHTML = `<div class="alert" style="background: rgba(239, 68, 68, 0.1); color: #ef4444; border-color: #ef4444;">
+                            ❌ Restore failed: ${result.detail || 'Unknown error'}
+                        </div>`;
+                    }
+                })
+                .catch(error => {
                     statusDiv.innerHTML = `<div class="alert" style="background: rgba(239, 68, 68, 0.1); color: #ef4444; border-color: #ef4444;">
-                        ❌ Restore failed: ${result.detail}
+                        ❌ Error: ${error.message}
                     </div>`;
-                }
-            } catch (error) {
-                statusDiv.innerHTML = `<div class="alert" style="background: rgba(239, 68, 68, 0.1); color: #ef4444; border-color: #ef4444;">
-                    ❌ Error: ${error.message}
-                </div>`;
-            }
+                });
+
+            // Start showing progress immediately
+            setTimeout(() => {
+                statusDiv.innerHTML = '<div class="alert">⏳ Step 2/5: Scaling down deployment and waiting for pods to terminate...</div>';
+            }, 2000);
+
+            setTimeout(() => {
+                statusDiv.innerHTML = '<div class="alert">⏳ Step 3/5: Creating restore job...</div>';
+            }, 10000);
         }
 
         async function pollRestoreStatus(namespace, restoreName) {
             const maxAttempts = 60; // 5 minutes
             let attempts = 0;
+            const statusDiv = document.getElementById(`${namespace}-status`);
+
+            statusDiv.innerHTML = '<div class="alert">⏳ Step 4/5: Restoring data from S3 backup...</div>';
 
             const interval = setInterval(async () => {
                 attempts++;
@@ -187,15 +199,21 @@ HTML_TEMPLATE = '''
                     const response = await fetch(`/api/restore/${namespace}/${restoreName}/status`);
                     const status = await response.json();
 
+                    if (status.started && !status.finished) {
+                        statusDiv.innerHTML = '<div class="alert">⏳ Step 4/5: Restoring data from S3 backup... (in progress)</div>';
+                    }
+
                     if (status.finished) {
                         clearInterval(interval);
                         const succeeded = status.conditions?.some(c => c.type === 'Completed' && c.status === 'True');
-                        const statusDiv = document.getElementById(`${namespace}-status`);
 
                         if (succeeded) {
-                            statusDiv.innerHTML = `<div class="alert" style="background: rgba(34, 197, 94, 0.1); color: #22c55e; border-color: #22c55e;">
-                                ✅ Restore completed successfully! ${namespace} has been restarted with restored data.
-                            </div>`;
+                            statusDiv.innerHTML = '<div class="alert">⏳ Step 5/5: Restarting application and re-enabling ArgoCD...</div>';
+                            setTimeout(() => {
+                                statusDiv.innerHTML = `<div class="alert" style="background: rgba(34, 197, 94, 0.1); color: #22c55e; border-color: #22c55e;">
+                                    ✅ Restore completed successfully! ${namespace} has been restarted with restored data.
+                                </div>`;
+                            }, 3000);
                         } else {
                             statusDiv.innerHTML = `<div class="alert" style="background: rgba(239, 68, 68, 0.1); color: #ef4444; border-color: #ef4444;">
                                 ❌ Restore failed. Check logs: <code>kubectl logs -n ${namespace} -l k8up.io/owned-by=restore_${restoreName}</code>
@@ -205,6 +223,9 @@ HTML_TEMPLATE = '''
 
                     if (attempts >= maxAttempts) {
                         clearInterval(interval);
+                        statusDiv.innerHTML = `<div class="alert" style="background: rgba(239, 68, 68, 0.1); color: #ef4444; border-color: #ef4444;">
+                            ⚠️ Restore status check timed out. Check manually: <code>kubectl get restore ${restoreName} -n ${namespace}</code>
+                        </div>`;
                     }
                 } catch (error) {
                     console.error('Status poll error:', error);
@@ -249,18 +270,70 @@ def get_snapshots(namespace):
 @app.route('/api/restore/<namespace>/<snapshot_id>', methods=['POST'])
 def create_restore(namespace, snapshot_id):
     try:
-        # Stop the application first
+        # Get current replica count before scaling down
+        original_replicas = 1  # Default fallback
         try:
+            deployment = apps_api.read_namespaced_deployment(name=namespace, namespace=namespace)
+            original_replicas = deployment.spec.replicas or 1
+
+            # Pause ArgoCD auto-sync to prevent it from reverting our changes
+            try:
+                custom_api.patch_namespaced_custom_object(
+                    group="argoproj.io",
+                    version="v1alpha1",
+                    namespace="argocd",
+                    plural="applications",
+                    name=namespace,
+                    body={"spec": {"syncPolicy": {"automated": None}}}
+                )
+            except:
+                pass  # ArgoCD app might not exist
+
+            # Scale deployment to 0
             apps_api.patch_namespaced_deployment_scale(
                 name=namespace,
                 namespace=namespace,
                 body={"spec": {"replicas": 0}}
             )
-        except:
-            pass  # Deployment might not exist or already scaled to 0
+
+            # Wait for pods to terminate (max 60 seconds)
+            max_wait = 60
+            wait_interval = 2
+            elapsed = 0
+
+            while elapsed < max_wait:
+                pods = core_api.list_namespaced_pod(
+                    namespace=namespace,
+                    label_selector=f"app.kubernetes.io/name={namespace}"
+                )
+
+                # Check if all pods are gone
+                if len(pods.items) == 0:
+                    break
+
+                # Check if all remaining pods are terminating
+                all_terminating = all(pod.metadata.deletion_timestamp is not None for pod in pods.items)
+                if all_terminating:
+                    time.sleep(wait_interval)
+                    elapsed += wait_interval
+                else:
+                    # Some pods still running
+                    time.sleep(wait_interval)
+                    elapsed += wait_interval
+
+            # Additional 2 second buffer to ensure PVC detachment
+            time.sleep(2)
+
+        except client.exceptions.ApiException as e:
+            if e.status != 404:
+                raise
+            # Deployment doesn't exist, proceed anyway
 
         timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
         restore_name = f"{namespace}-restore-{timestamp}"
+
+        # Store original replica count for this restore
+        REPLICA_COUNT_STORE[restore_name] = original_replicas
 
         restore_spec = {
             "apiVersion": "k8up.io/v1",
@@ -311,11 +384,31 @@ def get_restore_status(namespace, restore_name):
         if status.get("finished") and any(c.get("type") == "Completed" and c.get("status") == "True"
                                           for c in status.get("conditions", [])):
             try:
+                # Restore to original replica count, not hardcoded to 1
+                original_replicas = REPLICA_COUNT_STORE.get(restore_name, 1)
+
                 apps_api.patch_namespaced_deployment_scale(
                     name=namespace,
                     namespace=namespace,
-                    body={"spec": {"replicas": 1}}
+                    body={"spec": {"replicas": original_replicas}}
                 )
+
+                # Re-enable ArgoCD auto-sync
+                try:
+                    custom_api.patch_namespaced_custom_object(
+                        group="argoproj.io",
+                        version="v1alpha1",
+                        namespace="argocd",
+                        plural="applications",
+                        name=namespace,
+                        body={"spec": {"syncPolicy": {"automated": {"prune": True, "selfHeal": True}}}}
+                    )
+                except:
+                    pass
+
+                # Clean up the stored replica count
+                if restore_name in REPLICA_COUNT_STORE:
+                    del REPLICA_COUNT_STORE[restore_name]
             except:
                 pass
 
