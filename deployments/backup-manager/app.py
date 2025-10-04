@@ -272,9 +272,19 @@ def create_restore(namespace, snapshot_id):
     try:
         # Get current replica count before scaling down
         original_replicas = 1  # Default fallback
+        deployment_name = None
+
         try:
-            deployment = apps_api.read_namespaced_deployment(name=namespace, namespace=namespace)
-            original_replicas = deployment.spec.replicas or 1
+            # Find deployments in the namespace
+            deployments = apps_api.list_namespaced_deployment(namespace=namespace)
+            if deployments.items:
+                # Use the first deployment found
+                deployment = deployments.items[0]
+                deployment_name = deployment.metadata.name
+                original_replicas = deployment.spec.replicas or 1
+
+            if not deployment_name:
+                raise Exception(f"No deployment found in namespace {namespace}")
 
             # Pause ArgoCD auto-sync to prevent it from reverting our changes
             try:
@@ -291,7 +301,7 @@ def create_restore(namespace, snapshot_id):
 
             # Scale deployment to 0
             apps_api.patch_namespaced_deployment_scale(
-                name=namespace,
+                name=deployment_name,
                 namespace=namespace,
                 body={"spec": {"replicas": 0}}
             )
@@ -332,8 +342,11 @@ def create_restore(namespace, snapshot_id):
         timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
         restore_name = f"{namespace}-restore-{timestamp}"
 
-        # Store original replica count for this restore
-        REPLICA_COUNT_STORE[restore_name] = original_replicas
+        # Store original replica count and deployment name for this restore
+        REPLICA_COUNT_STORE[restore_name] = {
+            "deployment_name": deployment_name,
+            "replicas": original_replicas
+        }
 
         restore_spec = {
             "apiVersion": "k8up.io/v1",
@@ -384,11 +397,13 @@ def get_restore_status(namespace, restore_name):
         if status.get("finished") and any(c.get("type") == "Completed" and c.get("status") == "True"
                                           for c in status.get("conditions", [])):
             try:
-                # Restore to original replica count, not hardcoded to 1
-                original_replicas = REPLICA_COUNT_STORE.get(restore_name, 1)
+                # Restore to original replica count and deployment name
+                restore_info = REPLICA_COUNT_STORE.get(restore_name, {"deployment_name": namespace, "replicas": 1})
+                deployment_name = restore_info.get("deployment_name", namespace)
+                original_replicas = restore_info.get("replicas", 1)
 
                 apps_api.patch_namespaced_deployment_scale(
-                    name=namespace,
+                    name=deployment_name,
                     namespace=namespace,
                     body={"spec": {"replicas": original_replicas}}
                 )
