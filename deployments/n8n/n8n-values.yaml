@@ -4,7 +4,7 @@ service:
   port: 5678
   name: http
 
-replicaCount: 1
+replicaCount: 0
 
 main:
   persistence:
