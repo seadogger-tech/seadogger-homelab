@@ -1,7 +1,7 @@
 {
   "Rules": [
     {
-      "Id": "MoveToDeepArchiveAfter1Day",
+      "ID": "MoveToDeepArchiveAfter1Day",
       "Status": "Enabled",
       "Filter": {},
       "Transitions": [
