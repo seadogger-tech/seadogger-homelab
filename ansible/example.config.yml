@@ -29,12 +29,18 @@ manual_install_openwebui: true
 manual_install_n8n: true
 manual_install_nextcloud: true
 manual_install_jellyfin: true
+manual_install_k8up: true
 
 # --- Secrets ---
 dashboard_password: "YourSecurePasswordHere"
 aws_bedrock_api_key_id: "YOUR_AWS_ACCESS_KEY_ID_HERE"
 aws_bedrock_api_access_key: "YOUR_AWS_SECRET_ACCESS_KEY_HERE"
 xmltv_stream: "https://api.hdhomerun.com/api/xmltv?DeviceAuth=YOUR_HDHOMERUN_ACCESS_KEY"
+
+# --- K8up Backup Secrets (REQUIRED - See deployments/k8up/aws-setup/README.md) ---
+k8up_aws_access_key: "YOUR_K8UP_AWS_ACCESS_KEY_HERE"
+k8up_aws_secret_key: "YOUR_K8UP_AWS_SECRET_KEY_HERE"
+k8up_restic_password: "YOUR_K8UP_RESTIC_PASSWORD_HERE"
 
 # ==============================================================================
 # --- Granular Cleanup Configuration ---
@@ -88,6 +94,7 @@ pod_cleanup_list:
   - { name: "n8n", namespace: "n8n", selector: "app.kubernetes.io/instance=n8n", delete_pvc: true }
   - { name: "nextcloud", namespace: "nextcloud", selector: "app=nextcloud", delete_pvc: true }
   - { name: "jellyfin", namespace: "jellyfin", selector: "app=jellyfin", delete_pvc: true }
+  - { name: "k8up", namespace: "k8up", selector: "app.kubernetes.io/name=k8up", delete_pvc: false }
 
 # --- INFRASTRUCTURE CLEANUP ---
 run_infrastructure_cleanup: false
@@ -108,6 +115,7 @@ precook_namespaces:
   - { name: "bedrock-gateway" }
   - { name: "nextcloud" }
   - { name: "jellyfin" }
+  - { name: "k8up" }
 
 
 # ===================================================================================
@@ -140,3 +148,4 @@ enable_openwebui: "{{ cold_start_stage_3_install_applications | bool and manual_
 enable_n8n: "{{ cold_start_stage_3_install_applications | bool and manual_install_n8n | bool }}"
 enable_nextcloud: "{{ cold_start_stage_3_install_applications | bool and manual_install_nextcloud | bool }}"
 enable_jellyfin: "{{ cold_start_stage_3_install_applications | bool and manual_install_jellyfin | bool }}"
+enable_k8up: "{{ cold_start_stage_3_install_applications | bool and manual_install_k8up | bool }}"
