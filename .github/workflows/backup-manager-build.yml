@@ -2,7 +2,7 @@ name: Build Backup Manager Image
 
 on:
   push:
-    branches: [ main ]
+    branches: [ master ]
     paths:
       - 'deployments/backup-manager/**'
   workflow_dispatch:
