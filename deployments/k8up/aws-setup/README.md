@@ -2,14 +2,32 @@
 
 ## Prerequisites
 - AWS Account: 708765384784
-- Admin access to AWS Console or AWS CLI with admin permissions
+- Admin access to AWS Console **OR** AWS CLI with root/admin credentials configured
+- `openssl` installed for generating Restic password
+
+## AWS CLI Setup (If Using CLI)
+
+If you want to use AWS CLI instead of the console, you need root/admin credentials configured:
+
+```bash
+# Configure AWS CLI with root credentials
+aws configure --profile root
+# Enter:
+#   AWS Access Key ID: <your-root-access-key>
+#   AWS Secret Access Key: <your-root-secret-key>
+#   Default region: us-east-1
+#   Default output format: json
+
+# Verify access
+AWS_PROFILE=root aws sts get-caller-identity
+```
 
 ## Manual Setup Steps
 
 ### 1. Create S3 Bucket
 
 ```bash
-aws s3api create-bucket \
+AWS_PROFILE=root aws s3api create-bucket \
   --bucket seadogger-homelab-backup \
   --region us-east-1
 ```
@@ -24,7 +42,7 @@ aws s3api create-bucket \
 ### 2. Enable Versioning
 
 ```bash
-aws s3api put-bucket-versioning \
+AWS_PROFILE=root aws s3api put-bucket-versioning \
   --bucket seadogger-homelab-backup \
   --versioning-configuration Status=Enabled
 ```
@@ -40,7 +58,7 @@ aws s3api put-bucket-versioning \
 ### 3. Apply Lifecycle Policy (Deep Archive after 1 day)
 
 ```bash
-aws s3api put-bucket-lifecycle-configuration \
+AWS_PROFILE=root aws s3api put-bucket-lifecycle-configuration \
   --bucket seadogger-homelab-backup \
   --lifecycle-configuration file://s3-lifecycle-policy.json
 ```
@@ -59,7 +77,7 @@ aws s3api put-bucket-lifecycle-configuration \
 ### 4. Create IAM User
 
 ```bash
-aws iam create-user --user-name k8up-backup-user
+AWS_PROFILE=root aws iam create-user --user-name k8up-backup-user
 ```
 
 **Or via AWS Console:**
@@ -75,11 +93,11 @@ aws iam create-user --user-name k8up-backup-user
 ### 5. Create and Attach IAM Policy
 
 ```bash
-aws iam create-policy \
+AWS_PROFILE=root aws iam create-policy \
   --policy-name K8upBackupPolicy \
   --policy-document file://iam-policy.json
 
-aws iam attach-user-policy \
+AWS_PROFILE=root aws iam attach-user-policy \
   --user-name k8up-backup-user \
   --policy-arn arn:aws:iam::708765384784:policy/K8upBackupPolicy
 ```
@@ -103,7 +121,7 @@ aws iam attach-user-policy \
 ### 6. Create Access Keys
 
 ```bash
-aws iam create-access-key --user-name k8up-backup-user
+AWS_PROFILE=root aws iam create-access-key --user-name k8up-backup-user
 ```
 
 **Or via AWS Console:**
@@ -139,19 +157,19 @@ k8up_restic_password: "YOUR_RESTIC_PASSWORD_FROM_STEP_7"
 
 ```bash
 # Verify bucket exists
-aws s3 ls s3://seadogger-homelab-backup
+AWS_PROFILE=root aws s3 ls s3://seadogger-homelab-backup
 
 # Verify versioning is enabled
-aws s3api get-bucket-versioning --bucket seadogger-homelab-backup
+AWS_PROFILE=root aws s3api get-bucket-versioning --bucket seadogger-homelab-backup
 
 # Verify lifecycle policy
-aws s3api get-bucket-lifecycle-configuration --bucket seadogger-homelab-backup
+AWS_PROFILE=root aws s3api get-bucket-lifecycle-configuration --bucket seadogger-homelab-backup
 
 # Verify IAM user
-aws iam get-user --user-name k8up-backup-user
+AWS_PROFILE=root aws iam get-user --user-name k8up-backup-user
 
 # Verify policy is attached
-aws iam list-attached-user-policies --user-name k8up-backup-user
+AWS_PROFILE=root aws iam list-attached-user-policies --user-name k8up-backup-user
 ```
 
 ## Cost Estimation
