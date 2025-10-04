@@ -15,6 +15,13 @@
         name: k8up
   tags: k8up
 
+- name: Install K8up CRDs with server-side apply (fixes annotation size limits)
+  ansible.builtin.shell: |
+    helm show crds k8up-io/k8up --version 4.8.6 | kubectl apply --server-side=true --force-conflicts -f -
+  environment:
+    KUBECONFIG: "{{ KUBECONFIG }}"
+  tags: k8up
+
 - name: Create K8up ArgoCD Application
   kubernetes.core.k8s:
     kubeconfig: "{{ KUBECONFIG }}"
