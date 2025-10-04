@@ -1,0 +1,54 @@
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: backup-manager-http
+  namespace: portal
+spec:
+  entryPoints:
+    - web
+  routes:
+    - match: Host(`backups.seadogger-homelab`)
+      kind: Rule
+      services:
+        - name: backup-manager
+          port: 80
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: backup-manager-https
+  namespace: portal
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`backups.seadogger-homelab`)
+      kind: Rule
+      services:
+        - name: backup-manager
+          port: 80
+  tls:
+    secretName: backup-manager-tls
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: backup-manager-cert
+  namespace: portal
+spec:
+  dnsNames:
+    - backups.seadogger-homelab
+  duration: 2160h
+  isCA: false
+  issuerRef:
+    kind: ClusterIssuer
+    name: internal-local-issuer
+  privateKey:
+    algorithm: RSA
+    encoding: PKCS1
+    size: 2048
+  renewBefore: 360h
+  secretName: backup-manager-tls
+  subject:
+    organizations:
+      - SeaDogger Homelab
