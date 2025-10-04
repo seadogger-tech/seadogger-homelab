@@ -102,10 +102,6 @@
       import_tasks: tasks/k8up_deploy.yml
       when: enable_k8up | default(true)
 
-    - name: Deploy Portal
-      import_tasks: tasks/portal_deploy.yml
-      when: enable_portal | default(true)
-
     - name: Deploy Bedrock Gateway
       import_tasks: tasks/bedrock_gateway_deploy.yml
       when: enable_bedrock | default(true)
