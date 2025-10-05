@@ -34,6 +34,7 @@
 - [[12-Troubleshooting]]
 - [[15-CI-CD-and-GitHub-Actions]]
 - [[17-Runbooks]]
+- [[23-Disaster-Recovery-Restore]]
 
 ## 🧠 Knowledge
 - [[13-ADR-Index]]
