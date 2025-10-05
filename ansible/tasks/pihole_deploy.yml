@@ -23,7 +23,7 @@
           targetRevision: "*"
           helm:
             valueFiles:
-              - https://raw.githubusercontent.com/seadogger/seadogger-homelab/master/deployments/pihole/pihole-values.yaml
+              - https://raw.githubusercontent.com/seadogger-tech/seadogger-homelab-pro/main/core/deployments/pihole/pihole-values.yaml
         destination:
           server: https://kubernetes.default.svc
           namespace: pihole
@@ -47,7 +47,7 @@
 
 - name: Download Pihole IngressRoutes manifest from GitHub
   ansible.builtin.get_url:
-    url: "https://raw.githubusercontent.com/seadogger/seadogger-homelab/master/ingress/traefik-pihole-ingress.yml"
+    url: "https://raw.githubusercontent.com/seadogger-tech/seadogger-homelab-pro/main/core/ingress/traefik-pihole-ingress.yml"
     dest: "/tmp/traefik-pihole-ingress.yml"
     mode: "0644"
 
