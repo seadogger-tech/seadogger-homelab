@@ -28,6 +28,43 @@ This guide covers disaster recovery procedures for restoring data from Velero ba
 |----------|-----------|-----------|------|-----|
 | `daily-backup` | nextcloud, openwebui, n8n, jellyfin, pihole, portal | Daily | 2:00 AM | 30 days |
 
+## Application Restore Procedures and Verification Status
+
+### Restore Procedure #1: Standard Application Restore
+
+This procedure applies to most ArgoCD-managed applications that store data in PVCs.
+
+**Steps**:
+1. Delete ArgoCD Application: `kubectl delete application <app-name> -n argocd`
+2. Delete namespace: `kubectl delete namespace <namespace>`
+3. Create Velero restore:
+   ```bash
+   cat <<EOF | kubectl create -f -
+   apiVersion: velero.io/v1
+   kind: Restore
+   metadata:
+     name: <app>-restore-$(date +%Y%m%d-%H%M%S)
+     namespace: velero
+   spec:
+     backupName: <backup-name>
+   EOF
+   ```
+4. Wait for restore to complete: `kubectl get restore -n velero -w`
+5. Set Ansible deployment variable to `true` in `ansible/config.yml`
+6. Run Ansible playbook: `ansible-playbook ansible/main.yml --tags <app>`
+7. Verify pod is running: `kubectl get pods -n <namespace>`
+
+### Verification Status
+
+| Application | Restore Procedure | Verified | Notes |
+|-------------|------------------|----------|-------|
+| OpenWebUI | Procedure #1 | ✅ | Successfully restored 20 items. Pod running healthy. All configuration loaded from database. No encryption key issues. |
+| N8N | Procedure #1 | ❌ | **ENCRYPTION KEY MISMATCH**: N8N stores encryption key in both `/home/node/.n8n/config` (PVC) and Kubernetes secret. Restored config file encryption key doesn't match Helm-generated secret causing "Mismatching encryption keys" error. See [Issue #7](https://github.com/seadogger-tech/seadogger-homelab-pro/issues/7) for resolution. |
+| Jellyfin | Procedure #1 | ⏳ | **NOT TESTED**: Needs verification. Special consideration: AWS Glacier retrieval for media files (3TB+). |
+| Nextcloud | Procedure #1 | ⏳ | **NOT TESTED**: Large backup (~3.3TB). Requires separate testing due to size and AWS Glacier retrieval time. |
+| Pihole | Procedure #1 | ⏳ | Not yet tested. |
+| Portal | Procedure #1 | ⏳ | Not yet tested. |
+
 ## Prerequisites for Restore
 
 ### 1. Access Velero UI
