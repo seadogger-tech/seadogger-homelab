@@ -209,7 +209,7 @@ Since this is a protocol-level incompatibility and not a configuration error on 
 ![accent-divider](images/accent-divider.svg)
 ### ADR-009: Migrate from K8up to Velero for Kubernetes Backup/Restore
 
-- **Status:** Accepted
+- **Status:** Implemented & Verified
 - **Date:** 2025-10-04
 
 #### Context
@@ -218,26 +218,42 @@ The homelab requires a reliable backup and restore solution for Kubernetes persi
 
 #### Decision
 
-Migrate to Velero, a mature CNCF sandbox project with 6+ years of development, comprehensive namespace backup capabilities, established ArgoCD integration patterns, and proven restore reliability. Velero will back up entire namespaces (not just PVCs), use AWS S3 plugin, and provide both CLI and declarative management.
+Migrate to Velero v1.16.0, a mature CNCF sandbox project with 6+ years of development, comprehensive namespace backup capabilities, and proven restore reliability. Velero backs up entire namespaces (not just PVCs) and uses Kopia for incremental, deduplicated file-level backups to AWS S3 Glacier Deep Archive.
+
+Key technical decisions:
+1. **Kopia Uploader**: Replaced Restic with Kopia for content-addressable storage and better deduplication
+2. **Node-Agent Daemonset**: Deployed on all nodes for file-level PVC backups via `defaultVolumesToFsBackup: true`
+3. **AWS S3 Lifecycle**: 7 days in S3 Standard → Glacier Deep Archive (permanent retention)
+4. **Backup Strategy**:
+   - Week 1: Weekly Nextcloud backup (Sunday 2 AM) to allow 48-hour 3.3TB initial upload
+   - Week 2+: Daily backups for all namespaces (Nextcloud, OpenWebUI, N8N, Jellyfin, PiHole, Portal)
+5. **Exclusion Handling**: Jellyfin media volume excluded via `backup.velero.io/backup-volumes-excludes: media` (prevents duplicate 3.3TB backup of read-only Nextcloud mount)
 
 #### Consequences
 
 - **Positive:**
   - Industry-standard solution with proven reliability
   - Backs up all Kubernetes resources, not just PVCs
-  - Better GitOps integration with ArgoCD
-  - Strong community support and documentation
+  - Better GitOps integration with ArgoCD (managed in Pro repo)
+  - Cost-effective: ~$3.30/month for 3.3TB in Glacier Deep Archive
+  - Incremental backups with Kopia deduplication (only changed data uploaded)
+  - Velero UI for backup monitoring and management
   - Deterministic restore outcomes
 
 - **Negative:**
-  - Migration effort required (deployment, schedules, testing, documentation)
-  - Team learning curve for Velero CLI
-  - New S3 bucket required
+  - 12-48 hour retrieval time for backups >7 days old (Glacier Deep Archive)
+  - Bulk retrieval cost: $0.02/GB for disaster recovery
+  - Migration effort completed (deployment, schedules, testing, documentation, K8up cleanup)
 
-- **Implementation:**
-  - 5-phase rollout: Setup (Week 1), Testing (Week 1-2), Production schedules (Week 2), Documentation (Week 2-3), K8up cleanup (Week 3)
-  - Daily backups for n8n, nextcloud, jellyfin (7 day retention)
-  - Weekly full cluster backups (4 week retention)
+- **Implementation Status:**
+  - ✅ Velero v1.16.0 deployed via Helm in Pro repo
+  - ✅ Node-agent daemonset running on all nodes
+  - ✅ Backup schedules configured (`daily-backup`, `weekly-nextcloud-backup`)
+  - ✅ S3 bucket lifecycle policy configured (7 days → Deep Archive)
+  - ✅ Jellyfin media volume exclusion implemented
+  - ✅ Storage wiki documentation updated with architecture diagrams
+  - ✅ All k8up references removed from codebase
+  - ✅ S3 bucket cleaned (all k8up/test backups deleted)
 
 See `.memory_bank/k8up_failure_analysis.md` for detailed technical analysis of K8up failures.
 
