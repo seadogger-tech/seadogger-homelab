@@ -18,7 +18,7 @@
         source:
           repoURL: https://community-charts.github.io/helm-charts
           chart: n8n
-          targetRevision: "1.15.1"
+          targetRevision: "1.15.12"
           helm:
             valueFiles:
               - https://raw.githubusercontent.com/seadogger-tech/seadogger-homelab/master/deployments/n8n/n8n-values.yaml
