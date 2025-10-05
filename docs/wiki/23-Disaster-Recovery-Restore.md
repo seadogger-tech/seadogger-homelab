@@ -6,14 +6,224 @@ This guide covers disaster recovery procedures for restoring data from Velero ba
 
 **IMPORTANT**: S3 Deep Archive has a 12-48 hour retrieval time for bulk retrieval. Plan disaster recovery operations accordingly.
 
-## Backup Architecture
+### Backup Architecture Diagram
 
-- **Backup Tool**: Velero v1.16.0 (Kubernetes backup operator)
-- **Uploader**: Kopia (replaces Restic - content-addressable storage)
-- **Storage**: AWS S3 (seadogger-homelab-backup bucket, us-east-1)
-- **Lifecycle**: 7 days in S3 Standard → Glacier Deep Archive (permanent retention)
+The following C4 Container diagram shows the complete Velero backup system architecture:
+
+---
+> **🌙 Diagram Viewing Recommendation**
+>
+> The interactive Mermaid diagrams below are **optimized for GitHub Dark Mode** to provide maximum readability and visual impact.
+>
+> **To enable Dark Mode:** GitHub Settings → Appearance → Theme → **Dark default**
+>
+> *Light mode users can still view the diagrams, though colors may appear less vibrant.*
+---
+
+```mermaid
+graph TB
+    subgraph K8s["🎯 Kubernetes Cluster"]
+        direction TB
+        subgraph VeleroNS["velero namespace"]
+            VeleroServer["Velero Server<br/>Orchestration & Scheduling"]
+            VeleroUI["Velero UI<br/>Management Interface"]
+        end
+
+        subgraph Nodes["Worker Nodes"]
+            NodeAgent1["Node Agent (yoda)<br/>Kopia Uploader"]
+            NodeAgent2["Node Agent (anakin)<br/>Kopia Uploader"]
+            NodeAgent3["Node Agent (obiwan)<br/>Kopia Uploader"]
+            NodeAgent4["Node Agent (rey)<br/>Kopia Uploader"]
+        end
+
+        subgraph Apps["Application Namespaces"]
+            NextcloudPVC["Nextcloud PVC<br/>3.3TB CephFS EC"]
+            N8NPVC["N8N PVC<br/>RBD Block"]
+            JellyfinPVC["Jellyfin PVCs<br/>config + cache"]
+            OtherPVCs["Other PVCs<br/>OpenWebUI, PiHole, etc."]
+        end
+
+        subgraph Storage["Rook-Ceph Storage"]
+            CephFS["CephFS<br/>ceph-fs-data-ec"]
+            CephRBD["RBD Block<br/>ceph-block-data"]
+        end
+    end
+
+    subgraph AWS["☁️ AWS Cloud"]
+        S3Bucket["S3 Bucket<br/>seadogger-homelab-backup<br/>us-east-1"]
+        S3Standard["S3 Standard<br/>Kopia Metadata<br/>~100MB"]
+        DeepArchive["Glacier Deep Archive<br/>Data Blocks<br/>~3.3TB"]
+    end
+
+    VeleroServer -->|"Schedule Trigger<br/>daily-backup: 2 AM<br/>weekly-nextcloud: 2 AM Sun"| NodeAgent1
+    VeleroServer --> NodeAgent2
+    VeleroServer --> NodeAgent3
+    VeleroServer --> NodeAgent4
+
+    NodeAgent1 -->|"Read PVC Data"| NextcloudPVC
+    NodeAgent2 -->|"Read PVC Data"| N8NPVC
+    NodeAgent3 -->|"Read PVC Data"| JellyfinPVC
+    NodeAgent4 -->|"Read PVC Data"| OtherPVCs
+
+    NextcloudPVC --> CephFS
+    N8NPVC --> CephRBD
+    JellyfinPVC --> CephFS
+
+    NodeAgent1 -->|"Upload via Kopia<br/>AES-256 Encrypted<br/>Deduplicated"| S3Bucket
+    NodeAgent2 --> S3Bucket
+    NodeAgent3 --> S3Bucket
+    NodeAgent4 --> S3Bucket
+
+    S3Bucket -->|"Initial Upload"| S3Standard
+    S3Standard -->|"Lifecycle: 7 days"| DeepArchive
+    DeepArchive -->|"Keep Forever<br/>No Deletion"| DeepArchive
+
+    style K8s fill:#1e3a5f,stroke:#4a90e2,stroke-width:3px
+    style VeleroNS fill:#2d5016,stroke:#5a9216,stroke-width:2px
+    style Nodes fill:#7b1fa2,stroke:#9c27b0,stroke-width:2px
+    style Apps fill:#8b4513,stroke:#d2691e,stroke-width:2px
+    style Storage fill:#2d5016,stroke:#5a9216,stroke-width:2px
+    style AWS fill:#1e3a5f,stroke:#4a90e2,stroke-width:3px
+    style S3Bucket fill:#2d5016,stroke:#5a9216,stroke-width:2px
+    style DeepArchive fill:#7b1fa2,stroke:#9c27b0,stroke-width:2px
+```
+
+### Backup Workflow Sequence
+
+The following sequence diagram shows the complete backup lifecycle including Week 1 initial backup strategy and ongoing incremental backups:
+
+```mermaid
+sequenceDiagram
+    participant Schedule as Velero Schedule
+    participant Server as Velero Server
+    participant Agent as Node Agent (Kopia)
+    participant PVC as Nextcloud PVC<br/>3.3TB CephFS
+    participant S3 as S3 Standard
+    participant Glacier as Deep Archive
+
+    Note over Schedule,Glacier: Week 1: Initial Backup (Sunday 2 AM)
+    Schedule->>Server: Trigger weekly-nextcloud-backup
+    Server->>Agent: Start PVC backup
+    Agent->>PVC: Read all files (3.3TB)
+    Agent->>Agent: SHA-256 checksums<br/>Create content blocks
+    Agent->>S3: Upload metadata + blocks<br/>AES-256 encrypted
+    Note over Agent,S3: Upload time: ~48 hours
+
+    Note over S3,Glacier: Day 7: S3 Lifecycle Transition
+    S3->>Glacier: Move data blocks to Deep Archive<br/>Metadata remains in S3 Standard
+    Note over Glacier: Storage cost: $3.30/month for 3.3TB<br/>Metadata cost: $0.002/month
+
+    Note over Schedule,Glacier: Week 2+: Changed to Daily Backups (2 AM)
+    Schedule->>Server: Trigger daily-backup (Nextcloud included)
+    Server->>Agent: Start incremental backup
+    Agent->>PVC: Read changed files only (~100GB)
+    Agent->>Agent: SHA-256 checksums<br/>Compare with metadata
+    Agent->>S3: Upload new blocks only<br/>Reuse existing checksums
+    Note over Agent,S3: Deduplication: Only new/changed data uploaded
+
+    Note over S3,Glacier: Day 14: Second Lifecycle Transition
+    S3->>Glacier: Move new blocks to Deep Archive<br/>Total: 3.4TB in Glacier
+
+    Note over Schedule,Glacier: Month 6: User Adds 500GB Media
+    Schedule->>Server: Daily backup trigger
+    Agent->>PVC: Read new files (500GB)
+    Agent->>S3: Upload 500GB new blocks
+    S3->>Glacier: Move to Deep Archive after 7 days
+    Note over Glacier: Total storage: 3.9TB<br/>Cost: $3.87/month
+
+    Note over Schedule,Glacier: Disaster Recovery: Recent Data
+    Server->>S3: Request backup restore<br/>(recent snapshot)
+    S3-->>Server: Metadata (instant)
+    S3-->>Server: Recent blocks (instant)<br/>Still in S3 Standard
+
+    Note over Schedule,Glacier: Disaster Recovery: Old Data
+    Server->>S3: Request backup restore<br/>(6-month-old snapshot)
+    S3->>Glacier: Initiate retrieval<br/>(Bulk: 12-48 hours, $0.02/GB)
+    Note over Glacier: Wait 12-48 hours
+    Glacier-->>S3: Restore blocks to S3 temp
+    S3-->>Server: Download restored data
+    Server->>PVC: Restore files to cluster
+```
+
+## Prerequisites for Restore
+
+### 1. Access Velero UI
+
+Velero UI provides a visual interface for managing backups and restores:
+
+```
+https://velero.seadogger-homelab
+```
+
+### 2. S3 Glacier Deep Archive Retrieval
+
+For backups older than 7 days (stored in Deep Archive), initiate retrieval:
+
+```bash
+# Check which lifecycle class objects are in
+aws s3api head-object \
+  --bucket seadogger-homelab-backup \
+  --key <object-key>
+
+# Initiate bulk retrieval (12-48 hours, $0.02/GB)
+aws s3api restore-object \
+  --bucket seadogger-homelab-backup \
+  --key <object-key> \
+  --restore-request Days=1,GlacierJobParameters={Tier=Bulk}
+
+# Check retrieval status
+aws s3api head-object \
+  --bucket seadogger-homelab-backup \
+  --key <object-key> \
+  | jq '.Restore'
+```
+
+**Key Points:**
+- **Week 1**: Weekly Nextcloud backup (Sunday 2 AM) to allow 48-hour initial upload
+- **Week 2+**: Switch to daily backups for all apps including Nextcloud
+- **Deduplication**: Kopia stores each unique data block once via SHA-256 checksums
+- **Lifecycle**: 7 days in S3 Standard → Glacier Deep Archive forever
+- **Metadata**: Stays in S3 Standard for instant snapshot queries (~100MB)
+- **Recovery Time**: Recent backups (instant), Old backups (12-48 hours)
+
+### Backup Architecture
+
+- **Operator**: Velero v1.17.0 deployed via Helm
+- **Node Agent**: Kopia uploader for file-level PVC backups
+- **Backend**: AWS S3 with Glacier Deep Archive lifecycle
+- **Storage**: AWS S3 bucket `seadogger-homelab-backup` (us-east-1)
+- **Lifecycle**: 7 days in S3 Standard → Glacier Deep Archive
 - **Encryption**: AES-256 server-side encryption (AWS S3)
-- **Deduplication**: Kopia SHA-256 content checksums
+- **Deduplication**: Kopia content-addressable storage
+- **Monitoring**: Prometheus metrics enabled
+
+
+
+### Viewing Backups
+
+**Velero UI**:
+```
+https://velero.seadogger-homelab
+```
+
+**CLI - List Backups**:
+```bash
+ssh pi@yoda.local
+kubectl get backups -n velero
+kubectl get schedules -n velero
+```
+
+**CLI - View Backup Details**:
+```bash
+# Get backup details
+kubectl describe backup <backup-name> -n velero
+
+# Get backup logs
+kubectl logs deployment/velero -n velero
+
+# Get node-agent status
+kubectl get pods -n velero -l name=node-agent
+```
 
 ### Backup Schedule
 
@@ -21,14 +231,31 @@ This guide covers disaster recovery procedures for restoring data from Velero ba
 | Schedule | Namespaces | Frequency | Time | TTL |
 |----------|-----------|-----------|------|-----|
 | `weekly-nextcloud-backup` | nextcloud | Weekly (Sunday) | 2:00 AM | 30 days |
-| `daily-backup` | openwebui, n8n, jellyfin, pihole, portal | Daily | 2:00 AM | 30 days |
+| `daily-backup` | openwebui, n8n, jellyfin | Daily | 2:00 AM | 30 days |
 
 **Week 2+ Strategy** (After Initial Upload):
 | Schedule | Namespaces | Frequency | Time | TTL |
 |----------|-----------|-----------|------|-----|
-| `daily-backup` | nextcloud, openwebui, n8n, jellyfin, pihole, portal | Daily | 2:00 AM | 30 days |
+| `daily-backup` | nextcloud, openwebui, n8n, jellyfin | Daily | 2:00 AM | 30 days |
 
-## Application Restore Procedures and Verification Status
+**Notes**:
+- Jellyfin media volume (read-only Nextcloud mount) excluded via `backup.velero.io/backup-volumes-excludes: media`
+- Week 1: Nextcloud weekly to allow 48-hour initial 3.3TB upload window
+- Week 2+: Change Nextcloud to daily after initial backup completes
+- All PVCs backed up automatically via `defaultVolumesToFsBackup: true`
+
+
+
+## Verification Status
+
+| Application | Restore Procedure | Verified | Notes |
+|-------------|------------------|----------|-------|
+| OpenWebUI | Restore Procedure #1 | ✅ | Validated on 10-05-2025 and verified all users, chats, models, and settings were restored. |
+| N8N | Procedure #1 | ❌ | **ENCRYPTION KEY MISMATCH**: N8N stores encryption key in both `/home/node/.n8n/config` (PVC) and Kubernetes secret. Restored config file encryption key doesn't match Helm-generated secret causing "Mismatching encryption keys" error. See [Issue #7](https://github.com/seadogger-tech/seadogger-homelab-pro/issues/7) for resolution. |
+| Jellyfin | Procedure #1 | ⏳ | **NOT TESTED**: Needs verification. Special consideration: AWS Glacier retrieval for media files (3TB+). |
+| Nextcloud | Procedure #1 | ⏳ | **NOT TESTED**: Large backup (~3.3TB). Requires separate testing due to size and AWS Glacier retrieval time. |
+| Pihole | NA | ✅ | This is a stateless app. |
+| Portal | NA | ✅ | This is a stateless app. |
 
 ### Restore Procedure #1: Standard Application Restore
 
@@ -54,95 +281,34 @@ This procedure applies to most ArgoCD-managed applications that store data in PV
 6. Run Ansible playbook: `ansible-playbook ansible/main.yml --tags <app>`
 7. Verify pod is running: `kubectl get pods -n <namespace>`
 
-### Verification Status
 
-| Application | Restore Procedure | Verified | Notes |
-|-------------|------------------|----------|-------|
-| OpenWebUI | Procedure #1 | ✅ | Successfully restored 20 items. Pod running healthy. All configuration loaded from database. No encryption key issues. |
-| N8N | Procedure #1 | ❌ | **ENCRYPTION KEY MISMATCH**: N8N stores encryption key in both `/home/node/.n8n/config` (PVC) and Kubernetes secret. Restored config file encryption key doesn't match Helm-generated secret causing "Mismatching encryption keys" error. See [Issue #7](https://github.com/seadogger-tech/seadogger-homelab-pro/issues/7) for resolution. |
-| Jellyfin | Procedure #1 | ⏳ | **NOT TESTED**: Needs verification. Special consideration: AWS Glacier retrieval for media files (3TB+). |
-| Nextcloud | Procedure #1 | ⏳ | **NOT TESTED**: Large backup (~3.3TB). Requires separate testing due to size and AWS Glacier retrieval time. |
-| Pihole | Procedure #1 | ⏳ | Not yet tested. |
-| Portal | Procedure #1 | ⏳ | Not yet tested. |
-
-## Prerequisites for Restore
-
-### 1. Access Velero UI
-
-Velero UI provides a visual interface for managing backups and restores:
-
-```
-https://velero.seadogger-homelab
-```
-
-### 2. Install Velero CLI (Optional)
-
-For advanced operations, install the Velero CLI:
-
-```bash
-# macOS
-brew install velero
-
-# Linux
-wget https://github.com/vmware-tanzu/velero/releases/download/v1.16.0/velero-v1.16.0-linux-amd64.tar.gz
-tar -xvf velero-v1.16.0-linux-amd64.tar.gz
-sudo mv velero-v1.16.0-linux-amd64/velero /usr/local/bin/
-```
-
-### 3. S3 Glacier Deep Archive Retrieval
-
-For backups older than 7 days (stored in Deep Archive), initiate retrieval:
-
-```bash
-# Check which lifecycle class objects are in
-aws s3api head-object \
-  --bucket seadogger-homelab-backup \
-  --key <object-key>
-
-# Initiate bulk retrieval (12-48 hours, $0.02/GB)
-aws s3api restore-object \
-  --bucket seadogger-homelab-backup \
-  --key <object-key> \
-  --restore-request Days=1,GlacierJobParameters={Tier=Bulk}
-
-# Check retrieval status
-aws s3api head-object \
-  --bucket seadogger-homelab-backup \
-  --key <object-key> \
-  | jq '.Restore'
-```
-
-**Retrieval Tiers**:
-- **Bulk**: 12-48 hours, ~$0.02/GB
-- **Standard**: 3-5 hours, ~$0.03/GB
-- **Expedited**: Not available for Deep Archive
 
 ## Quick Reference: Common Restore Scenarios
 
-### Scenario 1: "I Deleted Something in N8N - Restore from Latest Backup"
+### Scenario 1: "I Deleted Something - Restore from Latest Backup"
 
-**Goal**: Restore N8N to most recent backup (within last 7 days)
+**Goal**: Restore App to most recent backup (within last 7 days)
 **Time**: 5-10 minutes
 
 ```bash
 # Step 1: List available backups
-kubectl get backups -n velero | grep n8n
+kubectl get backups -n velero | grep openwebui
 
-# Step 2: Scale down N8N (prevents conflicts)
-kubectl scale deployment n8n -n n8n --replicas=0
+# Step 2: Scale down openwebui (prevents conflicts)
+kubectl scale deployment openwebui -n openwebui --replicas=0
 
 # Step 3: Create restore from latest backup
-velero restore create n8n-restore-$(date +%Y%m%d-%H%M%S) \
+velero restore create openwebui-restore-$(date +%Y%m%d-%H%M%S) \
   --from-backup daily-backup-20251004020000 \
-  --include-namespaces n8n
+  --include-namespaces openwebui
 
 # Step 4: Watch restore progress
-velero restore describe n8n-restore-20251004-120000
+velero restore describe openwebui-restore-20251004-120000
 kubectl get restore -n velero -w
 
-# Step 5: Verify and restart N8N
-kubectl get pods -n n8n
-kubectl scale deployment n8n -n n8n --replicas=1
+# Step 5: Verify and restart openwebui
+kubectl get pods -n openwebui
+kubectl scale deployment openwebui -n openwebui --replicas=1
 ```
 
 ### Scenario 2: "Restore Nextcloud from Last Week"
@@ -178,20 +344,20 @@ kubectl scale deployment nextcloud -n nextcloud --replicas=1
 
 ```bash
 # Step 1: Create temporary test namespace
-kubectl create namespace n8n-test
+kubectl create namespace openwebui-test
 
 # Step 2: Restore to test namespace
-velero restore create n8n-test-restore \
+velero restore create openwebui-test-restore \
   --from-backup daily-backup-20251004020000 \
-  --include-namespaces n8n \
-  --namespace-mappings n8n:n8n-test
+  --include-namespaces openwebui \
+  --namespace-mappings openwebui:openwebui-test
 
 # Step 3: Verify restored data
-kubectl get all -n n8n-test
-kubectl exec -it <pod-name> -n n8n-test -- ls -lah /data
+kubectl get all -n openwebui-test
+kubectl exec -it <pod-name> -n openwebui-test -- ls -lah /data
 
 # Step 4: Cleanup when done
-kubectl delete namespace n8n-test
+kubectl delete namespace openwebui-test
 ```
 
 ### Scenario 4: "Which Backups Are Available?"
@@ -211,290 +377,6 @@ velero backup describe daily-backup-20251004020000
 
 # Filter by namespace
 kubectl get backups -n velero -o json | jq '.items[] | select(.spec.includedNamespaces[] == "nextcloud") | .metadata.name'
-```
-
-## Restore Procedures
-
-### Method 1: Restore Entire Namespace (Full Restore)
-
-**Use Case**: Complete data loss, need to restore entire application and its data
-
-```bash
-# 1. List available backups
-velero backup get
-
-# 2. Scale down application (if running)
-kubectl scale deployment <app-name> -n <namespace> --replicas=0
-
-# 3. Create restore
-velero restore create <restore-name> \
-  --from-backup <backup-name> \
-  --include-namespaces <namespace>
-
-# 4. Monitor restore progress
-velero restore describe <restore-name>
-velero restore logs <restore-name>
-
-# 5. Verify restoration
-kubectl get all -n <namespace>
-kubectl get pvc -n <namespace>
-
-# 6. Scale up application
-kubectl scale deployment <app-name> -n <namespace> --replicas=1
-```
-
-**Example YAML** (alternative to CLI):
-
-```yaml
-apiVersion: velero.io/v1
-kind: Restore
-metadata:
-  name: nextcloud-restore
-  namespace: velero
-spec:
-  backupName: daily-backup-20251004020000
-  includedNamespaces:
-    - nextcloud
-  restorePVs: true
-```
-
-### Method 2: Restore Specific Resources (Selective Restore)
-
-**Use Case**: Recover specific resources without full namespace restore
-
-```bash
-# Restore only PVCs from a backup
-velero restore create pvc-only-restore \
-  --from-backup daily-backup-20251004020000 \
-  --include-namespaces n8n \
-  --include-resources persistentvolumeclaims
-
-# Restore only ConfigMaps and Secrets
-velero restore create config-restore \
-  --from-backup daily-backup-20251004020000 \
-  --include-namespaces n8n \
-  --include-resources configmaps,secrets
-
-# Restore with label selector
-velero restore create app-restore \
-  --from-backup daily-backup-20251004020000 \
-  --selector app=n8n
-```
-
-### Method 3: Restore to Different Namespace
-
-**Use Case**: Clone application to staging/test environment
-
-```bash
-# Restore n8n production to n8n-staging
-velero restore create n8n-staging-clone \
-  --from-backup daily-backup-20251004020000 \
-  --include-namespaces n8n \
-  --namespace-mappings n8n:n8n-staging
-
-# Verify
-kubectl get all -n n8n-staging
-```
-
-## Emergency Full Cluster Restore
-
-### Scenario: Total Cluster Loss
-
-**Timeline**: 3-5 days (including S3 retrieval time)
-
-#### Day 1: Initiate S3 Deep Archive Retrieval
-
-```bash
-# List all objects in backup bucket
-aws s3 ls s3://seadogger-homelab-backup/ --recursive
-
-# Initiate bulk retrieval for all backup objects
-aws s3api restore-object \
-  --bucket seadogger-homelab-backup \
-  --key velero/backups/<backup-name>/<object> \
-  --restore-request Days=1,GlacierJobParameters={Tier=Bulk}
-
-# Monitor retrieval status
-aws s3api head-object \
-  --bucket seadogger-homelab-backup \
-  --key velero/backups/<backup-name>/<object>
-```
-
-#### Day 2-3: Wait for S3 Retrieval
-
-Monitor retrieval progress in AWS Console or via CLI. Objects will temporarily return to S3 Standard tier for 1 day.
-
-#### Day 3: Rebuild Cluster Infrastructure
-
-```bash
-# 1. SSH to control plane
-ssh pi@yoda.local
-
-# 2. Run infrastructure rebuild (from Mac)
-cd /Users/jason/Desktop/Development/seadogger-homelab-pro/core/ansible
-ansible-playbook main.yml --tags infrastructure
-
-# This will deploy:
-# - K3s control plane and workers
-# - Rook-Ceph storage
-# - MetalLB
-# - ArgoCD
-# - Prometheus
-```
-
-#### Day 3-4: Restore Applications
-
-```bash
-# 1. Deploy Velero (from Pro repo)
-cd /Users/jason/Desktop/Development/seadogger-homelab-pro/ansible
-ansible-playbook main.yml
-
-# 2. Verify Velero sees backups
-velero backup get
-
-# 3. Restore all namespaces one by one
-velero restore create nextcloud-restore --from-backup daily-backup-20251004020000 --include-namespaces nextcloud
-velero restore create n8n-restore --from-backup daily-backup-20251004020000 --include-namespaces n8n
-velero restore create jellyfin-restore --from-backup daily-backup-20251004020000 --include-namespaces jellyfin
-velero restore create openwebui-restore --from-backup daily-backup-20251004020000 --include-namespaces openwebui
-velero restore create pihole-restore --from-backup daily-backup-20251004020000 --include-namespaces pihole
-velero restore create portal-restore --from-backup daily-backup-20251004020000 --include-namespaces portal
-
-# 4. Monitor all restores
-velero restore get
-kubectl get pods --all-namespaces
-```
-
-#### Day 4-5: Validate and Resume Operations
-
-```bash
-# Verify applications
-kubectl get deployments --all-namespaces
-kubectl get pvc --all-namespaces
-
-# Test application functionality
-curl https://nextcloud.seadogger-homelab
-curl https://n8n.seadogger-homelab
-curl https://jellyfin.seadogger-homelab
-
-# Resume normal backup schedules
-kubectl get schedules -n velero
-
-# Verify backups are running
-velero backup get
-```
-
-## Monitoring and Verification
-
-### Check Backup Health
-
-```bash
-# View backup schedules
-kubectl get schedules -n velero
-
-# View all backups
-kubectl get backups -n velero
-
-# View backup details
-velero backup describe daily-backup-20251004020000
-
-# Check Velero server logs
-kubectl logs deployment/velero -n velero
-
-# Check node-agent status (Kopia uploaders)
-kubectl get pods -n velero -l name=node-agent
-kubectl logs <node-agent-pod> -n velero
-```
-
-### Test Restore Regularly
-
-**Best Practice**: Perform quarterly restore drills
-
-```bash
-# Create test namespace
-kubectl create namespace restore-test
-
-# Perform test restore
-velero restore create quarterly-drill-$(date +%Y%m%d) \
-  --from-backup daily-backup-$(date +%Y%m%d)020000 \
-  --include-namespaces n8n \
-  --namespace-mappings n8n:restore-test
-
-# Verify restored data
-kubectl get all -n restore-test
-kubectl exec -it <pod> -n restore-test -- ls -lah /data
-
-# Cleanup
-kubectl delete namespace restore-test
-```
-
-## Troubleshooting
-
-### Issue: Restore Stuck in "InProgress"
-
-```bash
-# Check restore details
-velero restore describe <restore-name>
-
-# Check restore logs
-velero restore logs <restore-name>
-
-# Check node-agent logs (Kopia)
-kubectl logs <node-agent-pod> -n velero
-
-# Check for PVC binding issues
-kubectl get pvc -n <namespace>
-kubectl describe pvc <pvc-name> -n <namespace>
-```
-
-### Issue: PVC Not Restoring
-
-```bash
-# Verify backup includes PVCs
-velero backup describe <backup-name> | grep "Persistent Volumes"
-
-# Check if node-agent pods are running
-kubectl get pods -n velero -l name=node-agent
-
-# Verify defaultVolumesToFsBackup is enabled
-kubectl get backup <backup-name> -n velero -o yaml | grep defaultVolumesToFsBackup
-
-# Check Kopia repository status
-kubectl exec <node-agent-pod> -n velero -- kopia repository status
-```
-
-### Issue: S3 Deep Archive Objects Not Available
-
-```bash
-# Check object storage class
-aws s3api head-object \
-  --bucket seadogger-homelab-backup \
-  --key velero/backups/<backup-name>/velero-backup.json
-
-# Check if retrieval is ongoing
-aws s3api head-object \
-  --bucket seadogger-homelab-backup \
-  --key <object-key> \
-  | jq '.Restore'
-
-# Output:
-# "ongoing-request": "true" = still retrieving
-# "expiry-date": "<date>" = available until this date
-```
-
-### Issue: "Backup Not Found" Error
-
-```bash
-# Verify backup exists in S3
-aws s3 ls s3://seadogger-homelab-backup/velero/backups/
-
-# Resync Velero backup location
-velero backup-location get
-kubectl delete backupstoragelocation default -n velero
-# Velero will recreate it automatically
-
-# Wait for sync
-velero backup get
 ```
 
 ## Cost Considerations
@@ -535,15 +417,6 @@ velero backup get
 - [13. ADR Index - ADR-009](./13-ADR-Index.md) - K8up to Velero migration decision
 - [Velero Documentation](https://velero.io/docs/v1.16/) - Official Velero docs
 - [Kopia Documentation](https://kopia.io/docs/) - Official Kopia docs
-
-## Contact and Support
-
-For disaster recovery assistance:
-1. Review this documentation thoroughly
-2. Check Velero UI at https://velero.seadogger-homelab
-3. Consult Velero server logs: `kubectl logs deployment/velero -n velero`
-4. Review backup schedules: `kubectl get schedules -n velero`
-5. If needed, contact cluster administrator
 
 ---
 
