@@ -233,67 +233,82 @@ sequenceDiagram
 
 ### Backup Schedule
 
-| Application | PVCs Backed Up | Frequency | Time (PT) | Retention |
-|------------|----------------|-----------|-----------|-----------|
-| **Nextcloud** | nextcloud-nextcloud (CephFS EC) | Daily | 2:00 AM | 7 daily, 4 weekly, 6 monthly |
-| **N8N** | n8n-main-persistence (RBD) | Daily | 3:00 AM | 14 daily, 8 weekly, 6 monthly |
-| **Jellyfin** | jellyfin-config, jellyfin-cache (CephFS EC) | Weekly (Sunday) | 4:00 AM | 4 weekly, 12 monthly |
+**Week 1 Strategy** (Initial 3.3TB Upload):
+| Schedule | Namespaces | Frequency | Time | TTL |
+|----------|-----------|-----------|------|-----|
+| `weekly-nextcloud-backup` | nextcloud | Weekly (Sunday) | 2:00 AM | 30 days |
+| `daily-backup` | openwebui, n8n, jellyfin, pihole, portal | Daily | 2:00 AM | 30 days |
+
+**Week 2+ Strategy** (After Initial Upload Completes):
+| Schedule | Namespaces | Frequency | Time | TTL |
+|----------|-----------|-----------|------|-----|
+| `daily-backup` | nextcloud, openwebui, n8n, jellyfin, pihole, portal | Daily | 2:00 AM | 30 days |
 
 **Notes**:
-- Jellyfin media library (read-only mount) is NOT backed up due to size (media is replaceable)
-- All backups include weekly integrity checks and automated pruning
-- Prometheus alerts trigger on backup failures
+- Jellyfin media volume (read-only Nextcloud mount) excluded via `backup.velero.io/backup-volumes-excludes: media`
+- Week 1: Nextcloud weekly to allow 48-hour initial 3.3TB upload window
+- Week 2+: Change Nextcloud to daily after initial backup completes
+- All PVCs backed up automatically via `defaultVolumesToFsBackup: true`
 
-### S3 Bucket Structure
+### Viewing Backups
 
-All namespaces share a single S3 bucket (`seadogger-homelab-backup`) because Restic deduplicates data automatically. The bucket uses Restic's encrypted repository format:
-
+**Velero UI**:
 ```
-seadogger-homelab-backup/
-├── config              # Repository configuration (encrypted)
-├── keys/               # Encryption keys
-├── data/               # Backup data chunks (encrypted, deduplicated)
-├── index/              # Index files for fast searches (encrypted)
-└── snapshots/          # Snapshot metadata (encrypted)
+https://velero.seadogger-homelab
 ```
 
-**All data is encrypted** with the Restic password before upload. Even identical files across namespaces are stored only once (deduplication).
-
-### Viewing Backups by Namespace
-
-**Method 1 - Kubernetes Snapshots** (easiest):
+**CLI - List Backups**:
 ```bash
-kubectl get snapshots -A
+ssh pi@yoda.local
+kubectl get backups -n velero
+kubectl get schedules -n velero
 ```
 
-**Method 2 - Restic CLI** (most detailed):
+**CLI - View Backup Details**:
 ```bash
-# Install on Mac
-brew install restic
+# Get backup details
+kubectl describe backup <backup-name> -n velero
 
-# Set credentials from config.yml
-export AWS_ACCESS_KEY_ID="<k8up_aws_access_key>"
-export AWS_SECRET_ACCESS_KEY="<k8up_aws_secret_key>"
-export RESTIC_PASSWORD="<k8up_restic_password>"
-export RESTIC_REPOSITORY="s3:https://s3.amazonaws.com/seadogger-homelab-backup"
+# Get backup logs
+kubectl logs deployment/velero -n velero
 
-# View snapshots (Host column = namespace)
-restic snapshots
-
-# Browse files in snapshot
-restic ls <snapshot-id>
+# Get node-agent status
+kubectl get pods -n velero -l name=node-agent
 ```
 
 ### Cost Estimate
 
-- **Storage**: $0.00099/GB/month ($1/TB/month)
-- **Estimated 1TB backups**: ~$1/month
-- **Restore cost** (Bulk retrieval): ~$0.02/GB + 12-48 hour wait
-- **Restore cost** (Expedited): ~$0.10/GB + 1-5 minutes wait
+**Glacier Deep Archive**:
+- **Storage**: $0.00099/GB/month ($0.99/TB/month)
+- **3.3TB Nextcloud**: ~$3.27/month
+- **Metadata in S3 Standard**: ~$0.002/month (~100MB)
+- **Total estimated cost**: ~$3.30/month
+
+**Restore Costs**:
+- **Bulk retrieval**: $0.02/GB + 12-48 hour wait
+- **Standard retrieval**: $0.03/GB + 3-5 hour wait
+- **Expedited retrieval**: Not available for Deep Archive
 
 ### Restore Procedures
 
-**IMPORTANT**: S3 Deep Archive has 12-48 hour retrieval time. Plan disaster recovery operations accordingly.
+**IMPORTANT**: S3 Deep Archive has 12-48 hour retrieval time for bulk retrieval. Plan disaster recovery operations accordingly.
+
+**Quick Restore** (Recent backups in S3 Standard):
+```bash
+# List available backups
+kubectl get backups -n velero
+
+# Restore entire namespace
+velero restore create --from-backup <backup-name>
+
+# Restore specific namespace
+velero restore create --from-backup <backup-name> --include-namespaces nextcloud
+```
+
+**Deep Archive Restore** (Backups >7 days old):
+1. Initiate Glacier retrieval (12-48 hours via AWS Console or CLI)
+2. Wait for retrieval completion
+3. Run Velero restore command
 
 For complete restore procedures, see:
 - **[[23-Disaster-Recovery-Restore]]** - Full restore procedures and emergency recovery
@@ -308,7 +323,7 @@ For complete restore procedures, see:
 - **[[23-Disaster-Recovery-Restore]]** - Backup restore procedures
 
 **Related Issues:**
-- [#24 - Disaster Recovery](https://github.com/seadogger-tech/seadogger-homelab/issues/24) - K8up S3 backup implementation (RESOLVED)
+- [#24 - Disaster Recovery](https://github.com/seadogger-tech/seadogger-homelab/issues/24) - Velero S3 backup implementation (RESOLVED)
 - [#50 - Move infrastructure to ArgoCD](https://github.com/seadogger-tech/seadogger-homelab/issues/50) - Rook-Ceph GitOps migration
 
 ![accent-divider.svg](images/accent-divider.svg)
