@@ -6,6 +6,8 @@ controllers:
     pod:
       hostNetwork: true
       dnsPolicy: ClusterFirstWithHostNet
+      annotations:
+        backup.velero.io/backup-volumes-excludes: media
       securityContext:
         runAsUser: 1000
         runAsGroup: 1000
