@@ -21,7 +21,7 @@
           targetRevision: "1.15.1"
           helm:
             valueFiles:
-              - https://raw.githubusercontent.com/seadogger/seadogger-homelab/master/deployments/n8n/n8n-values.yaml
+              - https://raw.githubusercontent.com/seadogger-tech/seadogger-homelab/master/deployments/n8n/n8n-values.yaml
         destination:
           server: https://kubernetes.default.svc
           namespace: n8n
@@ -50,12 +50,14 @@
 
 - name: Download n8n IngressRoutes manifest from GitHub
   ansible.builtin.get_url:
-    url: "https://raw.githubusercontent.com/seadogger/seadogger-homelab/master/ingress/traefik-n8n-ingress.yml"
+    url: "https://raw.githubusercontent.com/seadogger-tech/seadogger-homelab/master/ingress/traefik-n8n-ingress.yml"
     dest: "/tmp/traefik-n8n-ingress.yml"
     mode: "0644"
+  tags: n8n
 
 - name: Apply n8n IngressRoutes (no Helm/Argo)
   kubernetes.core.k8s:
     kubeconfig: "{{ KUBECONFIG }}"
     state: present
     src: "/tmp/traefik-n8n-ingress.yml"
+  tags: n8n
