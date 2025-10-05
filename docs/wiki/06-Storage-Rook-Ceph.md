@@ -81,16 +81,155 @@ This comprehensive update ensures the entire storage infrastructure is now corre
 ![accent-divider.svg](images/accent-divider.svg)
 ## Backup Strategy
 
-The cluster implements automated backup of all critical PVCs to AWS S3 Deep Archive using K8up (Kubernetes backup operator based on Restic).
+The cluster implements automated backup of all critical PVCs to AWS S3 Deep Archive using Velero with Kopia for incremental, deduplicated backups.
+
+### Backup Architecture Diagram
+
+The following C4 Container diagram shows the complete Velero backup system architecture:
+
+```mermaid
+graph TB
+    subgraph K8s["🎯 Kubernetes Cluster"]
+        direction TB
+        subgraph VeleroNS["velero namespace"]
+            VeleroServer["Velero Server<br/>Orchestration & Scheduling"]
+            VeleroUI["Velero UI<br/>Management Interface"]
+        end
+
+        subgraph Nodes["Worker Nodes"]
+            NodeAgent1["Node Agent (yoda)<br/>Kopia Uploader"]
+            NodeAgent2["Node Agent (anakin)<br/>Kopia Uploader"]
+            NodeAgent3["Node Agent (obiwan)<br/>Kopia Uploader"]
+            NodeAgent4["Node Agent (rey)<br/>Kopia Uploader"]
+        end
+
+        subgraph Apps["Application Namespaces"]
+            NextcloudPVC["Nextcloud PVC<br/>3.3TB CephFS EC"]
+            N8NPVC["N8N PVC<br/>RBD Block"]
+            JellyfinPVC["Jellyfin PVCs<br/>config + cache"]
+            OtherPVCs["Other PVCs<br/>OpenWebUI, PiHole, etc."]
+        end
+
+        subgraph Storage["Rook-Ceph Storage"]
+            CephFS["CephFS<br/>ceph-fs-data-ec"]
+            CephRBD["RBD Block<br/>ceph-block-data"]
+        end
+    end
+
+    subgraph AWS["☁️ AWS Cloud"]
+        S3Bucket["S3 Bucket<br/>seadogger-homelab-backup<br/>us-east-1"]
+        S3Standard["S3 Standard<br/>Kopia Metadata<br/>~100MB"]
+        DeepArchive["Glacier Deep Archive<br/>Data Blocks<br/>~3.3TB"]
+    end
+
+    VeleroServer -->|"Schedule Trigger<br/>daily-backup: 2 AM<br/>weekly-nextcloud: 2 AM Sun"| NodeAgent1
+    VeleroServer --> NodeAgent2
+    VeleroServer --> NodeAgent3
+    VeleroServer --> NodeAgent4
+
+    NodeAgent1 -->|"Read PVC Data"| NextcloudPVC
+    NodeAgent2 -->|"Read PVC Data"| N8NPVC
+    NodeAgent3 -->|"Read PVC Data"| JellyfinPVC
+    NodeAgent4 -->|"Read PVC Data"| OtherPVCs
+
+    NextcloudPVC --> CephFS
+    N8NPVC --> CephRBD
+    JellyfinPVC --> CephFS
+
+    NodeAgent1 -->|"Upload via Kopia<br/>AES-256 Encrypted<br/>Deduplicated"| S3Bucket
+    NodeAgent2 --> S3Bucket
+    NodeAgent3 --> S3Bucket
+    NodeAgent4 --> S3Bucket
+
+    S3Bucket -->|"Initial Upload"| S3Standard
+    S3Standard -->|"Lifecycle: 7 days"| DeepArchive
+    DeepArchive -->|"Keep Forever<br/>No Deletion"| DeepArchive
+
+    style K8s fill:#1e3a5f,stroke:#4a90e2,stroke-width:3px
+    style VeleroNS fill:#2d5016,stroke:#5a9216,stroke-width:2px
+    style Nodes fill:#7b1fa2,stroke:#9c27b0,stroke-width:2px
+    style Apps fill:#8b4513,stroke:#d2691e,stroke-width:2px
+    style Storage fill:#2d5016,stroke:#5a9216,stroke-width:2px
+    style AWS fill:#1e3a5f,stroke:#4a90e2,stroke-width:3px
+    style S3Bucket fill:#2d5016,stroke:#5a9216,stroke-width:2px
+    style DeepArchive fill:#7b1fa2,stroke:#9c27b0,stroke-width:2px
+```
+
+### Backup Workflow Sequence
+
+The following sequence diagram shows the complete backup lifecycle including Week 1 initial backup strategy and ongoing incremental backups:
+
+```mermaid
+sequenceDiagram
+    participant Schedule as Velero Schedule
+    participant Server as Velero Server
+    participant Agent as Node Agent (Kopia)
+    participant PVC as Nextcloud PVC<br/>3.3TB CephFS
+    participant S3 as S3 Standard
+    participant Glacier as Deep Archive
+
+    Note over Schedule,Glacier: Week 1: Initial Backup (Sunday 2 AM)
+    Schedule->>Server: Trigger weekly-nextcloud-backup
+    Server->>Agent: Start PVC backup
+    Agent->>PVC: Read all files (3.3TB)
+    Agent->>Agent: SHA-256 checksums<br/>Create content blocks
+    Agent->>S3: Upload metadata + blocks<br/>AES-256 encrypted
+    Note over Agent,S3: Upload time: ~48 hours
+
+    Note over S3,Glacier: Day 7: S3 Lifecycle Transition
+    S3->>Glacier: Move data blocks to Deep Archive<br/>Metadata remains in S3 Standard
+    Note over Glacier: Storage cost: $3.30/month for 3.3TB<br/>Metadata cost: $0.002/month
+
+    Note over Schedule,Glacier: Week 2+: Changed to Daily Backups (2 AM)
+    Schedule->>Server: Trigger daily-backup (Nextcloud included)
+    Server->>Agent: Start incremental backup
+    Agent->>PVC: Read changed files only (~100GB)
+    Agent->>Agent: SHA-256 checksums<br/>Compare with metadata
+    Agent->>S3: Upload new blocks only<br/>Reuse existing checksums
+    Note over Agent,S3: Deduplication: Only new/changed data uploaded
+
+    Note over S3,Glacier: Day 14: Second Lifecycle Transition
+    S3->>Glacier: Move new blocks to Deep Archive<br/>Total: 3.4TB in Glacier
+
+    Note over Schedule,Glacier: Month 6: User Adds 500GB Media
+    Schedule->>Server: Daily backup trigger
+    Agent->>PVC: Read new files (500GB)
+    Agent->>S3: Upload 500GB new blocks
+    S3->>Glacier: Move to Deep Archive after 7 days
+    Note over Glacier: Total storage: 3.9TB<br/>Cost: $3.87/month
+
+    Note over Schedule,Glacier: Disaster Recovery: Recent Data
+    Server->>S3: Request backup restore<br/>(recent snapshot)
+    S3-->>Server: Metadata (instant)
+    S3-->>Server: Recent blocks (instant)<br/>Still in S3 Standard
+
+    Note over Schedule,Glacier: Disaster Recovery: Old Data
+    Server->>S3: Request backup restore<br/>(6-month-old snapshot)
+    S3->>Glacier: Initiate retrieval<br/>(Bulk: 12-48 hours, $0.02/GB)
+    Note over Glacier: Wait 12-48 hours
+    Glacier-->>S3: Restore blocks to S3 temp
+    S3-->>Server: Download restored data
+    Server->>PVC: Restore files to cluster
+```
+
+**Key Points:**
+- **Week 1**: Weekly Nextcloud backup (Sunday 2 AM) to allow 48-hour initial upload
+- **Week 2+**: Switch to daily backups for all apps including Nextcloud
+- **Deduplication**: Kopia stores each unique data block once via SHA-256 checksums
+- **Lifecycle**: 7 days in S3 Standard → Glacier Deep Archive forever
+- **Metadata**: Stays in S3 Standard for instant snapshot queries (~100MB)
+- **Recovery Time**: Recent backups (instant), Old backups (12-48 hours)
 
 ### Backup Architecture
 
-- **Operator**: K8up v2.14.0 deployed via ArgoCD
-- **Backend**: Restic (encrypted, deduplicated backups)
+- **Operator**: Velero v1.16.0 deployed via Helm
+- **Node Agent**: Kopia uploader (replaces Restic) for file-level PVC backups
+- **Backend**: AWS S3 with Glacier Deep Archive lifecycle
 - **Storage**: AWS S3 bucket `seadogger-homelab-backup` (us-east-1)
-- **Storage Class**: S3 Deep Archive (objects transition after 1 day)
-- **Encryption**: AES-256 via Restic password
-- **Monitoring**: Prometheus metrics + Grafana dashboard
+- **Lifecycle**: 7 days in S3 Standard → Glacier Deep Archive
+- **Encryption**: AES-256 server-side encryption (AWS S3)
+- **Deduplication**: Kopia content-addressable storage
+- **Monitoring**: Prometheus metrics enabled
 
 ### Backup Schedule
 
