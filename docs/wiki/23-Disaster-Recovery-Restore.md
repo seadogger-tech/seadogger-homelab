@@ -17,13 +17,12 @@ This guide covers disaster recovery procedures for restoring data from Velero ba
 
 | Application | Restore Procedure | Verified | Notes |
 |-------------|------------------|----------|-------|
-| OpenWebUI | Procedure #1 | ✅ | Validated on 10-05-2025 and verified all users, chats, models, and settings were restored. |
+| OpenWebUI | Procedure #1 | ✅ | Validated on 10-05-2025, verified all users, chats, models, and settings were restored in test. |
 | N8N | Procedure #1 | ❌ | **ENCRYPTION KEY MISMATCH**: N8N stores encryption key in both `/home/node/.n8n/config` (PVC) and Kubernetes secret. Restored config file encryption key doesn't match Helm-generated secret causing "Mismatching encryption keys" error. See [Issue #7](https://github.com/seadogger-tech/seadogger-homelab-pro/issues/7) for resolution. |
-| Jellyfin | NA | ❌ | **NON Critical Data**: This application does not contain critical data.  The failover of cluster is fine.  Media is stored in Nextcloud and backed up there |
 | Nextcloud | Procedure #1 | ⏳ | **NOT TESTED**: Large backup (~3.3TB). Requires separate testing due to size and AWS Glacier retrieval time. |
-| Pihole | NA | ✅ | **Stateless App**: Redeploy app the with IaC deployment ansible script and setting pihole deployment to true on config.yml |
-| Portal | NA | ✅ | **Stateless App**: Redeploy app the with IaC deployment ansible script and setting pihole deployment to true on config.yml |
-
+| Pihole | NA | ✅ | **Stateless App**: Redeploy app with IaC deployment ansible script enabling pihole deployment in config.yml |
+| Portal | NA | ✅ | **Stateless App**: Redeploy app with IaC deployment ansible script enabling portal deployment in config.yml |
+| Jellyfin | NA | ✅ | **Non Critical Data**: Erasure Coded CEPH volume allows single drive failover protection.  Critcal media files are stored in Nextcloud and backed up there.  The rest of this app can be restored with some manual configuration inside of the application dashboard |
 
 ## Velero System Backup Architecture Diagram
 
