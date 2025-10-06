@@ -2,6 +2,13 @@
 ![accent-divider.svg](images/accent-divider.svg)
 # Storage Architecture: Rook-Ceph
 
+The cluster's storage is managed by Rook-Ceph, providing both block and filesystem storage. The architecture is designed for a balance of performance, data redundancy, and storage efficiency.
+
+
+## Storage Architecture
+
+Shows Rook-Ceph distributed storage with actual storage classes.
+
 ---
 > **🌙 Diagram Viewing Recommendation**
 >
@@ -11,12 +18,6 @@
 >
 > *Light mode users can still view the diagrams, though colors may appear less vibrant.*
 ---
-
-The cluster's storage is managed by Rook-Ceph, providing both block and filesystem storage. The architecture is designed for a balance of performance, data redundancy, and storage efficiency.
-
-## Storage Architecture
-
-Shows Rook-Ceph distributed storage with actual storage classes.
 
 ```mermaid
 graph TB
@@ -84,7 +85,7 @@ graph TB
 ```
 ![accent-divider.svg](images/accent-divider.svg)
 
-**Storage Classes Details:**
+## Storage Classes
 - **ceph-block-data** (DEFAULT): Block storage with replication (RBD)
   - Used by: N8N (n8n-main-persistence), OpenWebUI (open-webui)
 - **ceph-bucket**: S3-compatible object storage for backups
@@ -98,17 +99,17 @@ graph TB
 
 ![accent-divider.svg](images/accent-divider.svg)
 
-
+## CEPH Dashboard 
 ![ceph-dashboard](images/ceph-dashboard.png)
 
 ![accent-divider.svg](images/accent-divider.svg)
-### CEPH Block Storage
+## CEPH Block Storage
 -   **Pool:** `ceph-block-data` (Replicated, size 3)
 -   **Storage Class:** `ceph-block-data`
 -   **Default:** Yes. This is the default storage class for all general-purpose block storage needs (e.g., application databases).
 
 ![accent-divider.svg](images/accent-divider.svg)
-### CEPH FileSystem Storage
+## CEPH FileSystem Storage
 -   **Filesystem Name:** `ceph-fs`
 -   **Pools:**
     1.  `ceph-fs-metadata` (Replicated, size 3): Stores filesystem metadata.
@@ -130,7 +131,7 @@ graph TB
 
 \* Failure tolerance is indicative; exact resilience depends on your Ceph pool replica/EC settings.
 ![accent-divider.svg](images/accent-divider.svg)
-### Storage System (Rook-Ceph)
+## Storage System (Rook-Ceph)
    - Status: HEALTH_OK
    - Capacity: 11 TiB total available
    - Capacity: 3.8TB in replicated pools
@@ -138,7 +139,7 @@ graph TB
    - Configuration:
 
 ![accent-divider.svg](images/accent-divider.svg)
-### Implementation and IaaC 
+## Implementation and IaaC 
 
 The new architecture was implemented by making the following changes to the `seadogger-homelab` Infrastructure-as-Code repository:
 
