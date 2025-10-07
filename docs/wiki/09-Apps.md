@@ -29,6 +29,30 @@ User facing applications that are applied thru ArgoCD on top of the k3s tech sta
 - Supports **SSE streaming**, **Chat Completions**, **Embeddings**, **Tool/function calling**, **Multimodal**, **Models API**, **Cross-region inference**, and **Application Inference Profiles**.
 - **Easy deployment:** 1-click CloudFormation to **ALB + Lambda** or **ALB + Fargate**; also runs **locally** or in **containers/Kubernetes**.
 - Regions & models: follows **Bedrock-supported regions**; use the **Models API** to discover availability.
+
+### Deployment Architecture
+- **Automated Upstream Tracking:** GitHub Actions workflow rebuilds image every 6 hours from [aws-samples/bedrock-access-gateway](https://github.com/aws-samples/bedrock-access-gateway)
+- **Multi-arch Support:** Built for `linux/amd64` and `linux/arm64` (Raspberry Pi 5 compatible)
+- **Image Registry:** `ghcr.io/seadogger-tech/aws-bedrock-gateway:latest`
+- **Access:** MetalLB LoadBalancer at `192.168.1.242:6880`
+- **Integration:** Works seamlessly with OpenWebUI for chat interface
+
+### Configuration Requirements
+1. **AWS Bedrock Model Access:**
+   - Enable models in AWS Bedrock console for the deployment region (us-west-2)
+   - Cross-region inference profiles (`us.*` prefix) require separate access grants
+   - Example: `us.anthropic.claude-opus-4-1-20250805-v1:0` requires both base model and inference profile access
+
+2. **IAM Permissions:**
+   - User must have `AmazonBedrockFullAccess` policy or equivalent
+   - Credentials stored as Kubernetes secret in `bedrock-gateway` namespace
+   - Environment variables: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`
+
+3. **Known Issues & Solutions:**
+   - **Model returns AccessDeniedException:** Enable the specific model in AWS Bedrock console for us-west-2
+   - **Requests hang without response:** Restart deployment to pull latest gateway image (`kubectl rollout restart deployment/bedrock-access-gateway -n bedrock-gateway`)
+   - **Parameter validation errors:** Upstream fixes auto-deployed (e.g., Claude Sonnet 4.5 temperature/top_p conflict fixed in latest)
+
 ![Bedrock](images/bedrock.png)
 
 
