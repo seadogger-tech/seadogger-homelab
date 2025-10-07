@@ -1,0 +1,33 @@
+---
+# HTTP - Redirect to HTTPS
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: traefik-dashboard-http
+  namespace: kube-system
+spec:
+  entryPoints: ["web"]
+  routes:
+    - match: Host(`traefik.seadogger-homelab`)
+      kind: Rule
+      services:
+        - name: api@internal
+          kind: TraefikService
+
+---
+# HTTPS - Traefik Dashboard
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: traefik-dashboard-https
+  namespace: kube-system
+spec:
+  entryPoints: ["websecure"]
+  routes:
+    - match: Host(`traefik.seadogger-homelab`)
+      kind: Rule
+      services:
+        - name: api@internal
+          kind: TraefikService
+  tls:
+    secretName: traefik-dashboard-local-tls

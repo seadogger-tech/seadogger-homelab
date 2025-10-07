@@ -121,3 +121,7 @@
     - name: Deploy JellyFin
       import_tasks: tasks/jellyfin_deploy.yml
       when: enable_jellyfin | default(true)
+
+    - name: Deploy Traefik Dashboard
+      import_tasks: tasks/traefik_dashboard_deploy.yml
+      when: enable_traefik_dashboard | default(true)

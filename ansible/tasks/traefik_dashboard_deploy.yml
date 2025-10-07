@@ -1,0 +1,51 @@
+---
+# Step 1: Set KUBECONFIG globally
+- name: Set KUBECONFIG global
+  ansible.builtin.set_fact:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+
+# Step 2: Configure Traefik to enable API/dashboard
+- name: Create Traefik HelmChartConfig to enable API
+  kubernetes.core.k8s:
+    kubeconfig: "{{ KUBECONFIG }}"
+    state: present
+    definition:
+      apiVersion: helm.cattle.io/v1
+      kind: HelmChartConfig
+      metadata:
+        name: traefik
+        namespace: kube-system
+      spec:
+        valuesContent: |
+          additionalArguments:
+            - "--api.insecure=true"
+
+# Step 3: Wait for Traefik to restart with new config
+- name: Wait for Traefik deployment to be ready
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ KUBECONFIG }}"
+    kind: Deployment
+    name: traefik
+    namespace: kube-system
+  register: traefik_deployment
+  retries: 30
+  delay: 5
+  until: >
+    traefik_deployment.resources | length > 0 and
+    traefik_deployment.resources[0].status.readyReplicas is defined and
+    traefik_deployment.resources[0].status.readyReplicas > 0
+  changed_when: false
+
+# Step 4: Download Traefik dashboard IngressRoute manifest from GitHub
+- name: Download Traefik dashboard IngressRoute manifest from GitHub
+  ansible.builtin.get_url:
+    url: "https://raw.githubusercontent.com/seadogger/seadogger-homelab/master/ingress/traefik-dashboard-ingress.yml"
+    dest: "/tmp/traefik-dashboard-ingress.yml"
+    mode: "0644"
+
+# Step 5: Apply Traefik dashboard IngressRoute
+- name: Apply Traefik dashboard IngressRoute
+  kubernetes.core.k8s:
+    kubeconfig: "{{ KUBECONFIG }}"
+    state: present
+    src: "/tmp/traefik-dashboard-ingress.yml"
