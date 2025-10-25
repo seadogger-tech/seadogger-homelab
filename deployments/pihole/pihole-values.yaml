@@ -70,7 +70,7 @@ adlists:
     - https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/nrd14-8.txt
     - https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/nrd21-15.txt
     - https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/nrd28-22.txt
-    - hhttps://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/nrd35-29.txt
+    - https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/nrd35-29.txt
 whitelist:
     - https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/whitelist-referral-native.txt
 
@@ -89,3 +89,6 @@ dnsmasq:
     - address=/portal.seadogger-homelab/192.168.1.241
     - address=/velero.seadogger-homelab/192.168.1.241
     - address=/traefik.seadogger-homelab/192.168.1.241
+    - address=/octoprint.seadogger-homelab/192.168.1.77
+    - address=/hdhomerun.seadogger-homelab/192.168.1.70
+    - address=/gateway.seadogger-homelab/192.168.1.1
