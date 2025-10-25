@@ -44,7 +44,7 @@ resources:
     memory: 256Mi
 
 adlists:
-    - https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/pro.plus.txt
+    - https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/ultimate.txt
     - https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/fake.txt
     - https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/tif.txt
     - https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/nsfw.txt
@@ -52,11 +52,11 @@ adlists:
     - https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/doh.txt
     - https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/nosafesearch.txt
     - https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/hoster.txt
+    - https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/urlshortener.txt
     - https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/spam-tlds-adblock.txt
     - https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/anti.piracy.txt
     - https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/gambling.txt
     - https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/dyndns.txt
-    - https://raw.githubusercontent.com/DandelionSprout/adfilt/master/Alternate%20versions%20Anti-Malware%20List/AntiMalwareAdGuardHome.txt
     - https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/native.huawei.txt
     - https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/native.samsung.txt
     - https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/native.tiktok.txt
@@ -66,8 +66,11 @@ adlists:
     - https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/native.vivo.txt
     - https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/native.oppo-realme.txt
     - https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/native.xiaomi.txt
-    - https://raw.githubusercontent.com/xRuffKez/NRD/refs/heads/main/lists/30-day/adblock/nrd-30day_part_aa
-    - https://raw.githubusercontent.com/xRuffKez/NRD/refs/heads/main/lists/30-day/adblock/nrd-30day_part_ab
+    - https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/nrd7.txt
+    - https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/nrd14-8.txt
+    - https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/nrd21-15.txt
+    - https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/nrd28-22.txt
+    - hhttps://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/nrd35-29.txt
 whitelist:
     - https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/whitelist-referral-native.txt
 
