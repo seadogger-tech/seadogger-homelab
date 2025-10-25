@@ -63,7 +63,7 @@
 # --- Apply your CRs (no bogus wait_condition) ---
 - name: Apply MetalLB Custom Resources (IPAddressPools, L2Advertisements)
   kubernetes.core.k8s:
-    src: "https://raw.githubusercontent.com/seadogger/seadogger-homelab/refs/heads/master/deployments/metallb/metallb-values.yaml"
+    src: "https://raw.githubusercontent.com/seadogger-tech/seadogger-homelab/refs/heads/master/deployments/metallb/metallb-values.yaml"
     state: present
     kubeconfig: "{{ KUBECONFIG }}"
     apply: true

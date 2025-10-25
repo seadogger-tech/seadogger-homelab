@@ -39,7 +39,7 @@
 # Step 4: Download Traefik dashboard IngressRoute manifest from GitHub
 - name: Download Traefik dashboard IngressRoute manifest from GitHub
   ansible.builtin.get_url:
-    url: "https://raw.githubusercontent.com/seadogger/seadogger-homelab/master/ingress/traefik-dashboard-ingress.yml"
+    url: "https://raw.githubusercontent.com/seadogger-tech/seadogger-homelab/master/ingress/traefik-dashboard-ingress.yml"
     dest: "/tmp/traefik-dashboard-ingress.yml"
     mode: "0644"
 

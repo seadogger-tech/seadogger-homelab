@@ -101,7 +101,7 @@
 
 - name: Download ArgoCD IngressRoutes manifest from GitHub
   ansible.builtin.get_url:
-    url: "https://raw.githubusercontent.com/seadogger/seadogger-homelab/master/ingress/traefik-argocd-ingress.yml"
+    url: "https://raw.githubusercontent.com/seadogger-tech/seadogger-homelab/master/ingress/traefik-argocd-ingress.yml"
     dest: "/tmp/traefik-argocd-ingress.yml"
     mode: "0644"
 

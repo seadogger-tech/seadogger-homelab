@@ -23,7 +23,7 @@
           targetRevision: "7.0.2"
           helm:
             valueFiles:
-              - https://raw.githubusercontent.com/seadogger/seadogger-homelab/master/deployments/nextcloud/nextcloud-values.yaml
+              - https://raw.githubusercontent.com/seadogger-tech/seadogger-homelab/master/deployments/nextcloud/nextcloud-values.yaml
         destination:
           server: https://kubernetes.default.svc
           namespace: nextcloud
@@ -47,7 +47,7 @@
 
 - name: Download Nextcloud IngressRoutes manifest from GitHub
   ansible.builtin.get_url:
-    url: "https://raw.githubusercontent.com/seadogger/seadogger-homelab/master/ingress/traefik-nextcloud-ingress.yml"
+    url: "https://raw.githubusercontent.com/seadogger-tech/seadogger-homelab/master/ingress/traefik-nextcloud-ingress.yml"
     dest: "/tmp/traefik-nextcloud-ingress.yml"
     mode: "0644"
 
