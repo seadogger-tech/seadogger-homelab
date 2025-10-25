@@ -45,7 +45,7 @@
           spec:
             project: default
             source:
-              repoURL: https://github.com/seadogger/seadogger-homelab
+              repoURL: https://github.com/seadogger-tech/seadogger-homelab
               path: deployments/bedrock-access-gateway  # Ensure this path contains the metallb-values.yaml file as a manifest
               targetRevision: HEAD
             destination:
