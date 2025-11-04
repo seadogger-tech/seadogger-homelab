@@ -13,7 +13,7 @@ serviceWeb:
 serviceDns:
   loadBalancerIP: 192.168.1.250
   type: LoadBalancer
-  externalTrafficPolicy: Cluster
+  externalTrafficPolicy: Local
   annotations:
     metallb.universe.tf/allow-shared-ip: "pihole-shared-ip"
 
@@ -73,6 +73,19 @@ adlists:
     - https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/nrd35-29.txt
 whitelist:
     - https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/whitelist-referral-native.txt
+    - graph.facebook.com
+    - web.facebook.com
+    - xp.apple.com
+    - facebook.com
+    - fbcdn.net
+    - connect.facebook.net
+    - ecsv2.roblox.com
+    - nexus-websocket-a.intercom.io
+    - xboxlive.com
+    - xbox.com
+    - xboxservices.com
+    - scorecardresearch.com
+    - dat.xboxlive.com
 
 
 dnsmasq:
