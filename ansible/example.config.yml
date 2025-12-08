@@ -34,7 +34,13 @@ manual_install_jellyfin: true
 dashboard_password: "YourSecurePasswordHere"
 aws_bedrock_api_key_id: "YOUR_AWS_ACCESS_KEY_ID_HERE"
 aws_bedrock_api_access_key: "YOUR_AWS_SECRET_ACCESS_KEY_HERE"
-xmltv_stream: "https://api.hdhomerun.com/api/xmltv?DeviceAuth=YOUR_HDHOMERUN_ACCESS_KEY"
+
+# --- HDHomeRun Credentials (for Jellyfin XMLTV Proxy) ---
+# Note: The XMLTV proxy deployment is managed in deployments/jellyfin/xmltv-proxy.yaml
+# Credentials are provided via a Kubernetes Secret created externally (not via this Ansible)
+# The proxy serves uncompressed XMLTV at: http://xmltv-proxy.jellyfin/xmltv.xml
+hdhomerun_email: "YOUR_EMAIL@example.com"
+hdhomerun_device_ids: "YOUR_DEVICE_ID_HERE"
 
 
 # ==============================================================================
