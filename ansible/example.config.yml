@@ -147,3 +147,5 @@ enable_openwebui: "{{ cold_start_stage_3_install_applications | bool and manual_
 enable_n8n: "{{ cold_start_stage_3_install_applications | bool and manual_install_n8n | bool }}"
 enable_nextcloud: "{{ cold_start_stage_3_install_applications | bool and manual_install_nextcloud | bool }}"
 enable_jellyfin: "{{ cold_start_stage_3_install_applications | bool and manual_install_jellyfin | bool }}"
+enable_jellyfin_secrets: "{{ cold_start_stage_3_install_applications | bool and manual_install_jellyfin | bool }}"
+enable_jellyfin_xmltv_proxy: "{{ cold_start_stage_3_install_applications | bool and manual_install_jellyfin | bool }}"

@@ -1,0 +1,41 @@
+- name: Deploy Jellyfin XMLTV Proxy
+  vars:
+    kubeconfig_path: /etc/rancher/k3s/k3s.yaml
+    jellyfin_namespace: jellyfin
+    proxy_manifest_url: "https://raw.githubusercontent.com/seadogger-tech/seadogger-homelab/master/deployments/jellyfin/xmltv-proxy.yaml"
+  block:
+    - name: Ensure jellyfin namespace exists
+      kubernetes.core.k8s:
+        state: present
+        kubeconfig: "{{ kubeconfig_path }}"
+        definition:
+          apiVersion: v1
+          kind: Namespace
+          metadata:
+            name: "{{ jellyfin_namespace }}"
+
+    - name: Fetch XMLTV Proxy manifest from GitHub
+      ansible.builtin.get_url:
+        url: "{{ proxy_manifest_url }}"
+        dest: "/tmp/xmltv-proxy.yaml"
+        mode: "0644"
+
+    - name: Apply XMLTV Proxy manifest
+      kubernetes.core.k8s:
+        state: present
+        kubeconfig: "{{ kubeconfig_path }}"
+        src: "/tmp/xmltv-proxy.yaml"
+
+    - name: Wait for XMLTV Proxy deployment to be ready
+      kubernetes.core.k8s_info:
+        kubeconfig: "{{ kubeconfig_path }}"
+        api_version: apps/v1
+        kind: Deployment
+        name: xmltv-proxy
+        namespace: "{{ jellyfin_namespace }}"
+      register: proxy_deployment
+      retries: 20
+      delay: 5
+      until: proxy_deployment.resources | length > 0 and
+             proxy_deployment.resources[0].status.readyReplicas is defined and
+             proxy_deployment.resources[0].status.readyReplicas >= 1

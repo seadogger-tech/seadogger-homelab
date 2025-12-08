@@ -118,9 +118,17 @@
       import_tasks: tasks/nextcloud_deploy.yml
       when: enable_nextcloud | default(true)
 
+    - name: Deploy JellyFin Secrets
+      import_tasks: tasks/jellyfin_secrets.yml
+      when: enable_jellyfin_secrets | default(true)
+
     - name: Deploy JellyFin
       import_tasks: tasks/jellyfin_deploy.yml
       when: enable_jellyfin | default(true)
+
+    - name: Deploy JellyFin XMLTV Proxy
+      import_tasks: tasks/jellyfin_xmltv_proxy_deploy.yml
+      when: enable_jellyfin_xmltv_proxy | default(true)
 
     - name: Deploy Traefik Dashboard
       import_tasks: tasks/traefik_dashboard_deploy.yml
