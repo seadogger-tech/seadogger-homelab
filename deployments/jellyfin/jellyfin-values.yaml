@@ -86,7 +86,7 @@ persistence:
       - path: /dev/video12
 
   # V4L2 Hardware Acceleration - Render device
-  renderD128:
+  renderd128:
     enabled: true
     type: hostPath
     hostPath: /dev/dri/renderD128
