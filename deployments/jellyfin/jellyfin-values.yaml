@@ -12,7 +12,8 @@ controllers:
         runAsUser: 1000
         runAsGroup: 1000
         fsGroup: 1000
-        supplementalGroups: [33]
+        # Group 33 = www-data, Group 44 = video (for V4L2 hardware acceleration)
+        supplementalGroups: [33, 44]
     containers:
       app:
         image:
@@ -24,6 +25,9 @@ controllers:
         resources:
           requests: { cpu: "200m", memory: "512Mi" }
           limits:   { cpu: "2",    memory: "4Gi" }
+        securityContext:
+          privileged: false
+          allowPrivilegeEscalation: false
 
 service:
   main:
@@ -58,3 +62,33 @@ persistence:
     globalMounts:
       - path: /media
         readOnly: true
+
+  # V4L2 Hardware Acceleration - Video decode devices
+  video10:
+    enabled: true
+    type: hostPath
+    hostPath: /dev/video10
+    globalMounts:
+      - path: /dev/video10
+
+  video11:
+    enabled: true
+    type: hostPath
+    hostPath: /dev/video11
+    globalMounts:
+      - path: /dev/video11
+
+  video12:
+    enabled: true
+    type: hostPath
+    hostPath: /dev/video12
+    globalMounts:
+      - path: /dev/video12
+
+  # V4L2 Hardware Acceleration - Render device
+  renderD128:
+    enabled: true
+    type: hostPath
+    hostPath: /dev/dri/renderD128
+    globalMounts:
+      - path: /dev/dri/renderD128
