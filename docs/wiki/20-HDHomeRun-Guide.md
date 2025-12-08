@@ -1,336 +1,280 @@
 ![wiki-banner.svg](images/wiki-banner.svg)
 ![accent-divider.svg](images/accent-divider.svg)
-# HDHomeRun Guide Utility
+# HDHomeRun Guide Integration
 
-A Python utility that fetches the HDHomeRun XMLTV guide using the network device's DeviceAuth code to query the HDHomeRun API. The guide is saved to Nextcloud storage for use with Jellyfin.
+Integration of HDHomeRun XMLTV guide data with Jellyfin using an in-cluster HTTP proxy that works around Jellyfin's gzip decompression bug.
 
-> **⚠️ Important:** The guide file **must** be written to Nextcloud storage (not `/media`). Jellyfin's `/media` mount is **read-only**. Use the Kubernetes CronJob method below for automated updates.
+> **⚠️ Important:** Jellyfin cannot parse gzip-compressed XMLTV data from the HDHomeRun API. We use an in-cluster proxy that serves uncompressed XMLTV to Jellyfin.
 
 ![accent-divider.svg](images/accent-divider.svg)
 ## Overview
 
-This script automates the process of downloading EPG (Electronic Program Guide) data from HDHomeRun devices, making it easy to integrate live TV guide information into Jellyfin via Nextcloud.
+This system provides automated EPG (Electronic Program Guide) data from HDHomeRun devices to Jellyfin using a lightweight HTTP proxy deployed in the Jellyfin namespace.
 
-**Use Cases:**
-- Jellyfin live TV guide integration
-- Automated EPG updates for media servers
-- Offline TV guide storage
+**Architecture:**
+- **XMLTV Proxy** runs in the `jellyfin` namespace
+- **Fetches** from HDHomeRun API with `Accept-Encoding: identity` (no gzip)
+- **Serves** uncompressed XMLTV to Jellyfin at `http://xmltv-proxy.jellyfin/xmltv.xml`
+- **Credentials** stored in Kubernetes Secret (managed via Ansible)
 
-**Storage Architecture:**
-- **Nextcloud** owns the data at `/media/data/HomeMedia/files/Live_TV_Guide/xmltv.xml` (www-data UID:33)
-- **Jellyfin** reads the file via read-only `/media` mount
-- **Updates** must write to Nextcloud namespace with proper permissions
+**Why a Proxy?**
+Jellyfin has a bug where it sends `Accept-Encoding: gzip` to XMLTV URLs but fails to decompress the response. The HDHomeRun API returns gzip-compressed data by default, causing Jellyfin to fail with "Data at the root level is invalid" errors. The proxy solves this by explicitly requesting uncompressed data.
 
 ![accent-divider.svg](images/accent-divider.svg)
 ## Features
 
-- **Configurable discovery endpoint** – Point the script at any HDHomeRun device on your network
-- **Configurable target** – Write the XML to any writable file path
-- **No external dependencies** – Uses only Python standard library (`urllib`, `argparse`)
-- **Kubernetes CronJob ready** – Designed for automated scheduling in the cluster
+- **Gzip workaround** – Explicitly requests uncompressed XMLTV data
+- **Lightweight** – Python HTTP server in a 20MB Alpine container
+- **Always fresh** – Fetches latest guide data on each Jellyfin request
+- **Credential management** – Stored in Kubernetes Secret via Ansible
+- **Low resources** – 50m CPU / 64Mi RAM requests
 
 ![accent-divider.svg](images/accent-divider.svg)
-## Location
+## Components
 
-The script is located in the repository at:
+### 1. XMLTV Proxy Deployment
+**Location:** `deployments/jellyfin/xmltv-proxy.yaml`
 
-```
-seadogger-homelab-pro/core/useful_scripts/fetch_hdhomerun_guide.py
-```
+- **ConfigMap:** Python HTTP server script
+- **Deployment:** Single replica pod running `python:3.11-alpine`
+- **Service:** ClusterIP at `xmltv-proxy.jellyfin` on port 80
+- **Environment:** Credentials loaded from `hdhomerun-credentials` Secret
+
+### 2. Credentials Management
+**Location:** `ansible/tasks/jellyfin_secrets.yml`
+
+Creates the `hdhomerun-credentials` Secret from `ansible/config.yml` variables:
+- `hdhomerun_email` - HDHomeRun account email
+- `hdhomerun_device_ids` - Comma-separated device IDs
+
 
 ![accent-divider.svg](images/accent-divider.svg)
-## Prerequisites
+## Deployment
 
-- Python 3.8+ (uses `urllib` and `argparse` from stdlib)
-- HDHomeRun device on your network
-- Network access to HDHomeRun device
-- Write access to Nextcloud storage (for automated updates)
+### Step 1: Configure Credentials
 
-![accent-divider.svg](images/accent-divider.svg)
-## Automated Updates (Recommended)
-
-### Using Kubernetes CronJob
-
-Deploy as a CronJob that writes to Nextcloud storage (accessible to Jellyfin):
+Add your HDHomeRun credentials to `ansible/config.yml`:
 
 ```yaml
-apiVersion: batch/v1
-kind: CronJob
-metadata:
-  name: hdhomerun-guide-fetch
-  namespace: nextcloud
-spec:
-  schedule: "0 */6 * * *"  # Every 6 hours
-  jobTemplate:
-    spec:
-      template:
-        spec:
-          securityContext:
-            runAsUser: 33      # www-data user
-            runAsGroup: 33     # www-data group
-            fsGroup: 33
-          containers:
-          - name: fetch-guide
-            image: python:3.11-slim
-            command:
-            - python
-            - /scripts/fetch_hdhomerun_guide.py
-            - --discover-url
-            - http://192.168.1.70/discover.json
-            - --target
-            - /nextcloud/data/HomeMedia/files/Live_TV_Guide/xmltv.xml
-            volumeMounts:
-            - name: nextcloud-data
-              mountPath: /nextcloud/data
-            - name: script
-              mountPath: /scripts
-          volumes:
-          - name: nextcloud-data
-            persistentVolumeClaim:
-              claimName: nextcloud-nextcloud
-          - name: script
-            configMap:
-              name: hdhomerun-script
-          restartPolicy: OnFailure
+# --- HDHomeRun Credentials (for Jellyfin XMLTV Proxy) ---
+hdhomerun_email: "your-email@example.com"
+hdhomerun_device_ids: "YOUR_DEVICE_ID"
 ```
 
-**Key Configuration:**
-- **Namespace:** `nextcloud` (has write access to Nextcloud PVC)
-- **User/Group:** `33` (www-data) to match Nextcloud file permissions
-- **Mount Path:** `/nextcloud/data` (Nextcloud PVC root)
-- **Target File:** `/nextcloud/data/HomeMedia/files/Live_TV_Guide/xmltv.xml`
-- **PVC:** `nextcloud-nextcloud` (Nextcloud's storage)
+> **Note:** Find your Device ID on the [HDHomeRun website](https://my.hdhomerun.com/) or on the device label.
 
-### Creating the ConfigMap
+### Step 2: Create Kubernetes Secret
 
-Before deploying the CronJob, create a ConfigMap with the script:
+Run the Ansible playbook to create the Secret in the jellyfin namespace:
 
 ```bash
-# From the repository root
-kubectl create configmap hdhomerun-script \
-  --from-file=fetch_hdhomerun_guide.py=./useful_scripts/fetch_hdhomerun_guide.py \
-  -n nextcloud
-
-# Verify it was created
-kubectl get configmap hdhomerun-script -n nextcloud -o yaml
+cd ansible
+ansible-playbook -i hosts.ini main.yml --tags jellyfin
 ```
 
-### Deploying the CronJob
+This creates the `hdhomerun-credentials` Secret with your email and device IDs.
+
+### Step 3: Deploy XMLTV Proxy
+
+The proxy deployment is managed by ArgoCD from the repository:
 
 ```bash
-# Save the CronJob manifest to a file
-kubectl apply -f hdhomerun-cronjob.yaml
+# Check if deployment exists
+kubectl get deployment -n jellyfin xmltv-proxy
 
-# Verify it's scheduled
-kubectl get cronjob -n nextcloud
+# View proxy logs
+kubectl logs -n jellyfin -l app=xmltv-proxy --tail=20
 
-# Check job execution
-kubectl get jobs -n nextcloud
+# Check service
+kubectl get svc -n jellyfin xmltv-proxy
+```
 
-# View logs from most recent job
-kubectl logs -n nextcloud -l job-name=hdhomerun-guide-fetch-<id>
+**Expected Output:**
+```
+XMLTV Proxy server running on port 8080
+Proxying: https://api.hdhomerun.com/api/xmltv?Email=...&DeviceIDs=...
+```
+
+### Step 4: Test the Proxy
+
+Verify the proxy returns valid XMLTV data:
+
+```bash
+# From within the cluster
+kubectl exec -n jellyfin deployment/jellyfin -- \
+  curl -s http://xmltv-proxy.jellyfin/xmltv.xml | head -20
+```
+
+**Expected Output:**
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<tv source-info-url="https://www.hdhomerun.com/" source-info-name="HDHomeRun">
+  <channel id="US26588.hdhomerun.com">
+    <display-name>WKCFDT</display-name>
+    ...
 ```
 
 ![accent-divider.svg](images/accent-divider.svg)
 ## Jellyfin Configuration
 
-Once the CronJob is running and updating the guide file, configure Jellyfin to use it:
+Configure Jellyfin to use the XMLTV proxy:
 
 ### In Jellyfin UI:
 1. Navigate to **Dashboard** → **Live TV** → **TV Guide Data Providers**
-2. Select **XMLTV**
-3. Set the guide path to: `/media/data/HomeMedia/files/Live_TV_Guide/xmltv.xml`
-4. Set refresh interval: **6 hours** (to match CronJob schedule)
+2. Click **Add** → Select **XMLTV**
+3. Set the **File or URL** to: `http://xmltv-proxy.jellyfin/xmltv.xml`
+4. Set **Refresh interval**: **Daily** (guide data is fetched fresh on each request)
+5. Click **Save**
 
-**Path Explanation:**
-- Jellyfin sees path as: `/media/data/HomeMedia/files/Live_TV_Guide/xmltv.xml` (read-only mount)
-- CronJob writes to: `/nextcloud/data/HomeMedia/files/Live_TV_Guide/xmltv.xml` (Nextcloud PVC)
-- They're the same file on the underlying CephFS storage
+### Trigger Initial Load
+After saving the configuration:
+1. Navigate to **Dashboard** → **Scheduled Tasks**
+2. Find **Refresh Guide** task
+3. Click **Run Now**
 
-![accent-divider.svg](images/accent-divider.svg)
-## Manual Testing (Local Development Only)
-
-For local testing outside the cluster:
-
-### Basic Usage
-
-```bash
-# Test script locally (saves to current directory)
-./fetch_hdhomerun_guide.py \
-    --discover-url http://192.168.1.70/discover.json
-```
-
-**Output:** Guide saved to `./xmltv.xml`
-
-### Custom Output Path (Local Testing)
-
-```bash
-# Specify custom local path
-./fetch_hdhomerun_guide.py \
-    --discover-url http://192.168.1.70/discover.json \
-    --target /tmp/xmltv.xml
-```
-
-> **Note:** These manual commands are for **testing only**. For production updates in the cluster, use the Kubernetes CronJob method above.
-
-![accent-divider.svg](images/accent-divider.svg)
-## Command-Line Options
-
-```bash
-./fetch_hdhomerun_guide.py --help
-```
-
-**Available Options:**
-- `--discover-url` - URL to HDHomeRun device's discover.json endpoint (required)
-- `--target` - Output file path (optional, defaults to `./xmltv.xml`)
+### Verify Guide Data
+- Check **Dashboard** → **Live TV** → **Guide** to see program listings
+- The guide should populate with 14 days of program data (HDHomeRun DVR subscription required)
 
 ![accent-divider.svg](images/accent-divider.svg)
 ## Troubleshooting
 
-### CronJob Not Running
+### Proxy Not Running
 
-**Check CronJob status:**
+**Check deployment status:**
 ```bash
-kubectl get cronjob -n nextcloud hdhomerun-guide-fetch
-kubectl describe cronjob -n nextcloud hdhomerun-guide-fetch
+kubectl get deployment -n jellyfin xmltv-proxy
+kubectl get pods -n jellyfin -l app=xmltv-proxy
 ```
 
-**Check recent jobs:**
+**View proxy logs:**
 ```bash
-kubectl get jobs -n nextcloud
+kubectl logs -n jellyfin -l app=xmltv-proxy --tail=50
 ```
 
-**View job logs:**
+**Expected log output:**
+```
+XMLTV Proxy server running on port 8080
+Proxying: https://api.hdhomerun.com/api/xmltv?Email=...&DeviceIDs=...
+```
+
+### Secret Not Found Error
+
+**Error:** `secret "hdhomerun-credentials" not found`
+
+**Solution:** Create the Secret via Ansible:
 ```bash
-# Get the most recent job pod
-kubectl get pods -n nextcloud -l job-name --sort-by=.metadata.creationTimestamp
-
-# View logs
-kubectl logs -n nextcloud <pod-name>
+cd ansible
+ansible-playbook -i hosts.ini main.yml --tags jellyfin
 ```
 
-### Cannot Connect to HDHomeRun Device
-
-**Error:** Connection refused or timeout
-
-**Solutions:**
-1. Verify HDHomeRun device IP address:
-   ```bash
-   # Find HDHomeRun on network
-   nmap -p 80 192.168.1.0/24 | grep -B 4 "HDHomeRun"
-   ```
-
-2. Test discover endpoint:
-   ```bash
-   curl http://192.168.1.70/discover.json
-   ```
-
-3. Check network connectivity from cluster:
-   ```bash
-   kubectl run -n nextcloud test-curl --rm -it --restart=Never \
-     --image=curlimages/curl -- curl http://192.168.1.70/discover.json
-   ```
-
-### Permission Denied Writing File
-
-**Error:** `PermissionError: [Errno 13] Permission denied`
-
-**Cause:** CronJob not running as correct user/group
-
-**Solution:** Verify `securityContext` in CronJob manifest:
-```yaml
-securityContext:
-  runAsUser: 33      # www-data
-  runAsGroup: 33     # www-data
-  fsGroup: 33
-```
-
-**Check file ownership:**
+**Verify Secret exists:**
 ```bash
-kubectl exec -n nextcloud deploy/nextcloud -- \
-  ls -la /var/www/html/data/HomeMedia/files/Live_TV_Guide/
+kubectl get secret -n jellyfin hdhomerun-credentials
 ```
 
-Should show owner as `www-data` (UID:33).
+### Proxy Returns Error
 
-### Guide Not Updating in Jellyfin
+**Check proxy logs for errors:**
+```bash
+kubectl logs -n jellyfin -l app=xmltv-proxy | grep -i error
+```
+
+**Common errors:**
+- **"HDHOMERUN_EMAIL and HDHOMERUN_DEVICE_IDS environment variables must be set"**
+  - Solution: Ensure Secret is created and mounted correctly
+- **"Failed to fetch XMLTV"**
+  - Solution: Check network connectivity to HDHomeRun API
+  - Test: `curl https://api.hdhomerun.com/api/xmltv?Email=...&DeviceIDs=...`
+
+### Guide Not Loading in Jellyfin
+
+**Error:** "Data at the root level is invalid. Line 1, position 1"
+
+**This error indicates:**
+- Jellyfin is receiving gzip-compressed data (the proxy workaround isn't working)
+- Or Jellyfin cannot reach the proxy
 
 **Solutions:**
 
-1. **Verify file exists and is readable:**
+1. **Verify proxy is accessible from Jellyfin:**
    ```bash
-   kubectl exec -n jellyfin deploy/jellyfin -- \
-     ls -la /media/data/HomeMedia/files/Live_TV_Guide/xmltv.xml
+   kubectl exec -n jellyfin deployment/jellyfin -- \
+     curl -I http://xmltv-proxy.jellyfin/xmltv.xml
    ```
 
-2. **Check file modification time:**
+   Should return: `HTTP/1.0 200 OK` with `Content-Type: application/xml`
+
+2. **Check first bytes of response:**
    ```bash
-   kubectl exec -n jellyfin deploy/jellyfin -- \
-     stat /media/data/HomeMedia/files/Live_TV_Guide/xmltv.xml
+   kubectl exec -n jellyfin deployment/jellyfin -- \
+     curl -s http://xmltv-proxy.jellyfin/xmltv.xml | head -c 100
    ```
-   Should update every 6 hours based on CronJob schedule.
+
+   Should start with: `<?xml version="1.0" encoding="utf-8"?>`
 
 3. **Force refresh in Jellyfin:**
-   - **Dashboard** → **Scheduled Tasks** → **Live TV Guide** → **Run Now**
+   - **Dashboard** → **Scheduled Tasks** → **Refresh Guide** → **Run Now**
 
 4. **Check Jellyfin logs:**
    ```bash
-   kubectl logs -n jellyfin deploy/jellyfin --tail=100 | grep -i "guide\|xmltv"
+   kubectl logs -n jellyfin deployment/jellyfin --tail=100 | grep -i "xmltv\|guide\|error"
    ```
 
-### ConfigMap Not Found
+### Proxy Performance Issues
 
-**Error:** `configmap "hdhomerun-script" not found`
-
-**Solution:** Create the ConfigMap first:
+**Check proxy resource usage:**
 ```bash
-kubectl create configmap hdhomerun-script \
-  --from-file=fetch_hdhomerun_guide.py=./useful_scripts/fetch_hdhomerun_guide.py \
-  -n nextcloud
+kubectl top pod -n jellyfin -l app=xmltv-proxy
+```
+
+**Restart proxy if needed:**
+```bash
+kubectl rollout restart deployment/xmltv-proxy -n jellyfin
 ```
 
 ![accent-divider.svg](images/accent-divider.svg)
-## Script Details
+## Technical Details
 
 ### How It Works
 
-1. **Discover Device:** Queries the HDHomeRun device's `/discover.json` endpoint
-2. **Extract DeviceAuth:** Parses the device's authentication code from the response
-3. **Fetch Guide:** Uses DeviceAuth to authenticate to HDHomeRun's API and download XMLTV data
-4. **Save to Nextcloud:** Writes the XML guide data to Nextcloud storage (accessible to Jellyfin)
+1. **Jellyfin Request:** Jellyfin sends HTTP request to `http://xmltv-proxy.jellyfin/xmltv.xml`
+2. **Proxy Fetch:** Proxy fetches from HDHomeRun API with `Accept-Encoding: identity` (no gzip)
+3. **Uncompressed Response:** HDHomeRun API returns uncompressed XMLTV (10+ MB)
+4. **Pass Through:** Proxy serves the XML directly to Jellyfin with `Content-Encoding: identity`
 
-### Dependencies
-
-**Python stdlib only:**
-- `urllib.request` - HTTP requests
-- `urllib.parse` - URL handling
-- `argparse` - Command-line argument parsing
-- `json` - JSON parsing
-
-**No pip install required!**
-
-### Storage Flow
+### Architecture Flow
 
 ```
-HDHomeRun Device (192.168.1.70)
-    ↓
-CronJob Pod (nextcloud namespace, UID:33)
-    ↓
-Nextcloud PVC: /nextcloud/data/HomeMedia/files/Live_TV_Guide/xmltv.xml
-    ↓ (same file, different mount)
-Jellyfin Pod (read-only): /media/data/HomeMedia/files/Live_TV_Guide/xmltv.xml
+Jellyfin Pod (jellyfin namespace)
+    ↓ HTTP GET /xmltv.xml
+XMLTV Proxy Pod (jellyfin namespace)
+    ↓ Fetch with Accept-Encoding: identity
+HDHomeRun API (api.hdhomerun.com)
+    ↓ Returns uncompressed XMLTV
+XMLTV Proxy Pod
+    ↓ Serve uncompressed XML
+Jellyfin Pod (parses successfully)
 ```
+
+### Proxy Implementation
+
+**Language:** Python 3.11 (stdlib only, no dependencies)
+**Base Image:** `python:3.11-alpine` (20MB)
+**HTTP Server:** `http.server.HTTPServer` (Python stdlib)
+**Configuration:** Environment variables from Kubernetes Secret
+
+**Key Code:**
+- Explicitly requests uncompressed: `req.add_header('Accept-Encoding', 'identity')`
+- Sets response header: `Content-Encoding: identity`
+- No caching - always fetches fresh data
 
 ![accent-divider.svg](images/accent-divider.svg)
 ## See Also
 
-- **[[09-Apps]]** - Jellyfin and Nextcloud application details
-- **[[06-Storage-Rook-Ceph]]** - CephFS storage architecture
+- **[[09-Apps]]** - Jellyfin application details
+- **[[08-Security-and-Certificates]]** - Kubernetes Secrets management
 - [HDHomeRun Official Docs](https://www.silicondust.com/support/)
 - [Jellyfin Live TV Guide](https://jellyfin.org/docs/general/server/live-tv/)
 - [XMLTV Format Specification](http://wiki.xmltv.org/index.php/Main_Page)
-
-![accent-divider.svg](images/accent-divider.svg)
-## License
-
-This script is provided under the MIT License. Feel free to modify and adapt it to your needs.
+- [HDHomeRun XMLTV API](https://www.silicondust.com/support/hdhomerun/guide-data/)
