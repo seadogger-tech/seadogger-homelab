@@ -245,16 +245,27 @@ kubectl rollout restart deployment/xmltv-proxy -n jellyfin
 
 ### Architecture Flow
 
-```
-Jellyfin Pod (jellyfin namespace)
-    ↓ HTTP GET /xmltv.xml
-XMLTV Proxy Pod (jellyfin namespace)
-    ↓ Fetch with Accept-Encoding: identity
-HDHomeRun API (api.hdhomerun.com)
-    ↓ Returns uncompressed XMLTV
-XMLTV Proxy Pod
-    ↓ Serve uncompressed XML
-Jellyfin Pod (parses successfully)
+```mermaid
+sequenceDiagram
+    participant J as Jellyfin Pod
+    participant P as XMLTV Proxy
+    participant H as HDHomeRun API
+    participant S as K8s Secret
+
+    Note over P,S: Startup: Load credentials
+    P->>S: Read HDHOMERUN_EMAIL<br/>and HDHOMERUN_DEVICE_IDS
+    S-->>P: Return credentials
+
+    Note over J,H: Guide Refresh Request
+    J->>P: GET http://xmltv-proxy.jellyfin/xmltv.xml<br/>(with Accept-Encoding: gzip)
+
+    P->>H: GET /api/xmltv?Email=...&DeviceIDs=...<br/>(with Accept-Encoding: identity)
+    Note over H: API returns<br/>uncompressed XMLTV<br/>(~10MB)
+    H-->>P: 200 OK<br/>Content-Type: application/xml<br/>Uncompressed XMLTV data
+
+    P-->>J: 200 OK<br/>Content-Encoding: identity<br/>Uncompressed XMLTV data
+
+    Note over J: Successfully parses<br/>XMLTV and populates<br/>14-day guide
 ```
 
 ### Proxy Implementation
