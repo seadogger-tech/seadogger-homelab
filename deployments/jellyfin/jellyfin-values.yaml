@@ -63,32 +63,12 @@ persistence:
       - path: /media
         readOnly: true
 
-  # V4L2 Hardware Acceleration - Video decode devices
-  video10:
+  # V4L2 Hardware Acceleration - Mount entire /dev for video/media device autodiscovery
+  # Jellyfin probes all /dev/video* and /dev/media* nodes and binds to correct encoders/decoders
+  # Device numbers are dynamic and vary between boots, so mounting all devices is required
+  dev:
     enabled: true
     type: hostPath
-    hostPath: /dev/video10
+    hostPath: /dev
     globalMounts:
-      - path: /dev/video10
-
-  video11:
-    enabled: true
-    type: hostPath
-    hostPath: /dev/video11
-    globalMounts:
-      - path: /dev/video11
-
-  video12:
-    enabled: true
-    type: hostPath
-    hostPath: /dev/video12
-    globalMounts:
-      - path: /dev/video12
-
-  # V4L2 Hardware Acceleration - Render device
-  renderd128:
-    enabled: true
-    type: hostPath
-    hostPath: /dev/dri/renderD128
-    globalMounts:
-      - path: /dev/dri/renderD128
+      - path: /dev
