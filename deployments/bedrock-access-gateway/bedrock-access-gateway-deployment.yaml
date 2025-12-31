@@ -34,6 +34,8 @@ spec:
               value: "us-west-2"
             - name: AWS_REGION
               value: "us-west-2"
+            - name: API_KEY
+              value: "bedrock"
             - name: DEBUG
               value: "true"
           readinessProbe:
