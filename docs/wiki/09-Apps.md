@@ -48,10 +48,20 @@ User facing applications that are applied thru ArgoCD on top of the k3s tech sta
    - Credentials stored as Kubernetes secret in `bedrock-gateway` namespace
    - Environment variables: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`
 
-3. **Known Issues & Solutions:**
+3. **Gateway Authentication:**
+   - **API_KEY:** `bedrock` (used by clients to authenticate to the gateway)
+   - Clients must include header: `Authorization: Bearer bedrock`
+   - This is separate from AWS credentials (gateway → Bedrock authentication)
+
+4. **Container Configuration:**
+   - Container listens on port **8080** (upstream default as of 2025)
+   - Service exposes externally on port **6880** via MetalLB
+
+5. **Known Issues & Solutions:**
    - **Model returns AccessDeniedException:** Enable the specific model in AWS Bedrock console for us-west-2
    - **Requests hang without response:** Restart deployment to pull latest gateway image (`kubectl rollout restart deployment/bedrock-access-gateway -n bedrock-gateway`)
    - **Parameter validation errors:** Upstream fixes auto-deployed (e.g., Claude Sonnet 4.5 temperature/top_p conflict fixed in latest)
+   - **Pod CrashLoopBackOff "API Key not configured":** Ensure `API_KEY` env var is set (upstream removed default in Feb 2025)
 
 ![Bedrock](images/bedrock.png)
 
