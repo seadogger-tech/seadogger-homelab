@@ -18,7 +18,7 @@ spec:
           image: ghcr.io/seadogger-tech/aws-bedrock-gateway:latest
           imagePullPolicy: Always
           ports:
-            - containerPort: 80              # app listens on 80 inside the container
+            - containerPort: 8080            # upstream now defaults to port 8080
           env:
             - name: AWS_ACCESS_KEY_ID
               valueFrom:
@@ -40,12 +40,12 @@ spec:
               value: "true"
           readinessProbe:
             tcpSocket:
-              port: 80
+              port: 8080
             initialDelaySeconds: 5
             periodSeconds: 10
           livenessProbe:
             tcpSocket:
-              port: 80
+              port: 8080
             initialDelaySeconds: 15
             periodSeconds: 20
           resources:
@@ -71,5 +71,5 @@ spec:
   ports:
     - protocol: TCP
       port: 6880              # external port (MetalLB)
-      targetPort: 80          # container’s port
+      targetPort: 8080        # container's port (upstream default)
   loadBalancerIP: 192.168.1.242
