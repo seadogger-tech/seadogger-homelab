@@ -93,6 +93,7 @@ dnsmasq:
   customDnsEntries:
     - address=/ceph.seadogger-homelab/192.168.1.241
     - address=/jellyfin.seadogger-homelab/192.168.1.241
+    - address=/minecraft.seadogger-homelab/192.168.1.241
     - address=/n8n.seadogger-homelab/192.168.1.241
     - address=/nextcloud.seadogger-homelab/192.168.1.241
     - address=/openwebui.seadogger-homelab/192.168.1.241
