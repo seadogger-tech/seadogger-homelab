@@ -15,35 +15,29 @@ spec:
         app: minecraft-pack-manager
     spec:
       containers:
-        - name: pack-manager
-          image: python:3.11-slim
-          command:
-            - /bin/sh
-            - -c
-            - |
-              pip install --no-cache-dir flask flask-cors && \
-              python /app/app.py
+        - name: filebrowser
+          image: filebrowser/filebrowser:latest
           ports:
-            - containerPort: 8080
+            - containerPort: 80
+          args:
+            - --root=/data
+            - --port=80
+            - --database=/tmp/filebrowser.db
+            - --log=stdout
           volumeMounts:
             - name: data
               mountPath: /data
-            - name: app-script
-              mountPath: /app
           resources:
             requests:
-              memory: "128Mi"
-              cpu: "100m"
+              memory: "64Mi"
+              cpu: "50m"
             limits:
-              memory: "256Mi"
+              memory: "128Mi"
               cpu: "200m"
       volumes:
         - name: data
           persistentVolumeClaim:
             claimName: minecraft-bedrock-data
-        - name: app-script
-          configMap:
-            name: pack-manager-ui-app
 ---
 apiVersion: v1
 kind: Service
@@ -55,4 +49,4 @@ spec:
   ports:
     - name: http
       port: 80
-      targetPort: 8080
+      targetPort: 80
