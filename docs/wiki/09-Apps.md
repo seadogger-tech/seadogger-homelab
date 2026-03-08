@@ -117,7 +117,7 @@ The script lives in `seadogger-homelab-pro/core/useful_scripts/fetch_hdhomerun_g
 - **UDP LoadBalancer** at `192.168.1.247:19132` (MetalLB).
 - **Filebrowser** pack manager UI at `minecraft.seadogger-homelab` (HTTPS).
 - **TLS certificates** via cert-manager `internal-local-issuer`.
-- **Storage:** 10Gi PVC on `ceph-block-data` for world saves and packs.
+- **Storage:** 10Gi PVC on `ceph-fs-data-ec` (CephFS with 2+1 erasure coding) for world saves and packs.
 
 ### Features
 - **Cross-platform play:** Connect from Windows, iOS, Android, Xbox, PlayStation, Nintendo Switch
