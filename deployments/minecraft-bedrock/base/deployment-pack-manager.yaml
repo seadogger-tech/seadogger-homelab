@@ -24,7 +24,7 @@ spec:
               pip install --no-cache-dir flask flask-cors && \
               python /app/app.py
           ports:
-            - containerPort: 5000
+            - containerPort: 8080
           volumeMounts:
             - name: data
               mountPath: /data
@@ -55,4 +55,4 @@ spec:
   ports:
     - name: http
       port: 80
-      targetPort: 5000
+      targetPort: 8080
