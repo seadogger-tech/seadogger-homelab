@@ -133,3 +133,7 @@
     - name: Deploy Traefik Dashboard
       import_tasks: tasks/traefik_dashboard_deploy.yml
       when: enable_traefik_dashboard | default(true)
+
+    - name: Deploy Minecraft Bedrock Server
+      import_tasks: tasks/minecraft_bedrock_deploy.yml
+      when: enable_minecraft_bedrock | default(true)

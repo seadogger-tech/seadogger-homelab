@@ -1,0 +1,62 @@
+---
+- name: Minecraft Bedrock Server Deploy
+  vars:
+    kubeconfig_path: /etc/rancher/k3s/k3s.yaml
+    minecraft_namespace: minecraft-bedrock
+    argocd_namespace: argocd
+  block:
+    - name: Create Minecraft Bedrock ArgoCD Application
+      kubernetes.core.k8s:
+        kubeconfig: "{{ kubeconfig_path }}"
+        state: present
+        definition:
+          apiVersion: argoproj.io/v1alpha1
+          kind: Application
+          metadata:
+            name: minecraft-bedrock
+            namespace: "{{ argocd_namespace }}"
+          spec:
+            project: default
+            source:
+              repoURL: https://github.com/seadogger-tech/seadogger-homelab
+              path: deployments/minecraft-bedrock/base
+              targetRevision: HEAD
+            destination:
+              server: https://kubernetes.default.svc
+              namespace: "{{ minecraft_namespace }}"
+            syncPolicy:
+              automated:
+                prune: true
+                selfHeal: true
+              syncOptions:
+                - CreateNamespace=true
+
+    - name: Wait for ArgoCD Application to be Healthy
+      kubernetes.core.k8s_info:
+        kubeconfig: "{{ kubeconfig_path }}"
+        api_version: argoproj.io/v1alpha1
+        kind: Application
+        name: minecraft-bedrock
+        namespace: "{{ argocd_namespace }}"
+      register: app
+      retries: 30
+      delay: 10
+      until: app.resources and app.resources[0].status.health.status == "Healthy"
+
+    - name: Print connection info
+      ansible.builtin.debug:
+        msg:
+          - "✅ Minecraft Bedrock server deployed successfully!"
+          - ""
+          - "📱 Game Server Connection:"
+          - "   IP: 192.168.1.247:19132 (UDP)"
+          - ""
+          - "🌐 Pack Manager (Filebrowser):"
+          - "   URL: https://minecraft.seadogger-homelab"
+          - "   Default credentials: admin / admin"
+          - "   ⚠️  CHANGE PASSWORD IMMEDIATELY"
+          - ""
+          - "📦 Upload locations:"
+          - "   Behavior packs: /data/behavior_packs/"
+          - "   Resource packs: /data/resource_packs/"
+          - "   Worlds: /data/worlds/"
