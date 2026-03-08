@@ -31,9 +31,9 @@ doh:
   }
 
 persistentVolumeClaim:
-  enabled: false
-#  size: 10Gi
-#  storageClass: "longhorn"
+  enabled: true
+  size: 10Gi
+  storageClass: "ceph-block-data"
 
 # Basic resource configuration
 resources:
@@ -73,7 +73,6 @@ adlists:
     - https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/nrd28-22.txt
     - https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/nrd35-29.txt
 whitelist:
-    - https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/whitelist-referral-native.txt
     - graph.facebook.com
     - web.facebook.com
     - xp.apple.com
