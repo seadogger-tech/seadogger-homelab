@@ -22,7 +22,7 @@ spec:
           args:
             - --root=/data
             - --port=80
-            - --database=/data/.filebrowser.db
+            - --database=/tmp/filebrowser.db
             - --log=stdout
           volumeMounts:
             - name: data
