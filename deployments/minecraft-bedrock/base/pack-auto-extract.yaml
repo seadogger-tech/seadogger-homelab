@@ -1,0 +1,89 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pack-auto-extract-script
+data:
+  extract-packs.sh: |
+    #!/bin/sh
+    set -e
+
+    echo "[$(date)] Starting pack auto-extract..."
+
+    # Resource packs directory
+    RESOURCE_DIR="/data/resource_packs"
+    BEHAVIOR_DIR="/data/behavior_packs"
+
+    # Process resource packs
+    if ls ${RESOURCE_DIR}/*.mcpack 1> /dev/null 2>&1; then
+      for mcpack in ${RESOURCE_DIR}/*.mcpack; do
+        filename=$(basename "$mcpack")
+        packname="${filename%.mcpack}"
+
+        echo "Extracting resource pack: $filename"
+        unzip -o "$mcpack" -d "${RESOURCE_DIR}/${packname}"
+
+        # Remove the .mcpack file after extraction
+        rm "$mcpack"
+
+        echo "  ✓ Extracted and removed $filename"
+      done
+    fi
+
+    # Process behavior packs
+    if ls ${BEHAVIOR_DIR}/*.mcpack 1> /dev/null 2>&1; then
+      for mcpack in ${BEHAVIOR_DIR}/*.mcpack; do
+        filename=$(basename "$mcpack")
+        packname="${filename%.mcpack}"
+
+        echo "Extracting behavior pack: $filename"
+        unzip -o "$mcpack" -d "${BEHAVIOR_DIR}/${packname}"
+
+        # Remove the .mcpack file after extraction
+        rm "$mcpack"
+
+        echo "  ✓ Extracted and removed $filename"
+      done
+    fi
+
+    echo "[$(date)] Pack auto-extract complete!"
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: minecraft-pack-auto-extract
+spec:
+  schedule: "*/2 * * * *"  # Run every 2 minutes
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: pack-extractor
+              image: busybox:latest
+              command:
+                - /bin/sh
+                - /scripts/extract-packs.sh
+              volumeMounts:
+                - name: scripts
+                  mountPath: /scripts
+                - name: minecraft-data
+                  mountPath: /data
+              resources:
+                requests:
+                  memory: "64Mi"
+                  cpu: "50m"
+                limits:
+                  memory: "128Mi"
+                  cpu: "100m"
+          volumes:
+            - name: scripts
+              configMap:
+                name: pack-auto-extract-script
+                defaultMode: 0755
+            - name: minecraft-data
+              persistentVolumeClaim:
+                claimName: minecraft-bedrock-data

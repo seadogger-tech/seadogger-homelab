@@ -11,3 +11,4 @@ resources:
   - service-web.yaml
   - ingressroutes.yml
   - certificate.yml
+  - pack-auto-extract.yaml
