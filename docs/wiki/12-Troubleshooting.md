@@ -163,6 +163,76 @@ The definitive plan is to manage the `CephNFS` resource declaratively within the
 
 
 ![accent-divider.svg](images/accent-divider.svg)
+## ArgoCD GitHub Authentication Failures
+
+- **Date:** 2026-03-07
+- **Service:** ArgoCD
+- **Type:** Authentication / GitOps
+- **Status:** Known Issue - GitHub App migration needed
+
+### Symptoms
+ArgoCD Applications fail to sync with error:
+```
+Failed to load target state: failed to generate manifest for source 1 of 1:
+rpc error: code = Unknown desc = failed to list refs: authentication required:
+Invalid username or token. Password authentication is not supported for Git operations.
+```
+
+**Affected Applications:**
+- `portal` (seadogger-homelab-pro repo)
+- `velero-ui` (seadogger-homelab-pro repo)
+
+### Root Cause
+ArgoCD uses GitHub Personal Access Token (PAT) stored in `repo-credentials` secret. PATs expire periodically (typically 90 days to 1 year), requiring manual rotation.
+
+### Temporary Workaround
+Deploy affected applications manually:
+```bash
+# Portal
+cd /path/to/seadogger-homelab-pro/deployments/portal
+kubectl apply -k .
+
+# Velero UI
+cd /path/to/seadogger-homelab-pro/deployments/velero-ui
+kubectl apply -k .
+```
+
+### Permanent Solution
+Migrate to GitHub App authentication (tokens auto-refresh, never expire):
+
+1. **Create GitHub App:**
+   - Go to Settings → Developer settings → GitHub Apps → New GitHub App
+   - Set Homepage URL (any valid URL)
+   - Permissions: Repository → Contents (Read-only)
+   - Install app on `seadogger-homelab-pro` repository
+
+2. **Get credentials:**
+   - Note the App ID
+   - Generate and download private key
+   - Note the Installation ID
+
+3. **Update ArgoCD secret:**
+   ```bash
+   kubectl create secret generic repo-credentials \
+     --from-literal=type=git \
+     --from-literal=url=https://github.com/seadogger-tech/seadogger-homelab-pro \
+     --from-file=githubAppPrivateKey=/path/to/private-key.pem \
+     --from-literal=githubAppID=<APP_ID> \
+     --from-literal=githubAppInstallationID=<INSTALLATION_ID> \
+     --dry-run=client -o yaml | kubectl apply -f - -n argocd
+   ```
+
+4. **Verify:**
+   ```bash
+   kubectl get application -n argocd portal -o jsonpath='{.status.sync.status}'
+   kubectl get application -n argocd velero-ui -o jsonpath='{.status.sync.status}'
+   ```
+
+### References
+- [ArgoCD GitHub App Documentation](https://argo-cd.readthedocs.io/en/stable/user-guide/private-repositories/#github-app-credential)
+- [Issue #8](https://github.com/seadogger-tech/seadogger-homelab-pro/issues/8) - Tracking issue for migration
+
+![accent-divider.svg](images/accent-divider.svg)
 ## See Also
 
 - **[[04-Bootstrap-and-Cold-Start]]** - Deployment procedures and common issues
