@@ -8,10 +8,10 @@ data:
     set -e
 
     # Source and destination paths
-    NEXTCLOUD_MINECRAFT="/nextcloud/data/minecraft-packs"
+    NEXTCLOUD_MINECRAFT="/nextcloud/data/KellBell/files/minecraft-packs"
     RESOURCE_PACKS="/data/resource_packs"
     BEHAVIOR_PACKS="/data/behavior_packs"
-    PROCESSED_DIR="/nextcloud/data/minecraft-packs/.processed"
+    PROCESSED_DIR="/nextcloud/data/KellBell/files/minecraft-packs/.processed"
 
     echo "[$(date)] Starting pack sync..."
 
