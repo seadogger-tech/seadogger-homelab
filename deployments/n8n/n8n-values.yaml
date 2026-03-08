@@ -10,6 +10,8 @@ main:
     storageClass: ceph-block-data
     size: 50Gi
 
+  extraEnvVarsSecret: n8n-encryption-key
+
   extraEnvVars:
 #    WEBHOOK_URL: "https://n8n.seadogger-homelab"
 
