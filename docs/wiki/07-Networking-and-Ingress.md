@@ -32,15 +32,17 @@ Note: Prefer exposing application UIs via Ingress + TLS (cert-manager) at the Tr
 | `192.168.1.244` | Prometheus         |
 | `192.168.1.245` | Grafana            |
 | `192.168.1.246` | Alertmanager       |
+| `192.168.1.247` | Minecraft Bedrock  |
 | `192.168.1.250` | Pi-hole DNS        |
 
 ![accent-divider.svg](images/accent-divider.svg)
-### Ingress Hosts (TLS terminates at Traefik `192.168.1.241`) via PiHole DNS 
+### Ingress Hosts (TLS terminates at Traefik `192.168.1.241`) via PiHole DNS
 - `openwebui.seadogger-homelab`
 - `argocd.seadogger-homelab`
 - `ceph.seadogger-homelab`
 - `pihole.seadogger-homelab`
 - `jellyfin.seadogger-homelab`
+- `minecraft.seadogger-homelab` (Filebrowser pack manager)
 - `n8n.seadogger-homelab`
 
 ![accent-divider.svg](images/accent-divider.svg)

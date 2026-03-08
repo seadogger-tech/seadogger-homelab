@@ -110,6 +110,34 @@ The script lives in `seadogger-homelab-pro/core/useful_scripts/fetch_hdhomerun_g
 - 100% free—no tracking and no premium tiers.
 ![JellyFin](images/jellyfin-dashboard.png)
 
+![accent-divider](images/accent-divider.svg)
+## Minecraft Bedrock Server: **Website:** [https://www.minecraft.net](https://www.minecraft.net)
+- Self-hosted Minecraft Bedrock Edition server for ARM64 (Raspberry Pi 5).
+- Uses **itzg/minecraft-bedrock-server** container with **box64** ARM64 support.
+- **UDP LoadBalancer** at `192.168.1.247:19132` (MetalLB).
+- **Filebrowser** pack manager UI at `minecraft.seadogger-homelab` (HTTPS).
+- **TLS certificates** via cert-manager `internal-local-issuer`.
+- **Storage:** 10Gi PVC on `ceph-block-data` for world saves and packs.
+
+### Features
+- **Cross-platform play:** Connect from Windows, iOS, Android, Xbox, PlayStation, Nintendo Switch
+- **Pack management:** Upload behavior packs, resource packs, and world templates via Filebrowser web UI
+- **Persistent storage:** World data and server config saved to Ceph RBD
+- **Automated deployment:** ArgoCD Application with sync-wave 3
+- **Easy updates:** Change `VERSION` env var in deployment to upgrade server version
+
+### Configuration
+- **Server properties:** Managed via environment variables in [deployment.yaml](../deployments/minecraft-bedrock/base/deployment.yaml)
+- **Pack uploads:** Access Filebrowser at `https://minecraft.seadogger-homelab`
+  - Default credentials configured in deployment
+  - Upload packs to `/data/behavior_packs/`, `/data/resource_packs/`, `/data/worlds/`
+- **World settings:** Edit `server.properties` via Filebrowser or kubectl exec
+
+### Connection
+- **LAN clients:** Connect to `192.168.1.247:19132`
+- **VPN clients:** Connect to `192.168.1.247:19132` via WireGuard VPN
+- **Server name:** Shown in Bedrock server browser (configurable via `SERVER_NAME` env var)
+
 ![accent-divider.svg](images/accent-divider.svg)
 ## See Also
 
