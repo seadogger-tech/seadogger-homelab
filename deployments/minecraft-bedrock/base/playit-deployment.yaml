@@ -20,7 +20,7 @@ spec:
       dnsPolicy: ClusterFirstWithHostNet
       containers:
         - name: playit
-          image: ghcr.io/playit-cloud/playit-agent:v0.17.0  # Pinned to v0.17.0 (2026-01-14)
+          image: ghcr.io/playit-cloud/playit-agent:latest  # Using latest (v0.17.1 as of 2026-01-14)
           env:
             - name: SECRET_KEY
               valueFrom:
