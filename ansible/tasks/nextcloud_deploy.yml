@@ -20,7 +20,7 @@
         source:
           repoURL: https://nextcloud.github.io/helm/
           chart: nextcloud
-          targetRevision: "7.0.2"
+          targetRevision: "8.9.1"
           helm:
             valueFiles:
               - https://raw.githubusercontent.com/seadogger-tech/seadogger-homelab/master/deployments/nextcloud/nextcloud-values.yaml
