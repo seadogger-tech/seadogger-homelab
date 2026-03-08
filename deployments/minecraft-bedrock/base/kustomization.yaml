@@ -1,0 +1,13 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: minecraft-bedrock
+
+resources:
+  - namespace.yaml
+  - pvc.yaml
+  - deployment.yaml
+  - deployment-pack-manager.yaml
+  - service-udp.yaml
+  - service-web.yaml
+  - ingressroutes.yml
+  - certificate.yml

@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: minecraft-bedrock-udp
+  annotations:
+    # Assign .247 — confirmed available from portal IP map (.242/.244/.245/.246 in use)
+    # Verify against your IPAddressPool before applying
+    metallb.universe.tf/loadBalancerIPs: 192.168.1.247
+spec:
+  type: LoadBalancer
+  selector:
+    app: minecraft-bedrock
+  ports:
+    - name: bedrock-udp
+      protocol: UDP
+      port: 19132
+      targetPort: 19132
+  # UDP note: Traefik cannot proxy UDP — this bypasses ingress entirely.
+  # Xbox connects directly to 192.168.1.247:19132.
+  # Add this IP to your Pi-hole DNS or /etc/hosts as minecraft.seadogger-homelab
+  # for convenience, but the game uses the raw IP, not the hostname.

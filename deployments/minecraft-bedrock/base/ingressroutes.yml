@@ -1,0 +1,32 @@
+# HTTP: catch and redirect to HTTPS
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: minecraft-http
+  namespace: minecraft-bedrock
+spec:
+  entryPoints: ["web"]
+  routes:
+    - match: Host(`minecraft.seadogger-homelab`)
+      kind: Rule
+      services:
+        - name: minecraft-pack-manager
+          port: 80
+
+---
+# HTTPS: pack manager UI with internal TLS
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: minecraft-https
+  namespace: minecraft-bedrock
+spec:
+  entryPoints: ["websecure"]
+  routes:
+    - match: Host(`minecraft.seadogger-homelab`)
+      kind: Rule
+      services:
+        - name: minecraft-pack-manager
+          port: 80
+  tls:
+    secretName: minecraft-bedrock-local-tls

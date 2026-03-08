@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: minecraft-bedrock-data
+spec:
+  accessModes:
+    - ReadWriteMany          # CephFS EC supports RWX — needed for BDS + filebrowser sharing
+  storageClassName: ceph-fs-data-ec
+  resources:
+    requests:
+      storage: 10Gi

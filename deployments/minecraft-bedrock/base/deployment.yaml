@@ -1,0 +1,64 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: minecraft-bedrock
+  labels:
+    app: minecraft-bedrock
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: minecraft-bedrock
+  strategy:
+    type: Recreate              # stateful — avoid two pods fighting over /data
+  template:
+    metadata:
+      labels:
+        app: minecraft-bedrock
+    spec:
+      containers:
+        - name: bedrock-server
+          image: itzg/minecraft-bedrock-server:latest
+          # ARM64 note: itzg bundles box64 — x86_64 BDS binary runs via userspace emulation
+          # on Pi 5. Slight overhead but fully functional for a family server.
+          env:
+            - name: EULA
+              value: "TRUE"
+            - name: SERVER_NAME
+              value: "SeaDogger Homelab"
+            - name: GAMEMODE
+              value: "survival"
+            - name: DIFFICULTY
+              value: "normal"
+            - name: ALLOW_CHEATS
+              value: "false"
+            - name: MAX_PLAYERS
+              value: "10"
+            - name: LEVEL_NAME
+              value: "seadogger-world"
+            - name: SERVER_PORT
+              value: "19132"
+          ports:
+            - name: bedrock-udp
+              containerPort: 19132
+              protocol: UDP
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "500m"
+            limits:
+              memory: "1500Mi"
+              cpu: "1500m"   # box64 emulation needs headroom
+          readinessProbe:
+            exec:
+              command: ["mc-monitor", "edition", "--edition", "bedrock"]
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            failureThreshold: 6
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: minecraft-bedrock-data

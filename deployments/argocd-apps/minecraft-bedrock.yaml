@@ -1,0 +1,26 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: minecraft-bedrock
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: core-baseline
+    app.kubernetes.io/component: gaming
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"   # deploy after storage and cert-manager are ready
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/seadogger-tech/seadogger-homelab.git
+    targetRevision: master
+    path: deployments/minecraft-bedrock/base
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: minecraft-bedrock
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
