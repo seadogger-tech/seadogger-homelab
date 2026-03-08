@@ -116,19 +116,25 @@ The script lives in `seadogger-homelab-pro/core/useful_scripts/fetch_hdhomerun_g
 - Uses **itzg/minecraft-bedrock-server** container with **box64** ARM64 support.
 - **UDP LoadBalancer** at `192.168.1.247:19132` (MetalLB) with **hostNetwork** for LAN Discovery.
 - **Web Interfaces:**
-  - **Pack Manager UI** at `minecraft-packs.seadogger-homelab` (upload, extract, restart server, live status)
-  - **FileBrowser** at `minecraft.seadogger-homelab` (browse all server files)
+  - **Pack Manager UI** at `minecraft-packs.seadogger-homelab` (Flask web app with dark portal theme)
+  - **FileBrowser** at `minecraft.seadogger-homelab` (browse/upload all server files)
 - **TLS certificates** via cert-manager `internal-local-issuer`.
 - **Storage:** 10Gi PVC on `ceph-fs-data-ec` (CephFS with 2+1 erasure coding) for world saves and packs.
 
 ### Features
 - **Cross-platform play:** Connect from Windows, iOS, Android, Xbox, PlayStation, Nintendo Switch
-- **Pack Manager Web UI:** One-click upload, extract, and server restart with live status monitoring
-- **Pack management:** Upload behavior packs, resource packs, and world templates
+- **Pack Manager Web UI:**
+  - Upload `.mcpack` files and auto-register to world
+  - **Enable/Disable packs** with toggle button (updates `world_resource_packs.json`)
+  - **Permanently delete** pack folders with trash button
+  - View all packs with active status (✓ indicator)
+  - One-click server restart
+  - Real-time server status monitoring
+  - Dark theme matching portal UI
 - **Auto-extract .mcpack files:** CronJob automatically extracts uploaded .mcpack files every 2 minutes
 - **Blockbench support:** Upload custom models/textures directly from Blockbench as .mcpack files
 - **LAN Discovery:** Xbox/Switch/PlayStation can discover server via Friends → LAN Games
-- **Server controls:** Web-based restart, extract all packs, real-time server status
+- **FileBrowser:** Browse all server files, upload packs manually to `/data/resource_packs/` or `/data/behavior_packs/`
 - **File browser:** Full access to server files, world saves, and configuration
 - **Persistent storage:** World data and server config saved to Ceph erasure-coded filesystem
 - **Automated deployment:** ArgoCD Application with sync-wave 3
