@@ -13,9 +13,10 @@ main:
   extraEnvVars:
 #    WEBHOOK_URL: "https://n8n.seadogger-homelab"
 
-    #. access to n8n will be routed to https.  this will only work this way when setting up the 
+    #. access to n8n will be routed to https.  this will only work this way when setting up the
     #   localhost tunnel to perform the initial Oauth2 handshake
-    N8N_SECURE_COOKIE: "false" 
+    N8N_SECURE_COOKIE: "false"
+    N8N_ENCRYPTION_KEY: "943a9eff31b0047e920e366a00d68e54" 
 
 ingress:
   enabled: false
