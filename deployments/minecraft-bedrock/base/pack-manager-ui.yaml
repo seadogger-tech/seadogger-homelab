@@ -10,10 +10,10 @@ metadata:
 rules:
   - apiGroups: ["apps"]
     resources: ["deployments"]
-    verbs: ["get", "patch"]
+    verbs: ["get", "list", "watch", "create", "delete", "patch"]
   - apiGroups: [""]
-    resources: ["pods"]
-    verbs: ["get", "list"]
+    resources: ["pods", "services"]
+    verbs: ["get", "list", "watch", "create", "delete"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
@@ -36,7 +36,7 @@ data:
     #!/usr/bin/env python3
     from flask import Flask, request, jsonify
     from flask_cors import CORS
-    import os, zipfile, shutil, subprocess, json, glob
+    import os, zipfile, shutil, subprocess, json, glob, yaml, re
     from werkzeug.utils import secure_filename
     from datetime import datetime
 
@@ -46,10 +46,14 @@ data:
     UPLOAD_FOLDER = '/tmp/mcpack-uploads'
     RESOURCE_PACKS_DIR = '/data/resource_packs'
     BEHAVIOR_PACKS_DIR = '/data/behavior_packs'
-    WORLD_DIR = '/data/worlds/seadogger-world'
+    WORLDS_BASE_DIR = '/data/worlds'
+    WORLD_DIR = '/data/worlds/seadogger-world'  # Legacy default world
     RESOURCE_PACKS_JSON = os.path.join(WORLD_DIR, 'world_resource_packs.json')
     BEHAVIOR_PACKS_JSON = os.path.join(WORLD_DIR, 'world_behavior_packs.json')
+    NAMESPACE = 'minecraft-bedrock'
+    IP_POOL = ['192.168.1.251', '192.168.1.252', '192.168.1.253']
     os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+    os.makedirs(WORLDS_BASE_DIR, exist_ok=True)
 
     def read_manifest(extract_path):
         """Read manifest.json from extracted pack"""
@@ -177,6 +181,437 @@ data:
         except Exception as e:
             return False, str(e)
 
+    # ==================== WORLD MANAGEMENT FUNCTIONS ====================
+
+    def get_all_worlds():
+        """Scan /data/worlds/ and return list of worlds with running status"""
+        worlds = []
+        if not os.path.exists(WORLDS_BASE_DIR):
+            return worlds
+
+        for world_name in os.listdir(WORLDS_BASE_DIR):
+            world_path = os.path.join(WORLDS_BASE_DIR, world_name)
+            if os.path.isdir(world_path):
+                leveldat = os.path.join(world_path, 'level.dat')
+                levelname_txt = os.path.join(world_path, 'levelname.txt')
+
+                # Get world display name
+                display_name = world_name
+                if os.path.exists(levelname_txt):
+                    try:
+                        with open(levelname_txt, 'r') as f:
+                            display_name = f.read().strip() or world_name
+                    except:
+                        pass
+
+                # Check if deployment exists and is running
+                is_running = check_world_deployment_running(world_name)
+                ip = get_world_ip(world_name) if is_running else None
+
+                worlds.append({
+                    'name': world_name,
+                    'display_name': display_name,
+                    'path': world_path,
+                    'running': is_running,
+                    'ip': ip,
+                    'has_leveldat': os.path.exists(leveldat)
+                })
+
+        return sorted(worlds, key=lambda w: w['name'])
+
+    def check_world_deployment_running(world_name):
+        """Check if K8s deployment exists for this world"""
+        try:
+            deployment_name = f'minecraft-bedrock-{sanitize_name(world_name)}'
+            result = subprocess.run(
+                ['kubectl', 'get', 'deployment', deployment_name, '-n', NAMESPACE, '-o', 'json'],
+                capture_output=True, text=True, timeout=10
+            )
+            if result.returncode == 0:
+                deployment = json.loads(result.stdout)
+                replicas = deployment.get('status', {}).get('readyReplicas', 0)
+                return replicas > 0
+            return False
+        except:
+            return False
+
+    def get_world_ip(world_name):
+        """Get LoadBalancer IP for world's service"""
+        try:
+            service_name = f'minecraft-bedrock-{sanitize_name(world_name)}'
+            result = subprocess.run(
+                ['kubectl', 'get', 'service', service_name, '-n', NAMESPACE, '-o', 'json'],
+                capture_output=True, text=True, timeout=10
+            )
+            if result.returncode == 0:
+                service = json.loads(result.stdout)
+                lb_ip = service.get('status', {}).get('loadBalancer', {}).get('ingress', [{}])[0].get('ip')
+                return lb_ip
+            return None
+        except:
+            return None
+
+    def get_next_available_ip():
+        """Get next available IP from pool (251-253)"""
+        used_ips = set()
+
+        # Check all services for used IPs
+        try:
+            result = subprocess.run(
+                ['kubectl', 'get', 'services', '-n', NAMESPACE, '-o', 'json'],
+                capture_output=True, text=True, timeout=10
+            )
+            if result.returncode == 0:
+                services = json.loads(result.stdout)
+                for svc in services.get('items', []):
+                    annotations = svc.get('metadata', {}).get('annotations', {})
+                    lb_ip = annotations.get('metallb.universe.tf/loadBalancerIPs')
+                    if lb_ip:
+                        used_ips.add(lb_ip)
+        except:
+            pass
+
+        # Return first available IP
+        for ip in IP_POOL:
+            if ip not in used_ips:
+                return ip
+
+        return None
+
+    def sanitize_name(name):
+        """Sanitize world name for K8s resource names (lowercase, no special chars)"""
+        return re.sub(r'[^a-z0-9-]', '-', name.lower()).strip('-')
+
+    def create_world_folder(world_name, server_name=None, gamemode='survival', difficulty='normal'):
+        """Create a new empty world folder with basic structure"""
+        try:
+            world_path = os.path.join(WORLDS_BASE_DIR, world_name)
+            if os.path.exists(world_path):
+                return False, 'World already exists'
+
+            os.makedirs(world_path, exist_ok=True)
+
+            # Create levelname.txt
+            with open(os.path.join(world_path, 'levelname.txt'), 'w') as f:
+                f.write(server_name or world_name)
+
+            # Create empty pack JSONs
+            with open(os.path.join(world_path, 'world_resource_packs.json'), 'w') as f:
+                json.dump([], f)
+            with open(os.path.join(world_path, 'world_behavior_packs.json'), 'w') as f:
+                json.dump([], f)
+
+            # Server will generate level.dat and other files on first start
+
+            return True, world_path
+        except Exception as e:
+            return False, str(e)
+
+    def import_world_from_mcworld(mcworld_path, world_name):
+        """Extract .mcworld file to /data/worlds/<world_name>"""
+        try:
+            world_path = os.path.join(WORLDS_BASE_DIR, world_name)
+            if os.path.exists(world_path):
+                return False, 'World already exists'
+
+            with zipfile.ZipFile(mcworld_path, 'r') as zip_ref:
+                zip_ref.extractall(world_path)
+
+            # Ensure pack JSONs exist
+            for pack_json in ['world_resource_packs.json', 'world_behavior_packs.json']:
+                json_path = os.path.join(world_path, pack_json)
+                if not os.path.exists(json_path):
+                    with open(json_path, 'w') as f:
+                        json.dump([], f)
+
+            return True, world_path
+        except Exception as e:
+            return False, str(e)
+
+    def generate_world_deployment_yaml(world_name, server_name, gamemode, difficulty, ip_address):
+        """Generate K8s Deployment + Service YAML for a world"""
+        sanitized = sanitize_name(world_name)
+        deployment_name = f'minecraft-bedrock-{sanitized}'
+        service_name = f'minecraft-bedrock-{sanitized}'
+
+        deployment = {
+            'apiVersion': 'apps/v1',
+            'kind': 'Deployment',
+            'metadata': {
+                'name': deployment_name,
+                'namespace': NAMESPACE,
+                'labels': {'app': deployment_name}
+            },
+            'spec': {
+                'replicas': 1,
+                'selector': {'matchLabels': {'app': deployment_name}},
+                'strategy': {'type': 'Recreate'},
+                'template': {
+                    'metadata': {'labels': {'app': deployment_name}},
+                    'spec': {
+                        'hostNetwork': True,
+                        'dnsPolicy': 'ClusterFirstWithHostNet',
+                        'containers': [{
+                            'name': 'bedrock-server',
+                            'image': 'itzg/minecraft-bedrock-server:latest',
+                            'env': [
+                                {'name': 'EULA', 'value': 'TRUE'},
+                                {'name': 'SERVER_NAME', 'value': server_name},
+                                {'name': 'GAMEMODE', 'value': gamemode},
+                                {'name': 'DIFFICULTY', 'value': difficulty},
+                                {'name': 'ALLOW_CHEATS', 'value': 'false'},
+                                {'name': 'MAX_PLAYERS', 'value': '10'},
+                                {'name': 'LEVEL_NAME', 'value': world_name},
+                                {'name': 'SERVER_PORT', 'value': '19132'}
+                            ],
+                            'ports': [{'name': 'bedrock-udp', 'containerPort': 19132, 'protocol': 'UDP'}],
+                            'volumeMounts': [{'name': 'data', 'mountPath': '/data'}],
+                            'resources': {
+                                'requests': {'memory': '512Mi', 'cpu': '500m'},
+                                'limits': {'memory': '1500Mi', 'cpu': '1500m'}
+                            },
+                            'readinessProbe': {
+                                'exec': {'command': ['mc-monitor', 'status-bedrock', '--host', '127.0.0.1', '--port', '19132']},
+                                'initialDelaySeconds': 30,
+                                'periodSeconds': 15,
+                                'failureThreshold': 6
+                            }
+                        }],
+                        'volumes': [{
+                            'name': 'data',
+                            'persistentVolumeClaim': {'claimName': 'minecraft-bedrock-data'}
+                        }]
+                    }
+                }
+            }
+        }
+
+        service = {
+            'apiVersion': 'v1',
+            'kind': 'Service',
+            'metadata': {
+                'name': service_name,
+                'namespace': NAMESPACE,
+                'annotations': {
+                    'metallb.universe.tf/loadBalancerIPs': ip_address
+                }
+            },
+            'spec': {
+                'type': 'LoadBalancer',
+                'selector': {'app': deployment_name},
+                'ports': [{'name': 'bedrock-udp', 'port': 19132, 'targetPort': 19132, 'protocol': 'UDP'}]
+            }
+        }
+
+        return yaml.dump(deployment) + '---\n' + yaml.dump(service)
+
+    def start_world(world_name, server_name=None, gamemode='survival', difficulty='normal'):
+        """Create K8s deployment for world (allocate IP and deploy)"""
+        try:
+            # Check if already running
+            if check_world_deployment_running(world_name):
+                return False, 'World is already running'
+
+            # Get available IP
+            ip = get_next_available_ip()
+            if not ip:
+                return False, 'No available IPs (max 3 concurrent worlds)'
+
+            # Generate YAML
+            yaml_content = generate_world_deployment_yaml(
+                world_name,
+                server_name or world_name,
+                gamemode,
+                difficulty,
+                ip
+            )
+
+            # Write temp file and apply
+            temp_yaml = f'/tmp/world-{sanitize_name(world_name)}.yaml'
+            with open(temp_yaml, 'w') as f:
+                f.write(yaml_content)
+
+            result = subprocess.run(
+                ['kubectl', 'apply', '-f', temp_yaml],
+                capture_output=True, text=True, timeout=30
+            )
+            os.remove(temp_yaml)
+
+            if result.returncode != 0:
+                return False, f'kubectl apply failed: {result.stderr}'
+
+            return True, f'World started on {ip}:19132'
+        except Exception as e:
+            return False, str(e)
+
+    def stop_world(world_name):
+        """Delete K8s deployment for world"""
+        try:
+            sanitized = sanitize_name(world_name)
+            deployment_name = f'minecraft-bedrock-{sanitized}'
+            service_name = f'minecraft-bedrock-{sanitized}'
+
+            # Delete deployment
+            subprocess.run(
+                ['kubectl', 'delete', 'deployment', deployment_name, '-n', NAMESPACE],
+                capture_output=True, timeout=30
+            )
+
+            # Delete service
+            subprocess.run(
+                ['kubectl', 'delete', 'service', service_name, '-n', NAMESPACE],
+                capture_output=True, timeout=30
+            )
+
+            return True, 'World stopped'
+        except Exception as e:
+            return False, str(e)
+
+    def delete_world(world_name):
+        """Permanently delete world folder"""
+        try:
+            # Stop if running
+            if check_world_deployment_running(world_name):
+                stop_world(world_name)
+
+            # Delete folder
+            world_path = os.path.join(WORLDS_BASE_DIR, world_name)
+            if os.path.exists(world_path):
+                shutil.rmtree(world_path)
+
+            return True, 'World deleted'
+        except Exception as e:
+            return False, str(e)
+
+    def get_pack_usage_across_worlds(pack_id):
+        """Return list of world names that use this pack"""
+        using_worlds = []
+        for world_name in os.listdir(WORLDS_BASE_DIR):
+            world_path = os.path.join(WORLDS_BASE_DIR, world_name)
+            if os.path.isdir(world_path):
+                for pack_json in ['world_resource_packs.json', 'world_behavior_packs.json']:
+                    json_path = os.path.join(world_path, pack_json)
+                    if os.path.exists(json_path):
+                        try:
+                            with open(json_path, 'r') as f:
+                                packs = json.load(f)
+                                if any(p.get('pack_id') == pack_id for p in packs):
+                                    using_worlds.append(world_name)
+                                    break
+                        except:
+                            pass
+        return list(set(using_worlds))
+
+    def get_world_packs(world_name):
+        """Get all packs for a specific world with active status"""
+        world_path = os.path.join(WORLDS_BASE_DIR, world_name)
+        if not os.path.exists(world_path):
+            return {'resource': [], 'behavior': []}
+
+        all_packs = {'resource': [], 'behavior': []}
+        system_packs = {'vanilla', 'chemistry', 'editor', 'server_library', 'server_ui_library',
+                       'server_editor_library', 'experimental_creator_cameras',
+                       'experimental_villager_trade', 'experimental_y_2026_drop_1'}
+
+        # Load active pack IDs from world's JSON
+        active_ids = {'resource': set(), 'behavior': set()}
+        for pack_type in ['resource', 'behavior']:
+            json_file = os.path.join(world_path, f'world_{pack_type}_packs.json')
+            if os.path.exists(json_file):
+                try:
+                    with open(json_file, 'r') as f:
+                        packs_json = json.load(f)
+                        active_ids[pack_type] = {p.get('pack_id') for p in packs_json}
+                except:
+                    pass
+
+        # Scan all pack folders
+        for pack_type, packs_dir in [('resource', RESOURCE_PACKS_DIR), ('behavior', BEHAVIOR_PACKS_DIR)]:
+            for pack_dir in glob.glob(os.path.join(packs_dir, '*')):
+                if os.path.isdir(pack_dir):
+                    folder_name = os.path.basename(pack_dir)
+                    if folder_name in system_packs or folder_name.startswith('vanilla_'):
+                        continue
+
+                    manifest_path = os.path.join(pack_dir, 'manifest.json')
+                    if os.path.exists(manifest_path):
+                        try:
+                            with open(manifest_path, 'r') as mf:
+                                manifest = json.load(mf)
+                                pack_id = manifest.get('header', {}).get('uuid')
+                                if pack_id:
+                                    all_packs[pack_type].append({
+                                        'pack_id': pack_id,
+                                        'version': manifest.get('header', {}).get('version', [1, 0, 0]),
+                                        'name': manifest.get('header', {}).get('name', folder_name),
+                                        'description': manifest.get('header', {}).get('description', ''),
+                                        'folder': folder_name,
+                                        'active': pack_id in active_ids[pack_type]
+                                    })
+                        except json.JSONDecodeError:
+                            continue
+
+        return all_packs
+
+    def toggle_pack_for_world(world_name, pack_id, pack_type):
+        """Toggle pack active status for a specific world"""
+        try:
+            world_path = os.path.join(WORLDS_BASE_DIR, world_name)
+            if not os.path.exists(world_path):
+                return False, 'World not found'
+
+            # Get pack info from folder
+            packs_dir = RESOURCE_PACKS_DIR if pack_type == 'resource' else BEHAVIOR_PACKS_DIR
+            pack_info = None
+            for pack_dir in glob.glob(os.path.join(packs_dir, '*')):
+                if os.path.isdir(pack_dir):
+                    manifest_path = os.path.join(pack_dir, 'manifest.json')
+                    if os.path.exists(manifest_path):
+                        try:
+                            with open(manifest_path, 'r') as mf:
+                                manifest = json.load(mf)
+                                if manifest.get('header', {}).get('uuid') == pack_id:
+                                    pack_info = {
+                                        'pack_id': pack_id,
+                                        'version': manifest.get('header', {}).get('version', [1, 0, 0]),
+                                        'name': manifest.get('header', {}).get('name')
+                                    }
+                                    break
+                        except:
+                            pass
+
+            if not pack_info:
+                return False, 'Pack not found'
+
+            # Check if active
+            json_file = os.path.join(world_path, f'world_{pack_type}_packs.json')
+            is_active = False
+            packs = []
+            if os.path.exists(json_file):
+                try:
+                    with open(json_file, 'r') as f:
+                        packs = json.load(f)
+                        is_active = any(p.get('pack_id') == pack_id for p in packs)
+                except:
+                    pass
+
+            if is_active:
+                # Disable
+                packs = [p for p in packs if p.get('pack_id') != pack_id]
+                action = 'disabled'
+            else:
+                # Enable
+                packs = [p for p in packs if p.get('pack_id') != pack_id]
+                packs.append({'pack_id': pack_info['pack_id'], 'version': pack_info['version']})
+                action = 'enabled'
+
+            with open(json_file, 'w') as f:
+                json.dump(packs, f, indent=2)
+
+            return True, f'Pack {action}'
+        except Exception as e:
+            return False, str(e)
+
     def extract_mcpack(mcpack_path, destination, pack_type):
         try:
             pack_name = os.path.splitext(os.path.basename(mcpack_path))[0]
@@ -221,7 +656,444 @@ data:
 
     @app.route('/')
     def index():
-        return '''<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Minecraft Pack Manager</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:radial-gradient(1200px 800px at 10% -10%,#153b52 0%,transparent 60%),radial-gradient(900px 700px at 100% 0%,#0f3649 0%,transparent 55%),linear-gradient(180deg,#0a1f2e,#061420);min-height:100vh;padding:20px}.container{background:rgba(15,43,59,0.8);border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,0.4);max-width:900px;width:100%;padding:40px;margin:0 auto;border:1px solid rgba(255,255,255,0.1)}h1{color:#fff;margin-bottom:10px;text-align:center;font-size:28px}.subtitle{color:rgba(255,255,255,0.7);text-align:center;margin-bottom:20px;font-size:14px}.status-bar{background:rgba(255,255,255,0.05);padding:15px;border-radius:8px;margin-bottom:20px;text-align:center;border:1px solid rgba(255,255,255,0.1)}.status-indicator{display:inline-block;width:12px;height:12px;border-radius:50%;margin-right:8px}.status-running{background:#28a745}.status-stopped{background:#dc3545}.status-unknown{background:#ffc107}.section{margin-bottom:30px;padding:20px;background:rgba(255,255,255,0.05);border-radius:8px;border:1px solid rgba(255,255,255,0.1)}.section h2{color:#4fc3f7;font-size:18px;margin-bottom:15px}label{display:block;font-weight:600;margin-bottom:10px;color:rgba(255,255,255,0.9)}select{width:100%;padding:12px;border:1px solid rgba(255,255,255,0.2);border-radius:8px;font-size:16px;margin-bottom:15px;background:rgba(255,255,255,0.1);color:#fff}option{background:#0f2b3b}input[type=file]{color:#fff}.file-input-label{display:block;padding:20px;background:rgba(255,255,255,0.05);border:2px dashed rgba(79,195,247,0.5);border-radius:8px;text-align:center;cursor:pointer;transition:all 0.3s;color:rgba(255,255,255,0.9)}.file-input-label:hover{background:rgba(255,255,255,0.1);border-color:#4fc3f7}.file-name{margin-top:10px;color:#4fc3f7;font-weight:600;text-align:center;min-height:20px}button{width:100%;padding:15px;background:linear-gradient(135deg,#1e88e5,#1565c0);color:#fff;border:none;border-radius:8px;font-size:18px;font-weight:600;cursor:pointer;transition:all 0.2s;margin-top:10px}button:hover:not(:disabled){transform:translateY(-2px);box-shadow:0 4px 12px rgba(30,136,229,0.4)}button:disabled{opacity:0.5;cursor:not-allowed}button.secondary{background:linear-gradient(135deg,#43a047,#2e7d32)}button.danger{background:linear-gradient(135deg,#e53935,#c62828)}button.small{width:auto;padding:8px 16px;font-size:14px;margin:0}.status-msg{margin-top:15px;padding:15px;border-radius:8px;text-align:center;display:none}.status-msg.success{background:rgba(67,160,71,0.2);color:#81c784;border:1px solid rgba(129,199,132,0.3)}.status-msg.error{background:rgba(229,57,53,0.2);color:#e57373;border:1px solid rgba(229,115,115,0.3)}.spinner{border:3px solid rgba(255,255,255,0.1);border-top:3px solid #4fc3f7;border-radius:50%;width:30px;height:30px;animation:spin 1s linear infinite;margin:10px auto;display:none}@keyframes spin{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}.pack-list{margin-top:15px}.pack-item{background:rgba(255,255,255,0.05);padding:15px;border-radius:8px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;border:1px solid rgba(255,255,255,0.1)}.pack-info{flex:1}.pack-name{font-weight:600;color:#fff;margin-bottom:5px}.pack-desc{font-size:14px;color:rgba(255,255,255,0.7);margin-bottom:5px}.pack-meta{font-size:12px;color:rgba(255,255,255,0.5)}.empty-state{text-align:center;padding:30px;color:rgba(255,255,255,0.5)}h3{color:#4fc3f7}</style></head><body><div class="container"><h1>🎮 Minecraft Pack Manager</h1><p class="subtitle">SeaDogger Homelab</p><div class="status-bar"><div id="serverStatus"><span class="status-indicator status-unknown"></span>Loading server status...</div></div><div class="section"><h2>📋 All Packs</h2><div id="activePacks">Loading...</div></div><div class="section"><h2>📦 Upload & Install Pack</h2><label for="packType">Pack Type:</label><select id="packType"><option value="resource">Resource Pack</option><option value="behavior">Behavior Pack</option></select><label>Select .mcpack file:</label><label class="file-input-label" for="fileInput">📁 Click to browse<br><small>.mcpack files only</small></label><input type="file" id="fileInput" accept=".mcpack" style="display:none"><div class="file-name" id="fileName"></div><button id="uploadBtn" onclick="uploadAndRestart()" disabled>Upload, Extract & Restart</button><div class="spinner" id="uploadSpinner"></div><div class="status-msg" id="uploadStatus"></div></div><div class="section"><h2>🔧 Manual Actions</h2><button class="secondary" onclick="extractPacks()">Extract All .mcpack Files</button><div class="spinner" id="extractSpinner"></div><div class="status-msg" id="extractStatus"></div><button class="danger" onclick="restartServer()">🔄 Restart Server</button><div class="spinner" id="restartSpinner"></div><div class="status-msg" id="restartStatus"></div></div></div><script>const fileInput=document.getElementById('fileInput');const fileName=document.getElementById('fileName');const uploadBtn=document.getElementById('uploadBtn');fileInput.addEventListener('change',(e)=>{if(e.target.files.length>0){fileName.textContent=e.target.files[0].name;uploadBtn.disabled=false}else{fileName.textContent='';uploadBtn.disabled=true}});async function loadActivePacks(){try{const response=await fetch('/api/packs');const packs=await response.json();const container=document.getElementById('activePacks');container.innerHTML='';let hasAny=false;for(const type of['resource','behavior']){if(packs[type]&&packs[type].length>0){hasAny=true;const typeHeader=document.createElement('h3');typeHeader.style.cssText='color:#4fc3f7;font-size:16px;margin:15px 0 10px 0;text-transform:capitalize';typeHeader.textContent=type+' Packs';container.appendChild(typeHeader);packs[type].forEach(pack=>{const item=document.createElement('div');item.className='pack-item';const toggleBtn=pack.active?`<button class="small secondary" onclick="togglePack('${type}','${pack.pack_id}')">⏸️ Disable</button>`:`<button class="small" onclick="togglePack('${type}','${pack.pack_id}')">▶️ Enable</button>`;item.innerHTML=`<div class="pack-info"><div class="pack-name">${pack.name} ${pack.active?'✓':''}</div><div class="pack-desc">${pack.description||''}</div><div class="pack-meta">Folder: ${pack.folder} | Version: ${pack.version.join('.')}</div></div><div style="display:flex;gap:5px">${toggleBtn}<button class="small danger" onclick="deletePack('${type}','${pack.folder}')">🗑️ Delete</button></div>`;container.appendChild(item)})}}if(!hasAny){container.innerHTML='<div class="empty-state">No packs found. Upload one to get started!</div>'}}catch(error){document.getElementById('activePacks').innerHTML='<div class="empty-state">Error loading packs</div>'}}async function togglePack(type,packId){try{const response=await fetch(`/api/packs/${type}/${packId}/toggle`,{method:'PUT'});const result=await response.json();if(response.ok){loadActivePacks();alert(result.message)}else{alert('Error: '+result.error)}}catch(error){alert('Error: '+error.message)}}async function deletePack(type,folder){if(!confirm('Permanently delete this pack? This cannot be undone.')){return}try{const response=await fetch(`/api/packs/${type}/${folder}/delete`,{method:'DELETE'});const result=await response.json();if(response.ok){loadActivePacks();alert(result.message)}else{alert('Error: '+result.error)}}catch(error){alert('Error: '+error.message)}}async function uploadAndRestart(){const file=fileInput.files[0];if(!file)return;uploadBtn.disabled=true;showSpinner('uploadSpinner',true);hideStatus('uploadStatus');const formData=new FormData();formData.append('file',file);formData.append('packType',document.getElementById('packType').value);try{const response=await fetch('/api/upload',{method:'POST',body:formData});const result=await response.json();if(response.ok){showStatus('uploadStatus',result.message,'success');fileInput.value='';fileName.textContent='';setTimeout(()=>{updateServerStatus();loadActivePacks()},2000)}else{showStatus('uploadStatus',result.error||'Upload failed','error');uploadBtn.disabled=false}}catch(error){showStatus('uploadStatus','Error: '+error.message,'error');uploadBtn.disabled=false}finally{showSpinner('uploadSpinner',false)}}async function extractPacks(){showSpinner('extractSpinner',true);hideStatus('extractStatus');try{const response=await fetch('/api/extract',{method:'POST'});const result=await response.json();showStatus('extractStatus',result.message,response.ok?'success':'error');if(response.ok)loadActivePacks()}catch(error){showStatus('extractStatus','Error: '+error.message,'error')}finally{showSpinner('extractSpinner',false)}}async function restartServer(){if(!confirm('Restart server? Players will disconnect.')){return}showSpinner('restartSpinner',true);hideStatus('restartStatus');try{const response=await fetch('/api/restart',{method:'POST'});const result=await response.json();showStatus('restartStatus',result.message,response.ok?'success':'error');if(response.ok)setTimeout(updateServerStatus,2000)}catch(error){showStatus('restartStatus','Error: '+error.message,'error')}finally{showSpinner('restartSpinner',false)}}async function updateServerStatus(){try{const response=await fetch('/api/status');const result=await response.json();const statusDiv=document.getElementById('serverStatus');const indicatorClass=result.ready?'status-running':'status-stopped';statusDiv.innerHTML=`<span class="status-indicator ${indicatorClass}"></span>${result.message}`}catch(error){document.getElementById('serverStatus').innerHTML='<span class="status-indicator status-unknown"></span>Status unavailable'}}function showSpinner(id,show){document.getElementById(id).style.display=show?'block':'none'}function showStatus(id,message,type){const status=document.getElementById(id);status.textContent=message;status.className='status-msg '+type;status.style.display='block'}function hideStatus(id){document.getElementById(id).style.display='none'}updateServerStatus();loadActivePacks();setInterval(updateServerStatus,10000);setInterval(loadActivePacks,30000)</script></body></html>'''
+        return '''<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Minecraft World & Pack Manager</title>
+<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:radial-gradient(1200px 800px at 10% -10%,#153b52 0%,transparent 60%),radial-gradient(900px 700px at 100% 0%,#0f3649 0%,transparent 55%),linear-gradient(180deg,#0a1f2e,#061420);min-height:100vh;padding:20px}.container{background:rgba(15,43,59,0.8);border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,0.4);max-width:1000px;width:100%;padding:40px;margin:0 auto;border:1px solid rgba(255,255,255,0.1)}h1{color:#fff;margin-bottom:10px;text-align:center;font-size:28px}.subtitle{color:rgba(255,255,255,0.7);text-align:center;margin-bottom:20px;font-size:14px}.section{margin-bottom:30px;padding:20px;background:rgba(255,255,255,0.05);border-radius:8px;border:1px solid rgba(255,255,255,0.1)}.section h2{color:#4fc3f7;font-size:18px;margin-bottom:15px}label{display:block;font-weight:600;margin-bottom:10px;color:rgba(255,255,255,0.9)}select,input[type=text]{width:100%;padding:12px;border:1px solid rgba(255,255,255,0.2);border-radius:8px;font-size:16px;margin-bottom:15px;background:rgba(255,255,255,0.1);color:#fff}option{background:#0f2b3b}input[type=file]{color:#fff}.file-input-label{display:block;padding:20px;background:rgba(255,255,255,0.05);border:2px dashed rgba(79,195,247,0.5);border-radius:8px;text-align:center;cursor:pointer;transition:all 0.3s;color:rgba(255,255,255,0.9)}.file-input-label:hover{background:rgba(255,255,255,0.1);border-color:#4fc3f7}.file-name{margin-top:10px;color:#4fc3f7;font-weight:600;text-align:center;min-height:20px}button{width:100%;padding:15px;background:linear-gradient(135deg,#1e88e5,#1565c0);color:#fff;border:none;border-radius:8px;font-size:18px;font-weight:600;cursor:pointer;transition:all 0.2s;margin-top:10px}button:hover:not(:disabled){transform:translateY(-2px);box-shadow:0 4px 12px rgba(30,136,229,0.4)}button:disabled{opacity:0.5;cursor:not-allowed}button.secondary{background:linear-gradient(135deg,#43a047,#2e7d32)}button.danger{background:linear-gradient(135deg,#e53935,#c62828)}button.small{width:auto;padding:8px 16px;font-size:14px;margin:0}.status-msg{margin-top:15px;padding:15px;border-radius:8px;text-align:center;display:none}.status-msg.success{background:rgba(67,160,71,0.2);color:#81c784;border:1px solid rgba(129,199,132,0.3)}.status-msg.error{background:rgba(229,57,53,0.2);color:#e57373;border:1px solid rgba(229,115,115,0.3)}.spinner{border:3px solid rgba(255,255,255,0.1);border-top:3px solid #4fc3f7;border-radius:50%;width:30px;height:30px;animation:spin 1s linear infinite;margin:10px auto;display:none}@keyframes spin{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}.world-item,.pack-item{background:rgba(255,255,255,0.05);padding:15px;border-radius:8px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;border:1px solid rgba(255,255,255,0.1)}.world-info,.pack-info{flex:1}.world-name,.pack-name{font-weight:600;color:#fff;margin-bottom:5px}.world-meta,.pack-desc{font-size:14px;color:rgba(255,255,255,0.7);margin-bottom:5px}.pack-meta{font-size:12px;color:rgba(255,255,255,0.5)}.empty-state{text-align:center;padding:30px;color:rgba(255,255,255,0.5)}h3{color:#4fc3f7;font-size:16px;margin:15px 0 10px 0}.running-badge{display:inline-block;padding:3px 8px;border-radius:4px;font-size:12px;font-weight:600;margin-left:8px}.running-badge.active{background:rgba(67,160,71,0.3);color:#81c784}.running-badge.stopped{background:rgba(158,158,158,0.3);color:#bdbdbd}input[type=text]::placeholder{color:rgba(255,255,255,0.5)}</style>
+</head><body><div class="container">
+<h1>🎮 Minecraft World & Pack Manager</h1>
+<p class="subtitle">SeaDogger Homelab</p>
+
+<!-- WORLD MANAGEMENT SECTION -->
+<div class="section">
+<h2>🌍 Worlds (Max 3 Running)</h2>
+<div id="worldsList">Loading...</div>
+</div>
+
+<div class="section">
+<h2>➕ Create New World</h2>
+<label>World Folder Name (lowercase, no spaces):</label>
+<input type="text" id="newWorldName" placeholder="my-world">
+<label>Server Display Name:</label>
+<input type="text" id="newServerName" placeholder="My Cool Server">
+<label>Gamemode:</label>
+<select id="newGamemode"><option value="survival">Survival</option><option value="creative">Creative</option><option value="adventure">Adventure</option></select>
+<label>Difficulty:</label>
+<select id="newDifficulty"><option value="peaceful">Peaceful</option><option value="easy">Easy</option><option value="normal" selected>Normal</option><option value="hard">Hard</option></select>
+<button onclick="createWorld()">Create World</button>
+<div class="spinner" id="createSpinner"></div>
+<div class="status-msg" id="createStatus"></div>
+</div>
+
+<div class="section">
+<h2>📥 Import World from .mcworld</h2>
+<label>World Folder Name:</label>
+<input type="text" id="importWorldName" placeholder="imported-world">
+<label>Select .mcworld file:</label>
+<label class="file-input-label" for="mcworldInput">📁 Click to browse<br><small>.mcworld files only</small></label>
+<input type="file" id="mcworldInput" accept=".mcworld" style="display:none">
+<div class="file-name" id="mcworldFileName"></div>
+<button id="importBtn" onclick="importWorld()" disabled>Import World</button>
+<div class="spinner" id="importSpinner"></div>
+<div class="status-msg" id="importStatus"></div>
+</div>
+
+<!-- PACK MANAGEMENT SECTION -->
+<div class="section">
+<h2>📦 Manage Packs</h2>
+<label>Select World:</label>
+<select id="worldSelector" onchange="loadWorldPacks()">
+<option value="">Loading...</option>
+</select>
+<div id="packsList">Select a world to manage packs</div>
+</div>
+
+<div class="section">
+<h2>📤 Upload New Pack</h2>
+<label for="packType">Pack Type:</label>
+<select id="packType"><option value="resource">Resource Pack</option><option value="behavior">Behavior Pack</option></select>
+<label>Select .mcpack file:</label>
+<label class="file-input-label" for="mcpackInput">📁 Click to browse<br><small>.mcpack files only</small></label>
+<input type="file" id="mcpackInput" accept=".mcpack" style="display:none">
+<div class="file-name" id="mcpackFileName"></div>
+<button id="uploadBtn" onclick="uploadPack()" disabled>Upload Pack</button>
+<div class="spinner" id="uploadSpinner"></div>
+<div class="status-msg" id="uploadStatus"></div>
+</div>
+
+</div>
+
+<script>
+let selectedWorld = '';
+
+// File input handlers
+document.getElementById('mcpackInput').addEventListener('change',(e)=>{
+  document.getElementById('mcpackFileName').textContent=e.target.files.length>0?e.target.files[0].name:'';
+  document.getElementById('uploadBtn').disabled=e.target.files.length===0;
+});
+document.getElementById('mcworldInput').addEventListener('change',(e)=>{
+  document.getElementById('mcworldFileName').textContent=e.target.files.length>0?e.target.files[0].name:'';
+  document.getElementById('importBtn').disabled=e.target.files.length===0;
+});
+
+// ===== WORLD MANAGEMENT =====
+async function loadWorlds(){
+  try{
+    const resp=await fetch('/api/worlds');
+    const worlds=await resp.json();
+    const container=document.getElementById('worldsList');
+    const selector=document.getElementById('worldSelector');
+
+    if(worlds.length===0){
+      container.innerHTML='<div class="empty-state">No worlds yet. Create or import one!</div>';
+      selector.innerHTML='<option value="">No worlds available</option>';
+      return;
+    }
+
+    // Populate worlds list
+    container.innerHTML='';
+    worlds.forEach(w=>{
+      const item=document.createElement('div');
+      item.className='world-item';
+      const badge=w.running?`<span class="running-badge active">Running ${w.ip}:19132</span>`:`<span class="running-badge stopped">Stopped</span>`;
+      const startBtn=w.running?'':`<button class="small secondary" onclick="startWorld('${w.name}','${w.display_name}')">▶️ Start</button>`;
+      const stopBtn=w.running?`<button class="small danger" onclick="stopWorld('${w.name}')">⏸️ Stop</button>`:'';
+      item.innerHTML=`<div class="world-info"><div class="world-name">${w.display_name}${badge}</div><div class="world-meta">Folder: ${w.name}</div></div><div style="display:flex;gap:5px">${startBtn}${stopBtn}<button class="small danger" onclick="deleteWorld('${w.name}')">🗑️ Delete</button></div>`;
+      container.appendChild(item);
+    });
+
+    // Populate world selector
+    selector.innerHTML=worlds.map(w=>`<option value="${w.name}">${w.display_name}</option>`).join('');
+    if(!selectedWorld && worlds.length>0){
+      selectedWorld=worlds[0].name;
+      loadWorldPacks();
+    }
+  }catch(error){
+    document.getElementById('worldsList').innerHTML='<div class="empty-state">Error loading worlds</div>';
+  }
+}
+
+async function createWorld(){
+  const worldName=document.getElementById('newWorldName').value.trim();
+  const serverName=document.getElementById('newServerName').value.trim();
+  const gamemode=document.getElementById('newGamemode').value;
+  const difficulty=document.getElementById('newDifficulty').value;
+
+  if(!worldName){alert('World name required');return;}
+
+  showSpinner('createSpinner',true);
+  hideStatus('createStatus');
+
+  try{
+    const resp=await fetch('/api/worlds',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({world_name:worldName,server_name:serverName||worldName,gamemode,difficulty})});
+    const result=await resp.json();
+    if(resp.ok){
+      showStatus('createStatus',result.message,'success');
+      document.getElementById('newWorldName').value='';
+      document.getElementById('newServerName').value='';
+      loadWorlds();
+    }else{showStatus('createStatus',result.error,'error');}
+  }catch(error){showStatus('createStatus','Error: '+error.message,'error');}
+  finally{showSpinner('createSpinner',false);}
+}
+
+async function importWorld(){
+  const file=document.getElementById('mcworldInput').files[0];
+  const worldName=document.getElementById('importWorldName').value.trim();
+
+  if(!file||!worldName){alert('File and world name required');return;}
+
+  showSpinner('importSpinner',true);
+  hideStatus('importStatus');
+
+  const formData=new FormData();
+  formData.append('file',file);
+  formData.append('world_name',worldName);
+
+  try{
+    const resp=await fetch('/api/worlds/import',{method:'POST',body:formData});
+    const result=await resp.json();
+    if(resp.ok){
+      showStatus('importStatus',result.message,'success');
+      document.getElementById('mcworldInput').value='';
+      document.getElementById('mcworldFileName').textContent='';
+      document.getElementById('importWorldName').value='';
+      document.getElementById('importBtn').disabled=true;
+      loadWorlds();
+    }else{showStatus('importStatus',result.error,'error');}
+  }catch(error){showStatus('importStatus','Error: '+error.message,'error');}
+  finally{showSpinner('importSpinner',false);}
+}
+
+async function startWorld(worldName,displayName){
+  if(!confirm(`Start world "${displayName}"?`))return;
+
+  try{
+    const resp=await fetch(`/api/worlds/${worldName}/start`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({})});
+    const result=await resp.json();
+    if(resp.ok){alert(result.message);loadWorlds();}
+    else{alert('Error: '+result.error);}
+  }catch(error){alert('Error: '+error.message);}
+}
+
+async function stopWorld(worldName){
+  if(!confirm(`Stop this world? Players will disconnect.`))return;
+
+  try{
+    const resp=await fetch(`/api/worlds/${worldName}/stop`,{method:'POST'});
+    const result=await resp.json();
+    if(resp.ok){alert(result.message);loadWorlds();}
+    else{alert('Error: '+result.error);}
+  }catch(error){alert('Error: '+error.message);}
+}
+
+async function deleteWorld(worldName){
+  if(!confirm(`PERMANENTLY DELETE world "${worldName}"? This cannot be undone!`))return;
+
+  try{
+    const resp=await fetch(`/api/worlds/${worldName}`,{method:'DELETE'});
+    const result=await resp.json();
+    if(resp.ok){alert(result.message);loadWorlds();}
+    else{alert('Error: '+result.error);}
+  }catch(error){alert('Error: '+error.message);}
+}
+
+// ===== PACK MANAGEMENT =====
+async function loadWorldPacks(){
+  selectedWorld=document.getElementById('worldSelector').value;
+  if(!selectedWorld){document.getElementById('packsList').innerHTML='<div class="empty-state">Select a world</div>';return;}
+
+  try{
+    const resp=await fetch(`/api/worlds/${selectedWorld}/packs`);
+    const packs=await resp.json();
+    const container=document.getElementById('packsList');
+    container.innerHTML='';
+
+    let hasAny=false;
+    for(const type of['resource','behavior']){
+      if(packs[type]&&packs[type].length>0){
+        hasAny=true;
+        const header=document.createElement('h3');
+        header.textContent=type.charAt(0).toUpperCase()+type.slice(1)+' Packs';
+        container.appendChild(header);
+
+        packs[type].forEach(pack=>{
+          const item=document.createElement('div');
+          item.className='pack-item';
+          const toggleBtn=pack.active?`<button class="small secondary" onclick="togglePackForWorld('${type}','${pack.pack_id}')">⏸️ Disable</button>`:`<button class="small" onclick="togglePackForWorld('${type}','${pack.pack_id}')">▶️ Enable</button>`;
+          item.innerHTML=`<div class="pack-info"><div class="pack-name">${pack.name} ${pack.active?'✓':''}</div><div class="pack-desc">${pack.description||''}</div><div class="pack-meta">Folder: ${pack.folder} | Version: ${pack.version.join('.')}</div></div><div style="display:flex;gap:5px">${toggleBtn}<button class="small danger" onclick="deletePack('${type}','${pack.folder}')">🗑️ Delete</button></div>`;
+          container.appendChild(item);
+        });
+      }
+    }
+
+    if(!hasAny){container.innerHTML='<div class="empty-state">No packs installed. Upload one below!</div>';}
+  }catch(error){document.getElementById('packsList').innerHTML='<div class="empty-state">Error loading packs</div>';}
+}
+
+async function togglePackForWorld(type,packId){
+  if(!selectedWorld){alert('No world selected');return;}
+
+  try{
+    const resp=await fetch(`/api/worlds/${selectedWorld}/packs/${type}/${packId}/toggle`,{method:'PUT'});
+    const result=await resp.json();
+    if(resp.ok){alert(result.message);loadWorldPacks();}
+    else{alert('Error: '+result.error);}
+  }catch(error){alert('Error: '+error.message);}
+}
+
+async function deletePack(type,folder){
+  if(!confirm('PERMANENTLY DELETE this pack? This will check all worlds for usage.')){return;}
+
+  try{
+    const resp=await fetch(`/api/packs/${type}/${folder}/delete`,{method:'DELETE'});
+    const result=await resp.json();
+    if(resp.ok){alert(result.message);loadWorldPacks();}
+    else{alert('Error: '+result.error);}
+  }catch(error){alert('Error: '+error.message);}
+}
+
+async function uploadPack(){
+  const file=document.getElementById('mcpackInput').files[0];
+  const packType=document.getElementById('packType').value;
+
+  if(!file){return;}
+
+  showSpinner('uploadSpinner',true);
+  hideStatus('uploadStatus');
+  document.getElementById('uploadBtn').disabled=true;
+
+  const formData=new FormData();
+  formData.append('file',file);
+  formData.append('packType',packType);
+
+  try{
+    const resp=await fetch('/api/upload',{method:'POST',body:formData});
+    const result=await resp.json();
+    if(resp.ok){
+      showStatus('uploadStatus',result.message,'success');
+      document.getElementById('mcpackInput').value='';
+      document.getElementById('mcpackFileName').textContent='';
+      loadWorldPacks();
+    }else{
+      showStatus('uploadStatus',result.error,'error');
+      document.getElementById('uploadBtn').disabled=false;
+    }
+  }catch(error){
+    showStatus('uploadStatus','Error: '+error.message,'error');
+    document.getElementById('uploadBtn').disabled=false;
+  }finally{showSpinner('uploadSpinner',false);}
+}
+
+// ===== UTILITIES =====
+function showSpinner(id,show){document.getElementById(id).style.display=show?'block':'none';}
+function showStatus(id,msg,type){const el=document.getElementById(id);el.textContent=msg;el.className='status-msg '+type;el.style.display='block';}
+function hideStatus(id){document.getElementById(id).style.display='none';}
+
+// Initial load
+loadWorlds();
+setInterval(loadWorlds,15000);
+</script>
+</body></html>'''
+
+    # ==================== WORLD MANAGEMENT API ENDPOINTS ====================
+
+    @app.route('/api/worlds', methods=['GET'])
+    def list_worlds():
+        """Get all worlds with running status"""
+        return jsonify(get_all_worlds()), 200
+
+    @app.route('/api/worlds', methods=['POST'])
+    def create_world():
+        """Create new empty world"""
+        data = request.get_json()
+        world_name = data.get('world_name')
+        server_name = data.get('server_name', world_name)
+        gamemode = data.get('gamemode', 'survival')
+        difficulty = data.get('difficulty', 'normal')
+
+        if not world_name:
+            return jsonify({'error': 'world_name required'}), 400
+
+        success, result = create_world_folder(world_name, server_name, gamemode, difficulty)
+        if not success:
+            return jsonify({'error': result}), 500
+
+        return jsonify({'message': f'World "{world_name}" created', 'path': result}), 200
+
+    @app.route('/api/worlds/import', methods=['POST'])
+    def import_world():
+        """Import .mcworld file"""
+        if 'file' not in request.files:
+            return jsonify({'error': 'No file'}), 400
+
+        file = request.files['file']
+        world_name = request.form.get('world_name')
+
+        if not file.filename or not file.filename.endswith('.mcworld'):
+            return jsonify({'error': 'Invalid file (must be .mcworld)'}), 400
+
+        if not world_name:
+            return jsonify({'error': 'world_name required'}), 400
+
+        try:
+            filename = secure_filename(file.filename)
+            upload_path = os.path.join(UPLOAD_FOLDER, filename)
+            file.save(upload_path)
+
+            success, result = import_world_from_mcworld(upload_path, world_name)
+            os.remove(upload_path)
+
+            if not success:
+                return jsonify({'error': result}), 500
+
+            return jsonify({'message': f'World "{world_name}" imported', 'path': result}), 200
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/worlds/<world_name>/start', methods=['POST'])
+    def start_world_endpoint(world_name):
+        """Start world deployment"""
+        data = request.get_json() or {}
+        server_name = data.get('server_name', world_name)
+        gamemode = data.get('gamemode', 'survival')
+        difficulty = data.get('difficulty', 'normal')
+
+        success, result = start_world(world_name, server_name, gamemode, difficulty)
+        if not success:
+            return jsonify({'error': result}), 500
+
+        return jsonify({'message': result}), 200
+
+    @app.route('/api/worlds/<world_name>/stop', methods=['POST'])
+    def stop_world_endpoint(world_name):
+        """Stop world deployment"""
+        success, result = stop_world(world_name)
+        if not success:
+            return jsonify({'error': result}), 500
+
+        return jsonify({'message': result}), 200
+
+    @app.route('/api/worlds/<world_name>', methods=['DELETE'])
+    def delete_world_endpoint(world_name):
+        """Delete world permanently"""
+        success, result = delete_world(world_name)
+        if not success:
+            return jsonify({'error': result}), 500
+
+        return jsonify({'message': result}), 200
+
+    @app.route('/api/worlds/<world_name>/packs', methods=['GET'])
+    def get_world_packs_endpoint(world_name):
+        """Get all packs for a specific world"""
+        return jsonify(get_world_packs(world_name)), 200
+
+    @app.route('/api/worlds/<world_name>/packs/<pack_type>/<pack_id>/toggle', methods=['PUT'])
+    def toggle_world_pack(world_name, pack_type, pack_id):
+        """Toggle pack for specific world"""
+        if pack_type not in ['resource', 'behavior']:
+            return jsonify({'error': 'Invalid pack type'}), 400
+
+        success, result = toggle_pack_for_world(world_name, pack_id, pack_type)
+        if not success:
+            return jsonify({'error': result}), 500
+
+        # Restart world if running
+        if check_world_deployment_running(world_name):
+            sanitized = sanitize_name(world_name)
+            deployment_name = f'minecraft-bedrock-{sanitized}'
+            subprocess.run(
+                ['kubectl', 'rollout', 'restart', f'deployment/{deployment_name}', '-n', NAMESPACE],
+                capture_output=True
+            )
+            result += '. World restarting...'
+
+        return jsonify({'message': result}), 200
+
+    @app.route('/api/packs/<pack_type>/<pack_folder>/usage', methods=['GET'])
+    def get_pack_usage(pack_type, pack_folder):
+        """Get list of worlds using this pack"""
+        # Get pack ID from folder
+        packs_dir = RESOURCE_PACKS_DIR if pack_type == 'resource' else BEHAVIOR_PACKS_DIR
+        folder_path = os.path.join(packs_dir, pack_folder)
+        manifest_path = os.path.join(folder_path, 'manifest.json')
+
+        if not os.path.exists(manifest_path):
+            return jsonify({'error': 'Pack not found'}), 404
+
+        try:
+            with open(manifest_path, 'r') as mf:
+                manifest = json.load(mf)
+                pack_id = manifest.get('header', {}).get('uuid')
+                if not pack_id:
+                    return jsonify({'error': 'No UUID in manifest'}), 400
+
+                worlds = get_pack_usage_across_worlds(pack_id)
+                return jsonify({'worlds': worlds}), 200
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
+    # ==================== PACK MANAGEMENT API ENDPOINTS ====================
 
     @app.route('/api/upload', methods=['POST'])
     def upload():
@@ -332,16 +1204,25 @@ data:
         folder_path = os.path.join(packs_dir, pack_folder)
         manifest_path = os.path.join(folder_path, 'manifest.json')
 
+        pack_id = None
         if os.path.exists(manifest_path):
             try:
                 with open(manifest_path, 'r') as mf:
                     manifest = json.load(mf)
                     pack_id = manifest.get('header', {}).get('uuid')
-                    if pack_id:
-                        # Remove from world JSON if active
-                        remove_pack_from_world(pack_id, pack_type)
             except:
                 pass
+
+        # Check if pack is used in any worlds
+        if pack_id:
+            using_worlds = get_pack_usage_across_worlds(pack_id)
+            if using_worlds:
+                return jsonify({
+                    'error': f'Pack is used in {len(using_worlds)} world(s): {", ".join(using_worlds)}. Disable it in all worlds first.'
+                }), 400
+
+            # Remove from legacy world JSON if present
+            remove_pack_from_world(pack_id, pack_type)
 
         # Delete folder
         success, error = delete_pack_folder(pack_folder, pack_type)
@@ -386,7 +1267,7 @@ spec:
             - -c
             - |
               apt-get update && apt-get install -y kubectl && \
-              pip install --no-cache-dir flask flask-cors && \
+              pip install --no-cache-dir flask flask-cors pyyaml && \
               python app.py
           ports:
             - name: http

@@ -3,9 +3,9 @@ kind: Service
 metadata:
   name: minecraft-bedrock-udp
   annotations:
-    # Assign .247 — confirmed available from portal IP map (.242/.244/.245/.246 in use)
-    # Verify against your IPAddressPool before applying
-    metallb.universe.tf/loadBalancerIPs: 192.168.1.247
+    # Assign .251 — first IP in multi-world pool (251-253)
+    # .241-250 reserved for "system" IPs
+    metallb.universe.tf/loadBalancerIPs: 192.168.1.251
 spec:
   type: LoadBalancer
   selector:
@@ -16,6 +16,7 @@ spec:
       port: 19132
       targetPort: 19132
   # UDP note: Traefik cannot proxy UDP — this bypasses ingress entirely.
-  # Xbox connects directly to 192.168.1.247:19132.
+  # Xbox connects directly to 192.168.1.251:19132.
+  # Multi-world setup uses IPs .251-.253 for up to 3 concurrent servers.
   # Add this IP to your Pi-hole DNS or /etc/hosts as minecraft.seadogger-homelab
   # for convenience, but the game uses the raw IP, not the hostname.
