@@ -10,7 +10,7 @@ spec:
     - match: Host(`openwebui.seadogger-homelab`)
       kind: Rule
       services:
-        - name: open-webui
+        - name: openwebui-open-webui
           port: 8080
 
 ---
@@ -26,7 +26,7 @@ spec:
     - match: Host(`openwebui.seadogger-homelab`)
       kind: Rule
       services:
-        - name: open-webui
+        - name: openwebui-open-webui
           port: 8080
   tls:
     secretName: openwebui-local-tls
