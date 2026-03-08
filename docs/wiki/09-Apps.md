@@ -114,37 +114,76 @@ The script lives in `seadogger-homelab-pro/core/useful_scripts/fetch_hdhomerun_g
 ## Minecraft Bedrock Server: **Website:** [https://www.minecraft.net](https://www.minecraft.net)
 - Self-hosted Minecraft Bedrock Edition server for ARM64 (Raspberry Pi 5).
 - Uses **itzg/minecraft-bedrock-server** container with **box64** ARM64 support.
-- **UDP LoadBalancer** at `192.168.1.247:19132` (MetalLB).
-- **Filebrowser** pack manager UI at `minecraft.seadogger-homelab` (HTTPS).
+- **UDP LoadBalancer** at `192.168.1.247:19132` (MetalLB) with **hostNetwork** for LAN Discovery.
+- **Web Interfaces:**
+  - **Pack Manager UI** at `minecraft-packs.seadogger-homelab` (upload, extract, restart server, live status)
+  - **FileBrowser** at `minecraft.seadogger-homelab` (browse all server files)
 - **TLS certificates** via cert-manager `internal-local-issuer`.
 - **Storage:** 10Gi PVC on `ceph-fs-data-ec` (CephFS with 2+1 erasure coding) for world saves and packs.
 
 ### Features
 - **Cross-platform play:** Connect from Windows, iOS, Android, Xbox, PlayStation, Nintendo Switch
-- **Pack management:** Upload behavior packs, resource packs, and world templates via Filebrowser web UI
+- **Pack Manager Web UI:** One-click upload, extract, and server restart with live status monitoring
+- **Pack management:** Upload behavior packs, resource packs, and world templates
 - **Auto-extract .mcpack files:** CronJob automatically extracts uploaded .mcpack files every 2 minutes
 - **Blockbench support:** Upload custom models/textures directly from Blockbench as .mcpack files
-- **Persistent storage:** World data and server config saved to Ceph RBD
+- **LAN Discovery:** Xbox/Switch/PlayStation can discover server via Friends → LAN Games
+- **Server controls:** Web-based restart, extract all packs, real-time server status
+- **File browser:** Full access to server files, world saves, and configuration
+- **Persistent storage:** World data and server config saved to Ceph erasure-coded filesystem
 - **Automated deployment:** ArgoCD Application with sync-wave 3
 - **Easy updates:** Change `VERSION` env var in deployment to upgrade server version
 
 ### Configuration
 - **Server properties:** Managed via environment variables in [deployment.yaml](../deployments/minecraft-bedrock/base/deployment.yaml)
-- **World settings:** Edit `server.properties` via Filebrowser or kubectl exec
+- **World settings:** Edit `server.properties` via FileBrowser or kubectl exec
+- **Pack Manager UI:** `https://minecraft-packs.seadogger-homelab`
+- **FileBrowser:** `https://minecraft.seadogger-homelab`
+
+### Web Interfaces
+
+#### Pack Manager UI (`minecraft-packs.seadogger-homelab`)
+Modern web interface for pack management:
+- **Upload & Install:** Select pack type (Resource/Behavior), upload .mcpack, auto-extract & restart server
+- **Extract All:** Manually trigger extraction of all .mcpack files in pack directories
+- **Restart Server:** One-click server restart with confirmation prompt
+- **Live Status:** Real-time server status (Running/Ready) with auto-refresh every 10 seconds
+- **Features:**
+  - No login required (uses Kubernetes RBAC ServiceAccount)
+  - Upload progress indicators
+  - Success/error notifications
+  - Mobile-responsive design
+
+#### FileBrowser (`minecraft.seadogger-homelab`)
+Full file system access:
+- Browse `/data/resource_packs/`, `/data/behavior_packs/`, `/data/worlds/`
+- Upload .mcpack files manually
+- Edit server configuration files
+- Download world backups
+- **Login:** Password is ephemeral (generated on pod restart), retrieve from logs:
+  ```bash
+  kubectl logs -n minecraft-bedrock -l app=minecraft-pack-manager | grep "Admin password"
+  ```
 
 ### Uploading Custom Packs (Blockbench/mcpack)
-1. **Access Filebrowser:** Go to `https://minecraft.seadogger-homelab` and log in
-2. **Navigate to pack directory:**
-   - Resource packs (textures, models, sounds): `/data/resource_packs/`
-   - Behavior packs (gameplay mechanics): `/data/behavior_packs/`
-3. **Upload .mcpack file:** Use the upload button to select your file from Blockbench
-4. **Wait for auto-extraction:** A CronJob runs every 2 minutes and automatically:
-   - Extracts the .mcpack file to the appropriate directory
-   - Removes the .mcpack file after extraction
-5. **Restart server (if needed):** Most packs load automatically; if not, restart via:
-   ```bash
-   kubectl rollout restart deployment/minecraft-bedrock -n minecraft-bedrock
-   ```
+
+#### Method 1: Pack Manager UI (Recommended)
+1. **Access Pack Manager:** Go to `https://minecraft-packs.seadogger-homelab`
+2. **Select pack type:** Choose "Resource Pack" or "Behavior Pack" from dropdown
+3. **Upload & Install:**
+   - Click "Upload, Extract & Restart" button
+   - Server automatically restarts with the new pack loaded
+
+#### Method 2: FileBrowser (Manual)
+1. **Access FileBrowser:** Go to `https://minecraft.seadogger-homelab`
+2. **Get password:** Retrieve ephemeral password from logs (changes on pod restart)
+3. **Navigate to pack directory:**
+   - Resource packs: `/data/resource_packs/`
+   - Behavior packs: `/data/behavior_packs/`
+4. **Upload .mcpack file:** Use the upload button
+5. **Wait for extraction:** CronJob runs every 2 minutes, or trigger manually via Pack Manager UI
+6. **Restart server:** Use Pack Manager UI or kubectl
+7. **Reconnect to server:** Wait ~30 seconds for server to restart, then reconnect from your game client
 
 ### Connecting to the Server
 
