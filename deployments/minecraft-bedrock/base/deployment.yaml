@@ -16,6 +16,8 @@ spec:
       labels:
         app: minecraft-bedrock
     spec:
+      hostNetwork: true  # Required for LAN discovery UDP broadcasts
+      dnsPolicy: ClusterFirstWithHostNet
       containers:
         - name: bedrock-server
           image: itzg/minecraft-bedrock-server:latest
