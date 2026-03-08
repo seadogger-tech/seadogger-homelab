@@ -479,19 +479,24 @@ data:
             deployment_name = f'minecraft-bedrock-{sanitized}'
             service_name = f'minecraft-bedrock-{sanitized}'
 
+            # Handle legacy seadogger-world deployment
+            if world_name == 'seadogger-world':
+                deployment_name = 'minecraft-bedrock'
+                service_name = 'minecraft-bedrock-udp'
+
             # Delete deployment
-            subprocess.run(
+            result = subprocess.run(
                 ['kubectl', 'delete', 'deployment', deployment_name, '-n', NAMESPACE],
-                capture_output=True, timeout=30
+                capture_output=True, text=True, timeout=30
             )
 
             # Delete service
             subprocess.run(
                 ['kubectl', 'delete', 'service', service_name, '-n', NAMESPACE],
-                capture_output=True, timeout=30
+                capture_output=True, text=True, timeout=30
             )
 
-            return True, 'World stopped'
+            return True, 'World stopped and IP released'
         except Exception as e:
             return False, str(e)
 
