@@ -102,10 +102,10 @@ dnsmasq:
     - address=/ceph.seadogger-homelab/192.168.1.241
     - address=/jellyfin.seadogger-homelab/192.168.1.241
     - address=/minecraft.seadogger-homelab/192.168.1.241
+    - address=/minecraft-packs.seadogger-homelab/192.168.1.241
     - address=/n8n.seadogger-homelab/192.168.1.241
     - address=/nextcloud.seadogger-homelab/192.168.1.241
     - address=/openwebui.seadogger-homelab/192.168.1.241
-    - address=/plex.seadogger-homelab/192.168.1.241
     - address=/pihole.seadogger-homelab/192.168.1.241
     - address=/argocd.seadogger-homelab/192.168.1.241
     - address=/portal.seadogger-homelab/192.168.1.241
