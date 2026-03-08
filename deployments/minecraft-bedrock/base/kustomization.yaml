@@ -11,5 +11,3 @@ resources:
   - service-web.yaml
   - ingressroutes.yml
   - certificate.yml
-  - pack-sync-config.yaml
-  - pack-sync-cronjob.yaml
