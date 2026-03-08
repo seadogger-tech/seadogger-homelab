@@ -13,6 +13,6 @@ resources:
   - pack-auto-extract.yaml
   - pack-manager-ui.yaml
   - playit-pvc.yaml
-  - playit-secret.yaml
   - playit-deployment.yaml
   - playit-networkpolicy.yaml
+  # playit-secret.yaml excluded - managed by Ansible to avoid exposing secret in git
