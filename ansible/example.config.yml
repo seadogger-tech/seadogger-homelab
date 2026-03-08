@@ -29,6 +29,8 @@ manual_install_openwebui: true
 manual_install_n8n: true
 manual_install_nextcloud: true
 manual_install_jellyfin: true
+manual_install_minecraft_bedrock: true
+manual_install_traefik_dashboard: true
 
 # --- Secrets ---
 dashboard_password: "YourSecurePasswordHere"
@@ -95,6 +97,7 @@ pod_cleanup_list:
   - { name: "n8n", namespace: "n8n", selector: "app.kubernetes.io/instance=n8n", delete_pvc: true }
   - { name: "nextcloud", namespace: "nextcloud", selector: "app=nextcloud", delete_pvc: true }
   - { name: "jellyfin", namespace: "jellyfin", selector: "app=jellyfin", delete_pvc: true }
+  - { name: "minecraft-bedrock-server", namespace: "minecraft-bedrock", selector: "app=minecraft-bedrock-server", delete_pvc: true }
 
 # --- INFRASTRUCTURE CLEANUP ---
 run_infrastructure_cleanup: false
@@ -115,6 +118,7 @@ precook_namespaces:
   - { name: "bedrock-gateway" }
   - { name: "nextcloud" }
   - { name: "jellyfin" }
+  - { name: "minecraft-bedrock" }
 
 
 # ===================================================================================
@@ -149,3 +153,5 @@ enable_nextcloud: "{{ cold_start_stage_3_install_applications | bool and manual_
 enable_jellyfin: "{{ cold_start_stage_3_install_applications | bool and manual_install_jellyfin | bool }}"
 enable_jellyfin_secrets: "{{ cold_start_stage_3_install_applications | bool and manual_install_jellyfin | bool }}"
 enable_jellyfin_xmltv_proxy: "{{ cold_start_stage_3_install_applications | bool and manual_install_jellyfin | bool }}"
+enable_minecraft_bedrock: "{{ cold_start_stage_3_install_applications | bool and manual_install_minecraft_bedrock | bool }}"
+enable_traefik_dashboard: "{{ cold_start_stage_3_install_applications | bool and manual_install_traefik_dashboard | bool }}"
