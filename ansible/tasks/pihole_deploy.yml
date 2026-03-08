@@ -20,7 +20,7 @@
         source:
           repoURL: https://mojo2600.github.io/pihole-kubernetes/
           chart: pihole
-          targetRevision: "*"
+          targetRevision: "2.35.0"
           helm:
             valueFiles:
               - https://raw.githubusercontent.com/seadogger-tech/seadogger-homelab/master/deployments/pihole/pihole-values.yaml
