@@ -36,8 +36,9 @@ data:
     #!/usr/bin/env python3
     from flask import Flask, request, jsonify
     from flask_cors import CORS
-    import os, zipfile, shutil, subprocess, json
+    import os, zipfile, shutil, subprocess, json, glob
     from werkzeug.utils import secure_filename
+    from datetime import datetime
 
     app = Flask(__name__)
     CORS(app)
@@ -45,9 +46,113 @@ data:
     UPLOAD_FOLDER = '/tmp/mcpack-uploads'
     RESOURCE_PACKS_DIR = '/data/resource_packs'
     BEHAVIOR_PACKS_DIR = '/data/behavior_packs'
+    WORLD_DIR = '/data/worlds/seadogger-world'
+    RESOURCE_PACKS_JSON = os.path.join(WORLD_DIR, 'world_resource_packs.json')
+    BEHAVIOR_PACKS_JSON = os.path.join(WORLD_DIR, 'world_behavior_packs.json')
     os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-    def extract_mcpack(mcpack_path, destination):
+    def read_manifest(extract_path):
+        """Read manifest.json from extracted pack"""
+        try:
+            manifest_path = os.path.join(extract_path, 'manifest.json')
+            if not os.path.exists(manifest_path):
+                return None, "No manifest.json found"
+            with open(manifest_path, 'r') as f:
+                manifest = json.load(f)
+            pack_id = manifest.get('header', {}).get('uuid')
+            version = manifest.get('header', {}).get('version', [1, 0, 0])
+            name = manifest.get('header', {}).get('name', 'Unknown')
+            description = manifest.get('header', {}).get('description', '')
+            if not pack_id:
+                return None, "No UUID in manifest"
+            return {'pack_id': pack_id, 'version': version, 'name': name, 'description': description}, None
+        except Exception as e:
+            return None, str(e)
+
+    def update_world_packs_json(pack_info, pack_type):
+        """Add pack to world's active packs JSON"""
+        try:
+            json_file = RESOURCE_PACKS_JSON if pack_type == 'resource' else BEHAVIOR_PACKS_JSON
+            os.makedirs(os.path.dirname(json_file), exist_ok=True)
+
+            if os.path.exists(json_file):
+                with open(json_file, 'r') as f:
+                    packs = json.load(f)
+            else:
+                packs = []
+
+            # Remove existing pack with same UUID
+            packs = [p for p in packs if p.get('pack_id') != pack_info['pack_id']]
+
+            # Add new pack
+            packs.append({
+                'pack_id': pack_info['pack_id'],
+                'version': pack_info['version']
+            })
+
+            with open(json_file, 'w') as f:
+                json.dump(packs, f, indent=2)
+
+            return True, None
+        except Exception as e:
+            return False, str(e)
+
+    def get_active_packs():
+        """Get list of active packs from world JSON files"""
+        active = {'resource': [], 'behavior': []}
+
+        for pack_type, json_file, packs_dir in [
+            ('resource', RESOURCE_PACKS_JSON, RESOURCE_PACKS_DIR),
+            ('behavior', BEHAVIOR_PACKS_JSON, BEHAVIOR_PACKS_DIR)
+        ]:
+            if os.path.exists(json_file):
+                try:
+                    with open(json_file, 'r') as f:
+                        packs_json = json.load(f)
+
+                    for pack_entry in packs_json:
+                        pack_id = pack_entry.get('pack_id')
+                        # Try to find manifest for this pack
+                        for pack_dir in glob.glob(os.path.join(packs_dir, '*')):
+                            if os.path.isdir(pack_dir):
+                                manifest_path = os.path.join(pack_dir, 'manifest.json')
+                                if os.path.exists(manifest_path):
+                                    with open(manifest_path, 'r') as mf:
+                                        manifest = json.load(mf)
+                                        if manifest.get('header', {}).get('uuid') == pack_id:
+                                            active[pack_type].append({
+                                                'pack_id': pack_id,
+                                                'version': pack_entry.get('version'),
+                                                'name': manifest.get('header', {}).get('name', os.path.basename(pack_dir)),
+                                                'description': manifest.get('header', {}).get('description', ''),
+                                                'folder': os.path.basename(pack_dir)
+                                            })
+                                            break
+                except:
+                    pass
+
+        return active
+
+    def remove_pack_from_world(pack_id, pack_type):
+        """Remove pack from world JSON (disable it)"""
+        try:
+            json_file = RESOURCE_PACKS_JSON if pack_type == 'resource' else BEHAVIOR_PACKS_JSON
+            if not os.path.exists(json_file):
+                return True, None
+
+            with open(json_file, 'r') as f:
+                packs = json.load(f)
+
+            packs = [p for p in packs if p.get('pack_id') != pack_id]
+
+            with open(json_file, 'w') as f:
+                json.dump(packs, f, indent=2)
+
+            return True, None
+        except Exception as e:
+            return False, str(e)
+
+    def extract_mcpack(mcpack_path, destination, pack_type):
         try:
             pack_name = os.path.splitext(os.path.basename(mcpack_path))[0]
             extract_path = os.path.join(destination, pack_name)
@@ -55,6 +160,16 @@ data:
                 shutil.rmtree(extract_path)
             with zipfile.ZipFile(mcpack_path, 'r') as zip_ref:
                 zip_ref.extractall(extract_path)
+
+            # Read manifest and update world JSON
+            pack_info, error = read_manifest(extract_path)
+            if error:
+                return False, f"Manifest error: {error}"
+
+            success, error = update_world_packs_json(pack_info, pack_type)
+            if not success:
+                return False, f"Failed to register pack: {error}"
+
             return True, pack_name
         except Exception as e:
             return False, str(e)
@@ -81,7 +196,7 @@ data:
 
     @app.route('/')
     def index():
-        return '''<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Minecraft Pack Manager</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);min-height:100vh;display:flex;justify-content:center;align-items:center;padding:20px}.container{background:#fff;border-radius:20px;box-shadow:0 20px 60px rgba(0,0,0,0.3);max-width:700px;width:100%;padding:40px}h1{color:#333;margin-bottom:10px;text-align:center;font-size:28px}.subtitle{color:#666;text-align:center;margin-bottom:20px;font-size:14px}.status-bar{background:#f8f9fa;padding:15px;border-radius:10px;margin-bottom:20px;text-align:center}.status-indicator{display:inline-block;width:12px;height:12px;border-radius:50%;margin-right:8px}.status-running{background:#28a745}.status-stopped{background:#dc3545}.status-unknown{background:#ffc107}.section{margin-bottom:30px;padding:20px;background:#f8f9fa;border-radius:10px}.section h2{color:#667eea;font-size:18px;margin-bottom:15px}label{display:block;font-weight:600;margin-bottom:10px;color:#333}select{width:100%;padding:12px;border:2px solid #e0e0e0;border-radius:8px;font-size:16px;margin-bottom:15px}.file-input-label{display:block;padding:20px;background:#fff;border:2px dashed #667eea;border-radius:8px;text-align:center;cursor:pointer;transition:all 0.3s}.file-input-label:hover{background:#f0f0f0;border-color:#764ba2}.file-name{margin-top:10px;color:#667eea;font-weight:600;text-align:center;min-height:20px}button{width:100%;padding:15px;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:#fff;border:none;border-radius:8px;font-size:18px;font-weight:600;cursor:pointer;transition:transform 0.2s,box-shadow 0.2s;margin-top:10px}button:hover:not(:disabled){transform:translateY(-2px);box-shadow:0 10px 20px rgba(102,126,234,0.4)}button:disabled{opacity:0.5;cursor:not-allowed}button.secondary{background:linear-gradient(135deg,#f093fb 0%,#f5576c 100%)}button.danger{background:linear-gradient(135deg,#fa709a 0%,#fee140 100%)}.status-msg{margin-top:15px;padding:15px;border-radius:8px;text-align:center;display:none}.status-msg.success{background:#d4edda;color:#155724}.status-msg.error{background:#f8d7da;color:#721c24}.spinner{border:3px solid #f3f3f3;border-top:3px solid #667eea;border-radius:50%;width:30px;height:30px;animation:spin 1s linear infinite;margin:10px auto;display:none}@keyframes spin{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}</style></head><body><div class="container"><h1>🎮 Minecraft Pack Manager</h1><p class="subtitle">SeaDogger Homelab</p><div class="status-bar"><div id="serverStatus"><span class="status-indicator status-unknown"></span>Loading server status...</div></div><div class="section"><h2>📦 Upload & Install Pack</h2><label for="packType">Pack Type:</label><select id="packType"><option value="resource">Resource Pack</option><option value="behavior">Behavior Pack</option></select><label>Select .mcpack file:</label><label class="file-input-label" for="fileInput">📁 Click to browse<br><small>.mcpack files only</small></label><input type="file" id="fileInput" accept=".mcpack" style="display:none"><div class="file-name" id="fileName"></div><button id="uploadBtn" onclick="uploadAndRestart()" disabled>Upload, Extract & Restart</button><div class="spinner" id="uploadSpinner"></div><div class="status-msg" id="uploadStatus"></div></div><div class="section"><h2>🔧 Manual Actions</h2><button class="secondary" onclick="extractPacks()">Extract All .mcpack Files</button><div class="spinner" id="extractSpinner"></div><div class="status-msg" id="extractStatus"></div><button class="danger" onclick="restartServer()">🔄 Restart Server</button><div class="spinner" id="restartSpinner"></div><div class="status-msg" id="restartStatus"></div></div></div><script>const fileInput=document.getElementById('fileInput');const fileName=document.getElementById('fileName');const uploadBtn=document.getElementById('uploadBtn');fileInput.addEventListener('change',(e)=>{if(e.target.files.length>0){fileName.textContent=e.target.files[0].name;uploadBtn.disabled=false}else{fileName.textContent='';uploadBtn.disabled=true}});async function uploadAndRestart(){const file=fileInput.files[0];if(!file)return;uploadBtn.disabled=true;showSpinner('uploadSpinner',true);hideStatus('uploadStatus');const formData=new FormData();formData.append('file',file);formData.append('packType',document.getElementById('packType').value);try{const response=await fetch('/api/upload',{method:'POST',body:formData});const result=await response.json();if(response.ok){showStatus('uploadStatus',result.message,'success');fileInput.value='';fileName.textContent='';setTimeout(updateServerStatus,2000)}else{showStatus('uploadStatus',result.error||'Upload failed','error');uploadBtn.disabled=false}}catch(error){showStatus('uploadStatus','Error: '+error.message,'error');uploadBtn.disabled=false}finally{showSpinner('uploadSpinner',false)}}async function extractPacks(){showSpinner('extractSpinner',true);hideStatus('extractStatus');try{const response=await fetch('/api/extract',{method:'POST'});const result=await response.json();showStatus('extractStatus',result.message,response.ok?'success':'error')}catch(error){showStatus('extractStatus','Error: '+error.message,'error')}finally{showSpinner('extractSpinner',false)}}async function restartServer(){if(!confirm('Restart server? Players will disconnect.')){return}showSpinner('restartSpinner',true);hideStatus('restartStatus');try{const response=await fetch('/api/restart',{method:'POST'});const result=await response.json();showStatus('restartStatus',result.message,response.ok?'success':'error');if(response.ok)setTimeout(updateServerStatus,2000)}catch(error){showStatus('restartStatus','Error: '+error.message,'error')}finally{showSpinner('restartSpinner',false)}}async function updateServerStatus(){try{const response=await fetch('/api/status');const result=await response.json();const statusDiv=document.getElementById('serverStatus');const indicatorClass=result.ready?'status-running':'status-stopped';statusDiv.innerHTML=`<span class="status-indicator ${indicatorClass}"></span>${result.message}`}catch(error){document.getElementById('serverStatus').innerHTML='<span class="status-indicator status-unknown"></span>Status unavailable'}}function showSpinner(id,show){document.getElementById(id).style.display=show?'block':'none'}function showStatus(id,message,type){const status=document.getElementById(id);status.textContent=message;status.className='status-msg '+type;status.style.display='block'}function hideStatus(id){document.getElementById(id).style.display='none'}updateServerStatus();setInterval(updateServerStatus,10000)</script></body></html>'''
+        return '''<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Minecraft Pack Manager</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);min-height:100vh;padding:20px}.container{background:#fff;border-radius:20px;box-shadow:0 20px 60px rgba(0,0,0,0.3);max-width:900px;width:100%;padding:40px;margin:0 auto}h1{color:#333;margin-bottom:10px;text-align:center;font-size:28px}.subtitle{color:#666;text-align:center;margin-bottom:20px;font-size:14px}.status-bar{background:#f8f9fa;padding:15px;border-radius:10px;margin-bottom:20px;text-align:center}.status-indicator{display:inline-block;width:12px;height:12px;border-radius:50%;margin-right:8px}.status-running{background:#28a745}.status-stopped{background:#dc3545}.status-unknown{background:#ffc107}.section{margin-bottom:30px;padding:20px;background:#f8f9fa;border-radius:10px}.section h2{color:#667eea;font-size:18px;margin-bottom:15px}label{display:block;font-weight:600;margin-bottom:10px;color:#333}select{width:100%;padding:12px;border:2px solid #e0e0e0;border-radius:8px;font-size:16px;margin-bottom:15px}.file-input-label{display:block;padding:20px;background:#fff;border:2px dashed #667eea;border-radius:8px;text-align:center;cursor:pointer;transition:all 0.3s}.file-input-label:hover{background:#f0f0f0;border-color:#764ba2}.file-name{margin-top:10px;color:#667eea;font-weight:600;text-align:center;min-height:20px}button{width:100%;padding:15px;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:#fff;border:none;border-radius:8px;font-size:18px;font-weight:600;cursor:pointer;transition:transform 0.2s,box-shadow 0.2s;margin-top:10px}button:hover:not(:disabled){transform:translateY(-2px);box-shadow:0 10px 20px rgba(102,126,234,0.4)}button:disabled{opacity:0.5;cursor:not-allowed}button.secondary{background:linear-gradient(135deg,#f093fb 0%,#f5576c 100%)}button.danger{background:linear-gradient(135deg,#fa709a 0%,#fee140 100%)}button.small{width:auto;padding:8px 16px;font-size:14px;margin:0}.status-msg{margin-top:15px;padding:15px;border-radius:8px;text-align:center;display:none}.status-msg.success{background:#d4edda;color:#155724}.status-msg.error{background:#f8d7da;color:#721c24}.spinner{border:3px solid #f3f3f3;border-top:3px solid #667eea;border-radius:50%;width:30px;height:30px;animation:spin 1s linear infinite;margin:10px auto;display:none}@keyframes spin{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}.pack-list{margin-top:15px}.pack-item{background:#fff;padding:15px;border-radius:8px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;box-shadow:0 2px 4px rgba(0,0,0,0.1)}.pack-info{flex:1}.pack-name{font-weight:600;color:#333;margin-bottom:5px}.pack-desc{font-size:14px;color:#666;margin-bottom:5px}.pack-meta{font-size:12px;color:#999}.empty-state{text-align:center;padding:30px;color:#999}</style></head><body><div class="container"><h1>🎮 Minecraft Pack Manager</h1><p class="subtitle">SeaDogger Homelab</p><div class="status-bar"><div id="serverStatus"><span class="status-indicator status-unknown"></span>Loading server status...</div></div><div class="section"><h2>📋 Active Packs</h2><div id="activePacks">Loading...</div></div><div class="section"><h2>📦 Upload & Install Pack</h2><label for="packType">Pack Type:</label><select id="packType"><option value="resource">Resource Pack</option><option value="behavior">Behavior Pack</option></select><label>Select .mcpack file:</label><label class="file-input-label" for="fileInput">📁 Click to browse<br><small>.mcpack files only</small></label><input type="file" id="fileInput" accept=".mcpack" style="display:none"><div class="file-name" id="fileName"></div><button id="uploadBtn" onclick="uploadAndRestart()" disabled>Upload, Extract & Restart</button><div class="spinner" id="uploadSpinner"></div><div class="status-msg" id="uploadStatus"></div></div><div class="section"><h2>🔧 Manual Actions</h2><button class="secondary" onclick="extractPacks()">Extract All .mcpack Files</button><div class="spinner" id="extractSpinner"></div><div class="status-msg" id="extractStatus"></div><button class="danger" onclick="restartServer()">🔄 Restart Server</button><div class="spinner" id="restartSpinner"></div><div class="status-msg" id="restartStatus"></div></div></div><script>const fileInput=document.getElementById('fileInput');const fileName=document.getElementById('fileName');const uploadBtn=document.getElementById('uploadBtn');fileInput.addEventListener('change',(e)=>{if(e.target.files.length>0){fileName.textContent=e.target.files[0].name;uploadBtn.disabled=false}else{fileName.textContent='';uploadBtn.disabled=true}});async function loadActivePacks(){try{const response=await fetch('/api/packs');const packs=await response.json();const container=document.getElementById('activePacks');container.innerHTML='';let hasAny=false;for(const type of['resource','behavior']){if(packs[type]&&packs[type].length>0){hasAny=true;const typeHeader=document.createElement('h3');typeHeader.style.cssText='color:#764ba2;font-size:16px;margin:15px 0 10px 0;text-transform:capitalize';typeHeader.textContent=type+' Packs';container.appendChild(typeHeader);packs[type].forEach(pack=>{const item=document.createElement('div');item.className='pack-item';item.innerHTML=`<div class="pack-info"><div class="pack-name">${pack.name}</div><div class="pack-desc">${pack.description||''}</div><div class="pack-meta">Folder: ${pack.folder} | Version: ${pack.version.join('.')}</div></div><button class="small danger" onclick="removePack('${type}','${pack.pack_id}')">Remove</button>`;container.appendChild(item)})}}if(!hasAny){container.innerHTML='<div class="empty-state">No active packs. Upload one to get started!</div>'}}catch(error){document.getElementById('activePacks').innerHTML='<div class="empty-state">Error loading packs</div>'}}async function removePack(type,packId){if(!confirm('Remove this pack? Server will need restart to apply.')){return}try{const response=await fetch(`/api/packs/${type}/${packId}`,{method:'DELETE'});const result=await response.json();if(response.ok){loadActivePacks();alert(result.message)}else{alert('Error: '+result.error)}}catch(error){alert('Error: '+error.message)}}async function uploadAndRestart(){const file=fileInput.files[0];if(!file)return;uploadBtn.disabled=true;showSpinner('uploadSpinner',true);hideStatus('uploadStatus');const formData=new FormData();formData.append('file',file);formData.append('packType',document.getElementById('packType').value);try{const response=await fetch('/api/upload',{method:'POST',body:formData});const result=await response.json();if(response.ok){showStatus('uploadStatus',result.message,'success');fileInput.value='';fileName.textContent='';setTimeout(()=>{updateServerStatus();loadActivePacks()},2000)}else{showStatus('uploadStatus',result.error||'Upload failed','error');uploadBtn.disabled=false}}catch(error){showStatus('uploadStatus','Error: '+error.message,'error');uploadBtn.disabled=false}finally{showSpinner('uploadSpinner',false)}}async function extractPacks(){showSpinner('extractSpinner',true);hideStatus('extractStatus');try{const response=await fetch('/api/extract',{method:'POST'});const result=await response.json();showStatus('extractStatus',result.message,response.ok?'success':'error');if(response.ok)loadActivePacks()}catch(error){showStatus('extractStatus','Error: '+error.message,'error')}finally{showSpinner('extractSpinner',false)}}async function restartServer(){if(!confirm('Restart server? Players will disconnect.')){return}showSpinner('restartSpinner',true);hideStatus('restartStatus');try{const response=await fetch('/api/restart',{method:'POST'});const result=await response.json();showStatus('restartStatus',result.message,response.ok?'success':'error');if(response.ok)setTimeout(updateServerStatus,2000)}catch(error){showStatus('restartStatus','Error: '+error.message,'error')}finally{showSpinner('restartSpinner',false)}}async function updateServerStatus(){try{const response=await fetch('/api/status');const result=await response.json();const statusDiv=document.getElementById('serverStatus');const indicatorClass=result.ready?'status-running':'status-stopped';statusDiv.innerHTML=`<span class="status-indicator ${indicatorClass}"></span>${result.message}`}catch(error){document.getElementById('serverStatus').innerHTML='<span class="status-indicator status-unknown"></span>Status unavailable'}}function showSpinner(id,show){document.getElementById(id).style.display=show?'block':'none'}function showStatus(id,message,type){const status=document.getElementById(id);status.textContent=message;status.className='status-msg '+type;status.style.display='block'}function hideStatus(id){document.getElementById(id).style.display='none'}updateServerStatus();loadActivePacks();setInterval(updateServerStatus,10000);setInterval(loadActivePacks,30000)</script></body></html>'''
 
     @app.route('/api/upload', methods=['POST'])
     def upload():
@@ -94,13 +209,14 @@ data:
             filename = secure_filename(file.filename)
             upload_path = os.path.join(UPLOAD_FOLDER, filename)
             file.save(upload_path)
-            destination = RESOURCE_PACKS_DIR if request.form.get('packType') == 'resource' else BEHAVIOR_PACKS_DIR
-            success, result = extract_mcpack(upload_path, destination)
+            pack_type = request.form.get('packType', 'resource')
+            destination = RESOURCE_PACKS_DIR if pack_type == 'resource' else BEHAVIOR_PACKS_DIR
+            success, result = extract_mcpack(upload_path, destination, pack_type)
             os.remove(upload_path)
             if not success:
                 return jsonify({'error': f'Extraction failed: {result}'}), 500
             restart_success, restart_msg = restart_server()
-            message = f'Pack "{result}" installed! ' + ('Server restarting...' if restart_success else f'Restart failed: {restart_msg}')
+            message = f'Pack "{result}" installed and activated! ' + ('Server restarting...' if restart_success else f'Restart failed: {restart_msg}')
             return jsonify({'message': message}), 200
         except Exception as e:
             return jsonify({'error': str(e)}), 500
@@ -108,15 +224,28 @@ data:
     @app.route('/api/extract', methods=['POST'])
     def extract():
         extracted = []
-        for dir_path in [RESOURCE_PACKS_DIR, BEHAVIOR_PACKS_DIR]:
+        for pack_type, dir_path in [('resource', RESOURCE_PACKS_DIR), ('behavior', BEHAVIOR_PACKS_DIR)]:
             for filename in os.listdir(dir_path):
                 if filename.endswith('.mcpack'):
                     mcpack_path = os.path.join(dir_path, filename)
-                    success, result = extract_mcpack(mcpack_path, dir_path)
+                    success, result = extract_mcpack(mcpack_path, dir_path, pack_type)
                     if success:
                         os.remove(mcpack_path)
                         extracted.append(result)
         return jsonify({'message': f'Extracted {len(extracted)} pack(s)' if extracted else 'No packs found'}), 200
+
+    @app.route('/api/packs', methods=['GET'])
+    def list_packs():
+        return jsonify(get_active_packs()), 200
+
+    @app.route('/api/packs/<pack_type>/<pack_id>', methods=['DELETE'])
+    def remove_pack(pack_type, pack_id):
+        if pack_type not in ['resource', 'behavior']:
+            return jsonify({'error': 'Invalid pack type'}), 400
+        success, error = remove_pack_from_world(pack_id, pack_type)
+        if not success:
+            return jsonify({'error': error}), 500
+        return jsonify({'message': f'Pack disabled. Restart server to apply changes.'}), 200
 
     @app.route('/api/restart', methods=['POST'])
     def restart():
