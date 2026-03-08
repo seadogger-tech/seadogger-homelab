@@ -8,10 +8,10 @@ data:
     set -e
 
     # Source and destination paths
-    NEXTCLOUD_MINECRAFT="/nextcloud/data/KellBell/files/minecraft-packs"
+    NEXTCLOUD_MINECRAFT="/nextcloud/data/${NEXTCLOUD_USER}/files/minecraft-packs"
     RESOURCE_PACKS="/data/resource_packs"
     BEHAVIOR_PACKS="/data/behavior_packs"
-    PROCESSED_DIR="/nextcloud/data/KellBell/files/minecraft-packs/.processed"
+    PROCESSED_DIR="/nextcloud/data/${NEXTCLOUD_USER}/files/minecraft-packs/.processed"
 
     echo "[$(date)] Starting pack sync..."
 
@@ -78,6 +78,12 @@ spec:
               command:
                 - /bin/sh
                 - /scripts/sync-packs.sh
+              env:
+                - name: NEXTCLOUD_USER
+                  valueFrom:
+                    configMapKeyRef:
+                      name: minecraft-pack-sync-config
+                      key: NEXTCLOUD_USER
               volumeMounts:
                 - name: scripts
                   mountPath: /scripts

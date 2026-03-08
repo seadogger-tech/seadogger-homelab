@@ -1,0 +1,6 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: minecraft-pack-sync-config
+data:
+  NEXTCLOUD_USER: "KellBell"
