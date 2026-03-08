@@ -43,7 +43,7 @@ spec:
             claimName: minecraft-bedrock-data
         - name: app-script
           configMap:
-            name: minecraft-pack-manager-ui
+            name: pack-manager-ui-app
 ---
 apiVersion: v1
 kind: Service
