@@ -117,18 +117,22 @@ data:
                             if os.path.isdir(pack_dir):
                                 manifest_path = os.path.join(pack_dir, 'manifest.json')
                                 if os.path.exists(manifest_path):
-                                    with open(manifest_path, 'r') as mf:
-                                        manifest = json.load(mf)
-                                        if manifest.get('header', {}).get('uuid') == pack_id:
-                                            active[pack_type].append({
-                                                'pack_id': pack_id,
-                                                'version': pack_entry.get('version'),
-                                                'name': manifest.get('header', {}).get('name', os.path.basename(pack_dir)),
-                                                'description': manifest.get('header', {}).get('description', ''),
-                                                'folder': os.path.basename(pack_dir)
-                                            })
-                                            break
-                except:
+                                    try:
+                                        with open(manifest_path, 'r') as mf:
+                                            manifest = json.load(mf)
+                                            if manifest.get('header', {}).get('uuid') == pack_id:
+                                                active[pack_type].append({
+                                                    'pack_id': pack_id,
+                                                    'version': pack_entry.get('version'),
+                                                    'name': manifest.get('header', {}).get('name', os.path.basename(pack_dir)),
+                                                    'description': manifest.get('header', {}).get('description', ''),
+                                                    'folder': os.path.basename(pack_dir)
+                                                })
+                                                break
+                                    except json.JSONDecodeError:
+                                        # Skip manifests with invalid JSON (e.g., chemistry pack with comments)
+                                        continue
+                except Exception:
                     pass
 
         return active
