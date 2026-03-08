@@ -98,8 +98,13 @@ data:
             return False, str(e)
 
     def get_all_packs():
-        """Get all extracted packs with active status"""
+        """Get all extracted packs with active status (excluding system packs)"""
         all_packs = {'resource': [], 'behavior': []}
+
+        # System pack folders to exclude
+        system_packs = {'vanilla', 'chemistry', 'editor', 'server_library', 'server_ui_library',
+                       'server_editor_library', 'experimental_creator_cameras',
+                       'experimental_villager_trade', 'experimental_y_2026_drop_1'}
 
         # Load active pack IDs from JSON
         active_ids = {'resource': set(), 'behavior': set()}
@@ -116,6 +121,11 @@ data:
         for pack_type, packs_dir in [('resource', RESOURCE_PACKS_DIR), ('behavior', BEHAVIOR_PACKS_DIR)]:
             for pack_dir in glob.glob(os.path.join(packs_dir, '*')):
                 if os.path.isdir(pack_dir):
+                    folder_name = os.path.basename(pack_dir)
+                    # Skip system packs and vanilla version folders
+                    if folder_name in system_packs or folder_name.startswith('vanilla_'):
+                        continue
+
                     manifest_path = os.path.join(pack_dir, 'manifest.json')
                     if os.path.exists(manifest_path):
                         try:
@@ -126,9 +136,9 @@ data:
                                     all_packs[pack_type].append({
                                         'pack_id': pack_id,
                                         'version': manifest.get('header', {}).get('version', [1, 0, 0]),
-                                        'name': manifest.get('header', {}).get('name', os.path.basename(pack_dir)),
+                                        'name': manifest.get('header', {}).get('name', folder_name),
                                         'description': manifest.get('header', {}).get('description', ''),
-                                        'folder': os.path.basename(pack_dir),
+                                        'folder': folder_name,
                                         'active': pack_id in active_ids[pack_type]
                                     })
                         except json.JSONDecodeError:
