@@ -12,3 +12,4 @@ resources:
   - ingressroutes.yml
   - certificate.yml
   - pack-auto-extract.yaml
+  - pack-manager-ui.yaml

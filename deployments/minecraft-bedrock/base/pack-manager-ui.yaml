@@ -1,0 +1,220 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: pack-manager-ui
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: pack-manager-ui
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "patch"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: pack-manager-ui
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: pack-manager-ui
+subjects:
+  - kind: ServiceAccount
+    name: pack-manager-ui
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pack-manager-ui-app
+data:
+  app.py: |
+    #!/usr/bin/env python3
+    from flask import Flask, request, jsonify
+    from flask_cors import CORS
+    import os, zipfile, shutil, subprocess, json
+    from werkzeug.utils import secure_filename
+
+    app = Flask(__name__)
+    CORS(app)
+
+    UPLOAD_FOLDER = '/tmp/mcpack-uploads'
+    RESOURCE_PACKS_DIR = '/data/resource_packs'
+    BEHAVIOR_PACKS_DIR = '/data/behavior_packs'
+    os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+    def extract_mcpack(mcpack_path, destination):
+        try:
+            pack_name = os.path.splitext(os.path.basename(mcpack_path))[0]
+            extract_path = os.path.join(destination, pack_name)
+            if os.path.exists(extract_path):
+                shutil.rmtree(extract_path)
+            with zipfile.ZipFile(mcpack_path, 'r') as zip_ref:
+                zip_ref.extractall(extract_path)
+            return True, pack_name
+        except Exception as e:
+            return False, str(e)
+
+    def restart_server():
+        try:
+            subprocess.run(['kubectl', 'rollout', 'restart', 'deployment/minecraft-bedrock', '-n', 'minecraft-bedrock'], check=True, capture_output=True, text=True)
+            return True, "Server restart initiated"
+        except Exception as e:
+            return False, str(e)
+
+    def get_server_status():
+        try:
+            result = subprocess.run(['kubectl', 'get', 'pods', '-n', 'minecraft-bedrock', '-l', 'app=minecraft-bedrock', '-o', 'json'], capture_output=True, text=True, check=True)
+            pods = json.loads(result.stdout)
+            if not pods['items']:
+                return {'status': 'unknown', 'ready': False, 'message': 'No pods found'}
+            pod = pods['items'][0]
+            status = pod['status']['phase']
+            ready = all(c['ready'] for c in pod['status'].get('containerStatuses', []))
+            return {'status': status, 'ready': ready, 'message': f"Pod: {status}, Ready: {ready}"}
+        except Exception as e:
+            return {'status': 'error', 'ready': False, 'message': str(e)}
+
+    @app.route('/')
+    def index():
+        return '''<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Minecraft Pack Manager</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);min-height:100vh;display:flex;justify-content:center;align-items:center;padding:20px}.container{background:#fff;border-radius:20px;box-shadow:0 20px 60px rgba(0,0,0,0.3);max-width:700px;width:100%;padding:40px}h1{color:#333;margin-bottom:10px;text-align:center;font-size:28px}.subtitle{color:#666;text-align:center;margin-bottom:20px;font-size:14px}.status-bar{background:#f8f9fa;padding:15px;border-radius:10px;margin-bottom:20px;text-align:center}.status-indicator{display:inline-block;width:12px;height:12px;border-radius:50%;margin-right:8px}.status-running{background:#28a745}.status-stopped{background:#dc3545}.status-unknown{background:#ffc107}.section{margin-bottom:30px;padding:20px;background:#f8f9fa;border-radius:10px}.section h2{color:#667eea;font-size:18px;margin-bottom:15px}label{display:block;font-weight:600;margin-bottom:10px;color:#333}select{width:100%;padding:12px;border:2px solid #e0e0e0;border-radius:8px;font-size:16px;margin-bottom:15px}.file-input-label{display:block;padding:20px;background:#fff;border:2px dashed #667eea;border-radius:8px;text-align:center;cursor:pointer;transition:all 0.3s}.file-input-label:hover{background:#f0f0f0;border-color:#764ba2}.file-name{margin-top:10px;color:#667eea;font-weight:600;text-align:center;min-height:20px}button{width:100%;padding:15px;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:#fff;border:none;border-radius:8px;font-size:18px;font-weight:600;cursor:pointer;transition:transform 0.2s,box-shadow 0.2s;margin-top:10px}button:hover:not(:disabled){transform:translateY(-2px);box-shadow:0 10px 20px rgba(102,126,234,0.4)}button:disabled{opacity:0.5;cursor:not-allowed}button.secondary{background:linear-gradient(135deg,#f093fb 0%,#f5576c 100%)}button.danger{background:linear-gradient(135deg,#fa709a 0%,#fee140 100%)}.status-msg{margin-top:15px;padding:15px;border-radius:8px;text-align:center;display:none}.status-msg.success{background:#d4edda;color:#155724}.status-msg.error{background:#f8d7da;color:#721c24}.spinner{border:3px solid #f3f3f3;border-top:3px solid #667eea;border-radius:50%;width:30px;height:30px;animation:spin 1s linear infinite;margin:10px auto;display:none}@keyframes spin{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}</style></head><body><div class="container"><h1>🎮 Minecraft Pack Manager</h1><p class="subtitle">SeaDogger Homelab</p><div class="status-bar"><div id="serverStatus"><span class="status-indicator status-unknown"></span>Loading server status...</div></div><div class="section"><h2>📦 Upload & Install Pack</h2><label for="packType">Pack Type:</label><select id="packType"><option value="resource">Resource Pack</option><option value="behavior">Behavior Pack</option></select><label>Select .mcpack file:</label><label class="file-input-label" for="fileInput">📁 Click to browse<br><small>.mcpack files only</small></label><input type="file" id="fileInput" accept=".mcpack" style="display:none"><div class="file-name" id="fileName"></div><button id="uploadBtn" onclick="uploadAndRestart()" disabled>Upload, Extract & Restart</button><div class="spinner" id="uploadSpinner"></div><div class="status-msg" id="uploadStatus"></div></div><div class="section"><h2>🔧 Manual Actions</h2><button class="secondary" onclick="extractPacks()">Extract All .mcpack Files</button><div class="spinner" id="extractSpinner"></div><div class="status-msg" id="extractStatus"></div><button class="danger" onclick="restartServer()">🔄 Restart Server</button><div class="spinner" id="restartSpinner"></div><div class="status-msg" id="restartStatus"></div></div></div><script>const fileInput=document.getElementById('fileInput');const fileName=document.getElementById('fileName');const uploadBtn=document.getElementById('uploadBtn');fileInput.addEventListener('change',(e)=>{if(e.target.files.length>0){fileName.textContent=e.target.files[0].name;uploadBtn.disabled=false}else{fileName.textContent='';uploadBtn.disabled=true}});async function uploadAndRestart(){const file=fileInput.files[0];if(!file)return;uploadBtn.disabled=true;showSpinner('uploadSpinner',true);hideStatus('uploadStatus');const formData=new FormData();formData.append('file',file);formData.append('packType',document.getElementById('packType').value);try{const response=await fetch('/api/upload',{method:'POST',body:formData});const result=await response.json();if(response.ok){showStatus('uploadStatus',result.message,'success');fileInput.value='';fileName.textContent='';setTimeout(updateServerStatus,2000)}else{showStatus('uploadStatus',result.error||'Upload failed','error');uploadBtn.disabled=false}}catch(error){showStatus('uploadStatus','Error: '+error.message,'error');uploadBtn.disabled=false}finally{showSpinner('uploadSpinner',false)}}async function extractPacks(){showSpinner('extractSpinner',true);hideStatus('extractStatus');try{const response=await fetch('/api/extract',{method:'POST'});const result=await response.json();showStatus('extractStatus',result.message,response.ok?'success':'error')}catch(error){showStatus('extractStatus','Error: '+error.message,'error')}finally{showSpinner('extractSpinner',false)}}async function restartServer(){if(!confirm('Restart server? Players will disconnect.')){return}showSpinner('restartSpinner',true);hideStatus('restartStatus');try{const response=await fetch('/api/restart',{method:'POST'});const result=await response.json();showStatus('restartStatus',result.message,response.ok?'success':'error');if(response.ok)setTimeout(updateServerStatus,2000)}catch(error){showStatus('restartStatus','Error: '+error.message,'error')}finally{showSpinner('restartSpinner',false)}}async function updateServerStatus(){try{const response=await fetch('/api/status');const result=await response.json();const statusDiv=document.getElementById('serverStatus');const indicatorClass=result.ready?'status-running':'status-stopped';statusDiv.innerHTML=`<span class="status-indicator ${indicatorClass}"></span>${result.message}`}catch(error){document.getElementById('serverStatus').innerHTML='<span class="status-indicator status-unknown"></span>Status unavailable'}}function showSpinner(id,show){document.getElementById(id).style.display=show?'block':'none'}function showStatus(id,message,type){const status=document.getElementById(id);status.textContent=message;status.className='status-msg '+type;status.style.display='block'}function hideStatus(id){document.getElementById(id).style.display='none'}updateServerStatus();setInterval(updateServerStatus,10000)</script></body></html>'''
+
+    @app.route('/api/upload', methods=['POST'])
+    def upload():
+        if 'file' not in request.files:
+            return jsonify({'error': 'No file'}), 400
+        file = request.files['file']
+        if not file.filename or not file.filename.endswith('.mcpack'):
+            return jsonify({'error': 'Invalid file'}), 400
+        try:
+            filename = secure_filename(file.filename)
+            upload_path = os.path.join(UPLOAD_FOLDER, filename)
+            file.save(upload_path)
+            destination = RESOURCE_PACKS_DIR if request.form.get('packType') == 'resource' else BEHAVIOR_PACKS_DIR
+            success, result = extract_mcpack(upload_path, destination)
+            os.remove(upload_path)
+            if not success:
+                return jsonify({'error': f'Extraction failed: {result}'}), 500
+            restart_success, restart_msg = restart_server()
+            message = f'Pack "{result}" installed! ' + ('Server restarting...' if restart_success else f'Restart failed: {restart_msg}')
+            return jsonify({'message': message}), 200
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/extract', methods=['POST'])
+    def extract():
+        extracted = []
+        for dir_path in [RESOURCE_PACKS_DIR, BEHAVIOR_PACKS_DIR]:
+            for filename in os.listdir(dir_path):
+                if filename.endswith('.mcpack'):
+                    mcpack_path = os.path.join(dir_path, filename)
+                    success, result = extract_mcpack(mcpack_path, dir_path)
+                    if success:
+                        os.remove(mcpack_path)
+                        extracted.append(result)
+        return jsonify({'message': f'Extracted {len(extracted)} pack(s)' if extracted else 'No packs found'}), 200
+
+    @app.route('/api/restart', methods=['POST'])
+    def restart():
+        success, message = restart_server()
+        return jsonify({'message': message}), 200 if success else 500
+
+    @app.route('/api/status', methods=['GET'])
+    def status():
+        return jsonify(get_server_status()), 200
+
+    if __name__ == '__main__':
+        app.run(host='0.0.0.0', port=8080, debug=False)
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pack-manager-ui
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pack-manager-ui
+  template:
+    metadata:
+      labels:
+        app: pack-manager-ui
+    spec:
+      serviceAccountName: pack-manager-ui
+      containers:
+        - name: ui
+          image: python:3.11-slim
+          workingDir: /app
+          command:
+            - /bin/sh
+            - -c
+            - |
+              apt-get update && apt-get install -y kubectl && \
+              pip install --no-cache-dir flask flask-cors && \
+              python app.py
+          ports:
+            - name: http
+              containerPort: 8080
+          volumeMounts:
+            - name: app
+              mountPath: /app
+            - name: data
+              mountPath: /data
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "200m"
+      volumes:
+        - name: app
+          configMap:
+            name: pack-manager-ui-app
+        - name: data
+          persistentVolumeClaim:
+            claimName: minecraft-bedrock-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pack-manager-ui
+spec:
+  selector:
+    app: pack-manager-ui
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: pack-manager-ui-https
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`minecraft-packs.seadogger-homelab`)
+      kind: Rule
+      services:
+        - name: pack-manager-ui
+          port: 80
+  tls:
+    secretName: minecraft-packs-local-tls
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: minecraft-packs-certificate
+spec:
+  secretName: minecraft-packs-local-tls
+  issuerRef:
+    name: internal-local-issuer
+    kind: ClusterIssuer
+  dnsNames:
+    - minecraft-packs.seadogger-homelab
