@@ -122,21 +122,56 @@ The script lives in `seadogger-homelab-pro/core/useful_scripts/fetch_hdhomerun_g
 ### Features
 - **Cross-platform play:** Connect from Windows, iOS, Android, Xbox, PlayStation, Nintendo Switch
 - **Pack management:** Upload behavior packs, resource packs, and world templates via Filebrowser web UI
+- **Auto-extract .mcpack files:** CronJob automatically extracts uploaded .mcpack files every 2 minutes
+- **Blockbench support:** Upload custom models/textures directly from Blockbench as .mcpack files
 - **Persistent storage:** World data and server config saved to Ceph RBD
 - **Automated deployment:** ArgoCD Application with sync-wave 3
 - **Easy updates:** Change `VERSION` env var in deployment to upgrade server version
 
 ### Configuration
 - **Server properties:** Managed via environment variables in [deployment.yaml](../deployments/minecraft-bedrock/base/deployment.yaml)
-- **Pack uploads:** Access Filebrowser at `https://minecraft.seadogger-homelab`
-  - Default credentials configured in deployment
-  - Upload packs to `/data/behavior_packs/`, `/data/resource_packs/`, `/data/worlds/`
 - **World settings:** Edit `server.properties` via Filebrowser or kubectl exec
 
-### Connection
-- **LAN clients:** Connect to `192.168.1.247:19132`
-- **VPN clients:** Connect to `192.168.1.247:19132` via WireGuard VPN
-- **Server name:** Shown in Bedrock server browser (configurable via `SERVER_NAME` env var)
+### Uploading Custom Packs (Blockbench/mcpack)
+1. **Access Filebrowser:** Go to `https://minecraft.seadogger-homelab` and log in
+2. **Navigate to pack directory:**
+   - Resource packs (textures, models, sounds): `/data/resource_packs/`
+   - Behavior packs (gameplay mechanics): `/data/behavior_packs/`
+3. **Upload .mcpack file:** Use the upload button to select your file from Blockbench
+4. **Wait for auto-extraction:** A CronJob runs every 2 minutes and automatically:
+   - Extracts the .mcpack file to the appropriate directory
+   - Removes the .mcpack file after extraction
+5. **Restart server (if needed):** Most packs load automatically; if not, restart via:
+   ```bash
+   kubectl rollout restart deployment/minecraft-bedrock -n minecraft-bedrock
+   ```
+
+### Connecting to the Server
+
+#### From PC/Mobile (Windows, iOS, Android)
+1. Open Minecraft Bedrock Edition
+2. Go to **Play** → **Servers** → **Add Server**
+3. Enter server details:
+   - **Server Name:** SeaDogger Homelab
+   - **Server Address:** `192.168.1.247`
+   - **Port:** `19132`
+4. Save and connect
+
+#### From Xbox/PlayStation/Nintendo Switch
+**Option 1: LAN Discovery (Easiest)**
+1. Open Minecraft Bedrock Edition
+2. Go to **Play** → **Friends** tab
+3. Scroll down to **LAN Games** section
+4. Look for **"SeaDogger Homelab"** in the list
+5. Select and join
+
+**Option 2: Via Mobile/PC First**
+1. Add the server to a mobile device or Windows 10 PC using the steps above
+2. Connect to the server once from that device
+3. The server will now appear in the **Friends/Servers** list on Xbox/PlayStation/Switch
+4. Join from your console
+
+**Note:** Xbox/PlayStation/Switch don't allow direct server entry without using Xbox Insider or connecting from another device first.
 
 ![accent-divider.svg](images/accent-divider.svg)
 ## See Also
