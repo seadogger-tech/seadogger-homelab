@@ -223,7 +223,6 @@ data:
         """Check if K8s deployment exists for this world"""
         try:
             deployment_name = f'minecraft-bedrock-{sanitize_name(world_name)}'
-            # Check new-style deployment name first
             result = subprocess.run(
                 ['kubectl', 'get', 'deployment', deployment_name, '-n', NAMESPACE, '-o', 'json'],
                 capture_output=True, text=True, timeout=10
@@ -231,20 +230,7 @@ data:
             if result.returncode == 0:
                 deployment = json.loads(result.stdout)
                 replicas = deployment.get('status', {}).get('readyReplicas', 0)
-                if replicas > 0:
-                    return True
-
-            # Fallback: Check legacy deployment name (minecraft-bedrock) for seadogger-world
-            if world_name == 'seadogger-world':
-                result = subprocess.run(
-                    ['kubectl', 'get', 'deployment', 'minecraft-bedrock', '-n', NAMESPACE, '-o', 'json'],
-                    capture_output=True, text=True, timeout=10
-                )
-                if result.returncode == 0:
-                    deployment = json.loads(result.stdout)
-                    replicas = deployment.get('status', {}).get('readyReplicas', 0)
-                    return replicas > 0
-
+                return replicas > 0
             return False
         except:
             return False
@@ -253,7 +239,6 @@ data:
         """Get LoadBalancer IP for world's service"""
         try:
             service_name = f'minecraft-bedrock-{sanitize_name(world_name)}'
-            # Check new-style service name first
             result = subprocess.run(
                 ['kubectl', 'get', 'service', service_name, '-n', NAMESPACE, '-o', 'json'],
                 capture_output=True, text=True, timeout=10
@@ -261,20 +246,7 @@ data:
             if result.returncode == 0:
                 service = json.loads(result.stdout)
                 lb_ip = service.get('status', {}).get('loadBalancer', {}).get('ingress', [{}])[0].get('ip')
-                if lb_ip:
-                    return lb_ip
-
-            # Fallback: Check legacy service name (minecraft-bedrock-udp) for seadogger-world
-            if world_name == 'seadogger-world':
-                result = subprocess.run(
-                    ['kubectl', 'get', 'service', 'minecraft-bedrock-udp', '-n', NAMESPACE, '-o', 'json'],
-                    capture_output=True, text=True, timeout=10
-                )
-                if result.returncode == 0:
-                    service = json.loads(result.stdout)
-                    lb_ip = service.get('status', {}).get('loadBalancer', {}).get('ingress', [{}])[0].get('ip')
-                    return lb_ip
-
+                return lb_ip
             return None
         except:
             return None
@@ -478,11 +450,6 @@ data:
             sanitized = sanitize_name(world_name)
             deployment_name = f'minecraft-bedrock-{sanitized}'
             service_name = f'minecraft-bedrock-{sanitized}'
-
-            # Handle legacy seadogger-world deployment
-            if world_name == 'seadogger-world':
-                deployment_name = 'minecraft-bedrock'
-                service_name = 'minecraft-bedrock-udp'
 
             # Delete deployment
             result = subprocess.run(
