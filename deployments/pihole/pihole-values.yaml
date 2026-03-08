@@ -1,5 +1,6 @@
 # Service configuration for web admin
 image:
+  tag: "2026.02.0"
   architecture: arm64
 
 # Service configuration for web admin (via Traefik only)
@@ -86,6 +87,14 @@ whitelist:
     - xboxservices.com
     - scorecardresearch.com
     - dat.xboxlive.com
+    - ntck.co					
+    - url9788.noip.com					
+    - noip.com					
+    - notices.rei.com					
+    - somni.rei.com					
+    - tailscale.com					
+    - wwwv2.tailscale.com					
+    - login.tailscale.com	
 
 
 dnsmasq:
