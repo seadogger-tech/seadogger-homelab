@@ -54,7 +54,7 @@ spec:
               cpu: "1500m"   # box64 emulation needs headroom
           readinessProbe:
             exec:
-              command: ["mc-monitor", "status-bedrock"]
+              command: ["mc-monitor", "status-bedrock", "--host", "127.0.0.1", "--port", "19132"]
             initialDelaySeconds: 30
             periodSeconds: 15
             failureThreshold: 6
