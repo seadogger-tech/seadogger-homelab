@@ -8,8 +8,11 @@ resources:
   - deployment.yaml
   - deployment-pack-manager.yaml
   - service-udp.yaml
-  - service-web.yaml
   - ingressroutes.yml
   - certificate.yml
   - pack-auto-extract.yaml
   - pack-manager-ui.yaml
+  - playit-pvc.yaml
+  - playit-secret.yaml
+  - playit-deployment.yaml
+  - playit-networkpolicy.yaml

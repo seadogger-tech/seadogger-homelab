@@ -1,0 +1,39 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: playit-agent-restrict
+spec:
+  podSelector:
+    matchLabels:
+      app: playit-agent
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - {}  # Allow all ingress (playit.gg relays traffic to this pod)
+  egress:
+    # Allow DNS
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+    # Allow access to Minecraft server on hostNetwork port 19132
+    - to:
+        - podSelector:
+            matchLabels:
+              app: minecraft-bedrock
+      ports:
+        - protocol: UDP
+          port: 19132
+    # Allow outbound to playit.gg control plane (HTTPS and custom UDP)
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: 443
+        - protocol: UDP
+          port: 5525  # playit.gg control plane
+    # Block everything else (no access to other cluster services)

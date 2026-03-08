@@ -5,6 +5,21 @@
     minecraft_namespace: minecraft-bedrock
     argocd_namespace: argocd
   block:
+    - name: Create playit.gg secret
+      kubernetes.core.k8s:
+        kubeconfig: "{{ kubeconfig_path }}"
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: playit-secret
+            namespace: "{{ minecraft_namespace }}"
+          type: Opaque
+          stringData:
+            secret-key: "{{ playit_secret_key }}"
+      when: playit_secret_key is defined and playit_secret_key != "YOUR_PLAYIT_SECRET_KEY_HERE"
+
     - name: Create Minecraft Bedrock ArgoCD Application
       kubernetes.core.k8s:
         kubeconfig: "{{ kubeconfig_path }}"
