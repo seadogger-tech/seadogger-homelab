@@ -5,7 +5,7 @@ pipelines:
   enabled: false
 
 # Disable automatic model downloads on startup (causes hangs on Pi)
-extraEnvVars:
+env:
   - name: ENABLE_RAG_WEB_SEARCH
     value: "False"
   - name: ENABLE_MODEL_FILTER
