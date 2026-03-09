@@ -252,10 +252,10 @@ data:
             return None
 
     def get_next_available_ip():
-        """Get next available IP from pool (251-253)"""
+        """Get next available IP from pool (251-253), only counting running deployments"""
         used_ips = set()
 
-        # Check all services for used IPs
+        # Check all services for used IPs, but only count if deployment is running
         try:
             result = subprocess.run(
                 ['kubectl', 'get', 'services', '-n', NAMESPACE, '-o', 'json'],
@@ -267,7 +267,23 @@ data:
                     annotations = svc.get('metadata', {}).get('annotations', {})
                     lb_ip = annotations.get('metallb.universe.tf/loadBalancerIPs')
                     if lb_ip:
-                        used_ips.add(lb_ip)
+                        # Check if the corresponding deployment is actually running
+                        service_name = svc.get('metadata', {}).get('name', '')
+                        # Extract world name from service name (minecraft-bedrock-X -> X)
+                        if service_name.startswith('minecraft-bedrock-'):
+                            deployment_name = service_name
+                            try:
+                                dep_result = subprocess.run(
+                                    ['kubectl', 'get', 'deployment', deployment_name, '-n', NAMESPACE, '-o', 'json'],
+                                    capture_output=True, text=True, timeout=10
+                                )
+                                if dep_result.returncode == 0:
+                                    deployment = json.loads(dep_result.stdout)
+                                    ready_replicas = deployment.get('status', {}).get('readyReplicas', 0)
+                                    if ready_replicas > 0:
+                                        used_ips.add(lb_ip)
+                            except:
+                                pass
         except:
             pass
 
