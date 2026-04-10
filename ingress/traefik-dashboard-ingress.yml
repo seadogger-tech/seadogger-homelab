@@ -1,4 +1,17 @@
 ---
+# HTTP: catch and redirect to HTTPS
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: redirect-https
+  namespace: kube-system
+spec:
+  redirectScheme:
+    scheme: https
+    permanent: true
+    port: "443"
+
+---
 # HTTP - Redirect to HTTPS
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
@@ -10,6 +23,8 @@ spec:
   routes:
     - match: Host(`traefik.seadogger-homelab`)
       kind: Rule
+      middlewares:
+        - name: redirect-https
       services:
         - name: api@internal
           kind: TraefikService

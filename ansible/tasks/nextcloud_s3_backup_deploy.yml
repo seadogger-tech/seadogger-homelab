@@ -1,0 +1,51 @@
+---
+# Step 1: Set KUBECONFIG globally
+- name: Set KUBECONFIG global
+  ansible.builtin.set_fact:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+
+# Step 2: Create S3 backup credentials secret
+- name: Create Nextcloud S3 backup credentials secret
+  kubernetes.core.k8s:
+    kubeconfig: "{{ KUBECONFIG }}"
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: nextcloud-s3-backup-credentials
+        namespace: nextcloud
+      type: Opaque
+      stringData:
+        aws-credentials: |
+          [default]
+          aws_access_key_id={{ nextcloud_s3_backup_key_id }}
+          aws_secret_access_key={{ nextcloud_s3_backup_access_key }}
+
+# Step 3: Create S3 backup configmap for bucket and region
+- name: Create Nextcloud S3 backup configmap
+  kubernetes.core.k8s:
+    kubeconfig: "{{ KUBECONFIG }}"
+    state: present
+    definition:
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: nextcloud-s3-backup-config
+        namespace: nextcloud
+      data:
+        bucket: "{{ nextcloud_s3_backup_bucket }}"
+        region: "{{ nextcloud_s3_backup_region }}"
+
+# Step 4: Apply the CronJob manifest from GitHub
+- name: Download Nextcloud S3 backup CronJob manifest
+  ansible.builtin.get_url:
+    url: "https://raw.githubusercontent.com/seadogger-tech/seadogger-homelab/master/deployments/nextcloud/s3-backup-cronjob.yaml"
+    dest: "/tmp/s3-backup-cronjob.yaml"
+    mode: "0644"
+
+- name: Apply Nextcloud S3 backup CronJob
+  kubernetes.core.k8s:
+    kubeconfig: "{{ KUBECONFIG }}"
+    state: present
+    src: "/tmp/s3-backup-cronjob.yaml"

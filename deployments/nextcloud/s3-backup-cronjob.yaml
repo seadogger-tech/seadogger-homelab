@@ -1,0 +1,86 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: nextcloud-s3-backup
+  namespace: nextcloud
+spec:
+  # Run every night at 2 AM
+  schedule: "0 2 * * *"
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app: nextcloud-s3-backup
+        spec:
+          restartPolicy: OnFailure
+          securityContext:
+            runAsUser: 33
+            runAsGroup: 33
+            fsGroup: 33
+          containers:
+          - name: s3-sync
+            image: amazon/aws-cli:latest
+            command:
+            - /bin/bash
+            - -c
+            - |
+              set -e
+              echo "Starting Nextcloud S3 backup at $(date)"
+
+              export HOME=/tmp
+              export AWS_SHARED_CREDENTIALS_FILE=/aws-credentials/aws-credentials
+              export AWS_DEFAULT_REGION=${S3_REGION}
+
+              aws s3 sync /nextcloud-data \
+                s3://${S3_BUCKET}/nextcloud-data/ \
+                --exclude "*/cache/*" \
+                --exclude "*/tmp/*" \
+                --exclude "*/appdata_*/*" \
+                --exclude "*/files_trashbin/*" \
+                --exclude "*/files_versions/*" \
+                --exclude "nextcloud.log*" \
+                --storage-class STANDARD \
+                --delete
+
+              echo "Backup completed successfully at $(date)"
+              aws s3 ls s3://${S3_BUCKET}/nextcloud-data/ --recursive --human-readable --summarize | tail -2
+
+            env:
+            - name: S3_BUCKET
+              valueFrom:
+                configMapKeyRef:
+                  name: nextcloud-s3-backup-config
+                  key: bucket
+            - name: S3_REGION
+              valueFrom:
+                configMapKeyRef:
+                  name: nextcloud-s3-backup-config
+                  key: region
+
+            volumeMounts:
+            - name: nextcloud-data
+              mountPath: /nextcloud-data
+              readOnly: true
+            - name: aws-credentials
+              mountPath: /aws-credentials
+              readOnly: true
+
+            resources:
+              requests:
+                memory: "512Mi"
+                cpu: "250m"
+              limits:
+                memory: "2Gi"
+                cpu: "1000m"
+
+          volumes:
+          - name: nextcloud-data
+            persistentVolumeClaim:
+              claimName: nextcloud-nextcloud
+          - name: aws-credentials
+            secret:
+              secretName: nextcloud-s3-backup-credentials

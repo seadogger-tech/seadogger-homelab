@@ -1,5 +1,18 @@
 ---
-# HTTP
+# HTTP: catch and redirect to HTTPS
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: redirect-https
+  namespace: argocd
+spec:
+  redirectScheme:
+    scheme: https
+    permanent: true
+    port: "443"
+
+---
+# HTTP: catch and redirect to HTTPS
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
@@ -10,6 +23,8 @@ spec:
   routes:
     - match: Host(`argocd.seadogger-homelab`)
       kind: Rule
+      middlewares:
+        - name: redirect-https
       services:
         - name: argocd-server   # <- correct Service name from Helm chart
           port: 80              # <- Service port (maps to targetPort 8080)

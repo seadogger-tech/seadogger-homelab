@@ -1,4 +1,16 @@
 apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: redirect-https
+  namespace: pihole
+spec:
+  redirectScheme:
+    scheme: https
+    permanent: true
+    port: "443"
+
+---
+apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
   name: pihole-http
@@ -8,6 +20,8 @@ spec:
   routes:
     - match: Host(`pihole.seadogger-homelab`)
       kind: Rule
+      middlewares:
+        - name: redirect-https
       services:
         - name: pihole-web   # If your Service is actually named 'pihole', change this to 'pihole'
           port: 80

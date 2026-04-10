@@ -1,5 +1,18 @@
 # HTTP: catch and redirect to HTTPS
 apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: redirect-https
+  namespace: rook-ceph
+spec:
+  redirectScheme:
+    scheme: https
+    permanent: true
+    port: "443"
+
+---
+# HTTP: catch and redirect to HTTPS
+apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
   name: ceph-dashboard-http
@@ -9,6 +22,8 @@ spec:
   routes:
     - match: Host(`ceph.seadogger-homelab`)
       kind: Rule
+      middlewares:
+        - name: redirect-https
       services:
         - name: rook-ceph-mgr-dashboard
           port: 7000

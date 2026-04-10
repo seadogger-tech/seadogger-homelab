@@ -118,6 +118,10 @@
       import_tasks: tasks/nextcloud_deploy.yml
       when: enable_nextcloud | default(true)
 
+    - name: Deploy Nextcloud S3 Backup
+      import_tasks: tasks/nextcloud_s3_backup_deploy.yml
+      when: enable_nextcloud_s3_backup | default(false)
+
     - name: Deploy JellyFin Secrets
       import_tasks: tasks/jellyfin_secrets.yml
       when: enable_jellyfin_secrets | default(true)

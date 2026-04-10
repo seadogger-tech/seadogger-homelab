@@ -31,11 +31,18 @@ manual_install_nextcloud: true
 manual_install_jellyfin: true
 manual_install_minecraft_bedrock: true
 manual_install_traefik_dashboard: true
+manual_install_nextcloud_s3_backup: true
 
 # --- Secrets ---
 dashboard_password: "YourSecurePasswordHere"
 aws_bedrock_api_key_id: "YOUR_AWS_ACCESS_KEY_ID_HERE"
 aws_bedrock_api_access_key: "YOUR_AWS_SECRET_ACCESS_KEY_HERE"
+
+# --- Nextcloud S3 Backup ---
+nextcloud_s3_backup_key_id: "YOUR_AWS_ACCESS_KEY_ID_HERE"
+nextcloud_s3_backup_access_key: "YOUR_AWS_SECRET_ACCESS_KEY_HERE"
+nextcloud_s3_backup_bucket: "YOUR_S3_BUCKET_NAME_HERE"
+nextcloud_s3_backup_region: "us-east-1"
 
 # --- HDHomeRun Credentials (for Jellyfin XMLTV Proxy) ---
 # Note: The XMLTV proxy deployment is managed in deployments/jellyfin/xmltv-proxy.yaml
@@ -155,3 +162,4 @@ enable_jellyfin_secrets: "{{ cold_start_stage_3_install_applications | bool and 
 enable_jellyfin_xmltv_proxy: "{{ cold_start_stage_3_install_applications | bool and manual_install_jellyfin | bool }}"
 enable_minecraft_bedrock: "{{ cold_start_stage_3_install_applications | bool and manual_install_minecraft_bedrock | bool }}"
 enable_traefik_dashboard: "{{ cold_start_stage_3_install_applications | bool and manual_install_traefik_dashboard | bool }}"
+enable_nextcloud_s3_backup: "{{ cold_start_stage_3_install_applications | bool and manual_install_nextcloud_s3_backup | bool }}"
