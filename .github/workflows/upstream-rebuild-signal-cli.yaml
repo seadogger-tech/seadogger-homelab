@@ -25,6 +25,12 @@ on:
   schedule:
     - cron: "0 */6 * * *"
   workflow_dispatch:
+    inputs:
+      force_rebuild:
+        description: "Rebuild/push the current upstream tag even if already tracked"
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -75,7 +81,10 @@ jobs:
       - name: Decide if changed
         id: changed
         run: |
-          if [[ "${{ steps.tag.outputs.new_tag }}" == "${{ steps.last.outputs.last_tag }}" ]]; then
+          if [[ "${{ github.event.inputs.force_rebuild }}" == "true" ]]; then
+            echo "changed=true"  >> "$GITHUB_OUTPUT"
+            echo "force_rebuild=true; rebuilding ${{ steps.tag.outputs.new_tag }} even though last built is '${{ steps.last.outputs.last_tag }}'."
+          elif [[ "${{ steps.tag.outputs.new_tag }}" == "${{ steps.last.outputs.last_tag }}" ]]; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
             echo "No new release; skipping build."
           else
@@ -126,5 +135,9 @@ jobs:
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add "$TAG_FILE"
-          git commit -m "ci(upstream): signal-cli ${{ steps.tag.outputs.new_tag }}"
-          git push
+          if git diff --cached --quiet; then
+            echo "Tag file already up to date; nothing to commit."
+          else
+            git commit -m "ci(upstream): signal-cli ${{ steps.tag.outputs.new_tag }}"
+            git push
+          fi
