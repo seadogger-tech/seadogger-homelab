@@ -14,7 +14,12 @@ ARG VERSION=0.14.4.1
 ARG SHA256_TARBALL=
 
 ENV SIGNAL_CLI_VERSION=${VERSION}
-ENV SIGNAL_CLI_CONFIG=/data
+# NOTE: do NOT set SIGNAL_CLI_CONFIG. The Gradle-generated wrapper script
+# in signal-cli interprets that env var as "--config <value>", and signal-cli
+# treats --config's argument as a config FILE path (not a directory) - so
+# the daemon crashes at startup with
+#   "Failed to load config from /data: /data (Is a directory)"
+# Pass the data directory via --data-dir in CMD instead.
 
 # Install signal-cli from upstream release.
 # Supply-chain note: if SHA256_TARBALL is provided at build time, the
@@ -44,6 +49,6 @@ EXPOSE 8080
 # in the JSON-RPC request body.
 #
 # Override at the Deployment level by setting `args:` if needed (e.g. for
-# single-account mode: `args: ["--config","/data","--account","+1XXX","daemon","--http","0.0.0.0:8080"]`).
+# single-account mode: `args: ["--data-dir","/data","--account","+1XXX","daemon","--http","0.0.0.0:8080"]`).
 ENTRYPOINT ["signal-cli"]
-CMD ["--config", "/data", "daemon", "--http", "0.0.0.0:8080"]
+CMD ["--data-dir", "/data", "daemon", "--http", "0.0.0.0:8080"]
