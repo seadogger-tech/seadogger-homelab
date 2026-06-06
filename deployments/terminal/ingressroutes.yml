@@ -1,0 +1,44 @@
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: redirect-https
+  namespace: terminal
+spec:
+  redirectScheme:
+    scheme: https
+    permanent: true
+    port: "443"
+
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: terminal-http
+  namespace: terminal
+spec:
+  entryPoints: ["web"]
+  routes:
+    - match: Host(`terminal.seadogger-homelab`)
+      kind: Rule
+      middlewares:
+        - name: redirect-https
+      services:
+        - name: terminal
+          port: 7681
+
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: terminal-https
+  namespace: terminal
+spec:
+  entryPoints: ["websecure"]
+  routes:
+    - match: Host(`terminal.seadogger-homelab`)
+      kind: Rule
+      services:
+        - name: terminal
+          port: 7681
+  tls:
+    secretName: terminal-local-tls

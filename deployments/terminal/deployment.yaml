@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: terminal
+  labels:
+    app: terminal
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: terminal
+  template:
+    metadata:
+      labels:
+        app: terminal
+    spec:
+      serviceAccountName: terminal
+      initContainers:
+        # Copy kubectl binary into the shared volume at startup
+        - name: kubectl-installer
+          image: bitnami/kubectl:latest
+          command: ["cp", "/opt/bitnami/kubectl/bin/kubectl", "/tools/kubectl"]
+          volumeMounts:
+            - name: tools
+              mountPath: /tools
+      containers:
+        - name: ttyd
+          image: tsl0922/ttyd:alpine
+          command: ["/usr/bin/ttyd"]
+          args:
+            - --port=7681
+            - --writable
+            - bash
+          ports:
+            - containerPort: 7681
+          env:
+            - name: HOME
+              value: /root
+            - name: PATH
+              value: /tools:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+            - name: KUBECONFIG
+              value: ""
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          volumeMounts:
+            - name: tools
+              mountPath: /tools
+      volumes:
+        - name: tools
+          emptyDir: {}

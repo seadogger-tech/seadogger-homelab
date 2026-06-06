@@ -1,0 +1,20 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: terminal
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/seadogger-tech/seadogger-homelab
+    targetRevision: master
+    path: deployments/terminal
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: terminal
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
