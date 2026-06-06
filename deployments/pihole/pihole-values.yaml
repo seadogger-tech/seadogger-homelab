@@ -126,4 +126,5 @@ dnsmasq:
     - address=/traefik.seadogger-homelab/192.168.1.241
     - address=/octoprint.seadogger-homelab/192.168.1.77
     - address=/hdhomerun.seadogger-homelab/192.168.1.70
+    - address=/terminal.seadogger-homelab/192.168.1.241
     - address=/gateway.seadogger-homelab/192.168.1.1
