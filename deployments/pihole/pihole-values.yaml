@@ -110,6 +110,7 @@ dnsmasq:
     - address=/argocd.seadogger-homelab/192.168.1.241
     - address=/portal.seadogger-homelab/192.168.1.241
     - address=/velero.seadogger-homelab/192.168.1.241
+    - address=/cameras.seadogger-homelab/192.168.1.241
     - address=/traefik.seadogger-homelab/192.168.1.241
     - address=/octoprint.seadogger-homelab/192.168.1.77
     - address=/hdhomerun.seadogger-homelab/192.168.1.70
