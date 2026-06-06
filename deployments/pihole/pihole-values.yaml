@@ -94,6 +94,18 @@ whitelist:
     - tailscale.com					
     - wwwv2.tailscale.com					
     - login.tailscale.com	
+    - alpaca.markets					
+    - app.alpaca.markets					
+    - docs.alpaca.markets					
+    - sentry.alpaca.markets					
+    - authx.alpaca.markets					
+    - live.alpaca.markets					
+    - unleash.alpaca.markets					
+    - paper-api.alpaca.markets					
+    - data.alpaca.markets					
+    - api.alpaca.markets					
+    - fc.yahoo.com					
+    - query1.finance.yahoo.com
 
 
 dnsmasq:
