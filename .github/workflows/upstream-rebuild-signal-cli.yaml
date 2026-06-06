@@ -1,0 +1,130 @@
+name: Rebuild from AsamK/signal-cli on new release
+
+# Builds and publishes ghcr.io/seadogger-tech/signal-cli for the
+# seadogger-homelab-pro signal-cli pod. The Dockerfile + workflow + tag
+# tracker live in the public core repo because they only package public
+# components (eclipse-temurin base + AsamK upstream signal-cli tarball)
+# - building from a public repo means new GHCR packages inherit public
+# visibility automatically (no UI clicks).
+#
+# Mirrors the upstream-rebuild.yaml bedrock pattern but tracks release
+# tags instead of commit SHAs (AsamK ships clean semver releases). One
+# notable difference: this workflow does NOT auto-bump a deployment.yaml,
+# because the deployment.yaml lives in the private pro repo. The image
+# tag in pro is bumped manually by the operator when ready to roll out
+# - documented in the wiki "Hermes Agents" page.
+#
+# What this does:
+#   1. Every 6h check AsamK/signal-cli for a new release tag
+#   2. If the latest tag != the one stored in .github/upstream_tag_signal_cli,
+#      rebuild deployments/signal-cli/Dockerfile with VERSION=<new tag>
+#   3. Push multi-arch image to ghcr.io/seadogger-tech/signal-cli:<tag> + :latest
+#   4. Commit the new tag back to .github/upstream_tag_signal_cli in core
+
+on:
+  schedule:
+    - cron: "0 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  packages: write
+
+concurrency:
+  group: upstream-rebuild-signal-cli
+  cancel-in-progress: true
+
+env:
+  IMAGE: ghcr.io/seadogger-tech/signal-cli
+  UPSTREAM_REPO: AsamK/signal-cli
+  TAG_FILE: .github/upstream_tag_signal_cli
+  DOCKERFILE: deployments/signal-cli/Dockerfile
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout this repo (master)
+        uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
+
+      - name: Query latest upstream release tag
+        id: tag
+        run: |
+          NEW_TAG=$(curl -fsSL \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${UPSTREAM_REPO}/releases/latest" \
+            | jq -r '.tag_name')
+          VERSION="${NEW_TAG#v}"
+          echo "new_tag=$NEW_TAG"   >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION"   >> "$GITHUB_OUTPUT"
+          echo "Upstream latest tag: $NEW_TAG (version=$VERSION)"
+
+      - name: Load last built tag (if any)
+        id: last
+        run: |
+          if [[ -f "$TAG_FILE" ]]; then
+            echo "last_tag=$(cat "$TAG_FILE")" >> "$GITHUB_OUTPUT"
+          else
+            echo "last_tag=" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Decide if changed
+        id: changed
+        run: |
+          if [[ "${{ steps.tag.outputs.new_tag }}" == "${{ steps.last.outputs.last_tag }}" ]]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "No new release; skipping build."
+          else
+            echo "changed=true"  >> "$GITHUB_OUTPUT"
+            echo "Upstream advanced to ${{ steps.tag.outputs.new_tag }}; building..."
+          fi
+
+      - name: Setup QEMU (for multi-arch emulation)
+        if: steps.changed.outputs.changed == 'true'
+        uses: docker/setup-qemu-action@v3
+
+      - name: Setup Buildx
+        if: steps.changed.outputs.changed == 'true'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        if: steps.changed.outputs.changed == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & Push (amd64 + arm64)
+        if: steps.changed.outputs.changed == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: deployments/signal-cli
+          file: deployments/signal-cli/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          build-args: |
+            VERSION=${{ steps.tag.outputs.version }}
+          tags: |
+            ${{ env.IMAGE }}:${{ steps.tag.outputs.version }}
+            ${{ env.IMAGE }}:latest
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.description=AsamK/signal-cli ${{ steps.tag.outputs.new_tag }} daemon for k8s
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Save upstream tag
+        if: steps.changed.outputs.changed == 'true'
+        run: |
+          mkdir -p .github
+          echo "${{ steps.tag.outputs.new_tag }}" > "$TAG_FILE"
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "$TAG_FILE"
+          git commit -m "ci(upstream): signal-cli ${{ steps.tag.outputs.new_tag }}"
+          git push
