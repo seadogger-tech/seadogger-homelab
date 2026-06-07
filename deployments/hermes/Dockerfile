@@ -26,8 +26,8 @@ RUN apt-get update -qq && apt-get install -y -qq --no-install-recommends \
     tree fd-find bat tmux \
     # Python dev (python3 + uv already in upstream base; ipython installed via pip below)
     python3-pip python3-venv \
-    # JavaScript
-    yarn \
+    # JavaScript (yarn installed via npm below — not in Debian Trixie apt repos)
+
     # Java
     openjdk-21-jdk gradle maven \
     # C / C++
@@ -113,8 +113,8 @@ RUN curl -fsSL "https://github.com/nicklockwood/SwiftFormat/releases/download/${
 RUN ln -sf /usr/bin/fdfind /usr/local/bin/fd && \
     ln -sf /usr/bin/batcat /usr/local/bin/bat
 
-# ── pnpm + TypeScript + ESLint + Prettier ────────────────────────────────────
-RUN npm install -g pnpm typescript eslint prettier
+# ── pnpm + yarn + TypeScript + ESLint + Prettier ─────────────────────────────
+RUN npm install -g pnpm yarn typescript eslint prettier
 
 # ── Python dev packages ───────────────────────────────────────────────────────
 # uv/uvx already in upstream hermes-agent base image
