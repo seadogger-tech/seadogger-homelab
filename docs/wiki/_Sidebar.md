@@ -28,6 +28,7 @@
 ## 🧩 Setting Up Apps
 - [[18-Setting-Up-n8n-Connections]]
 - [[22-Hermes-Agents]]
+- [[25-Hermes-Dev-Environment-Setup]]
 
 ## 📊 Ops
 - [[10-Benchmarking]]
