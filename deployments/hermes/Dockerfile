@@ -96,7 +96,7 @@ RUN curl -fsSL "https://download.swift.org/swift-6.3.2-release/debian12-aarch64/
     ln -s /opt/${SWIFT_VERSION}-debian12-aarch64/usr/bin/swiftc /usr/local/bin/swiftc
 
 # ── SwiftLint ─────────────────────────────────────────────────────────────────
-RUN curl -fsSL "https://github.com/realm/SwiftLint/releases/download/${SWIFTLINT_VERSION}/swiftlint_linux_aarch64.zip" \
+RUN curl -fsSL "https://github.com/realm/SwiftLint/releases/download/${SWIFTLINT_VERSION}/swiftlint_linux_arm64.zip" \
     -o /tmp/swiftlint.zip && \
     unzip -q /tmp/swiftlint.zip -d /tmp/swiftlint && \
     cp /tmp/swiftlint/swiftlint /usr/local/bin/swiftlint && \
