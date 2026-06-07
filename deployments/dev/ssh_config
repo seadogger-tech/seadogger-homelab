@@ -1,0 +1,14 @@
+# VS Code Remote SSH host for the hermes agent pod.
+# The hermes Service exposes port 22 as ClusterIP within the namespace.
+# Both pods are in the same namespace so no Traefik/ingress hop needed —
+# this is a direct in-cluster connection.
+#
+# The namespace in the hostname is patched by the dev pod init container
+# which writes /opt/data/home/.ssh/config with the correct value at startup.
+Host hermes
+    HostName hermes.OVERRIDE_NAMESPACE.svc.cluster.local
+    Port 22
+    User hermes
+    IdentityFile /opt/data/home/.ssh/id_ed25519
+    StrictHostKeyChecking no
+    UserKnownHostsFile /dev/null
