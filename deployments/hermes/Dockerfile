@@ -37,6 +37,8 @@ RUN apt-get update -qq && apt-get install -y -qq --no-install-recommends \
     libedit2 libgcc-13-dev libpython3-dev libsqlite3-0 \
     libstdc++-13-dev libxml2-dev libz3-dev pkg-config \
     tzdata unzip zlib1g-dev \
+    # Ruby — needed for fastlane (not in upstream base image)
+    ruby ruby-dev \
     # SSH server — VS Code Remote SSH from the dev (code-server) pod connects
     # here so the integrated terminal runs inside the full dev environment.
     # No passwords — auth is exclusively via keypair written to the PVC.
