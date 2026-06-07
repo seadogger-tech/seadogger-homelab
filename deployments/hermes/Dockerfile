@@ -22,10 +22,10 @@ RUN apt-get update -qq && apt-get install -y -qq --no-install-recommends \
     dnsutils netcat-openbsd iputils-ping traceroute \
     # JSON / YAML
     jq \
-    # Shell / filesystem
-    tree fd-find bat tmux ripgrep \
-    # Python dev
-    python3-pip python3-venv ipython3 \
+    # Shell / filesystem (ripgrep already in upstream base)
+    tree fd-find bat tmux \
+    # Python dev (python3 + uv already in upstream base; ipython installed via pip below)
+    python3-pip python3-venv \
     # JavaScript
     yarn \
     # Java
@@ -117,7 +117,8 @@ RUN ln -sf /usr/bin/fdfind /usr/local/bin/fd && \
 RUN npm install -g pnpm typescript eslint prettier
 
 # ── Python dev packages ───────────────────────────────────────────────────────
-RUN pip3 install --break-system-packages django fastapi uvicorn pytest black ruff
+# uv/uvx already in upstream hermes-agent base image
+RUN pip3 install --break-system-packages django fastapi uvicorn pytest black ruff ipython
 
 # ── fastlane ─────────────────────────────────────────────────────────────────
 RUN gem install fastlane --no-document
