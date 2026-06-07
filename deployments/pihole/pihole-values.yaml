@@ -86,25 +86,25 @@ whitelist:
     - xboxservices.com
     - scorecardresearch.com
     - dat.xboxlive.com
-    - ntck.co					
-    - url9788.noip.com					
-    - noip.com					
-    - notices.rei.com					
-    - somni.rei.com					
-    - tailscale.com					
-    - wwwv2.tailscale.com					
-    - login.tailscale.com	
-    - alpaca.markets					
-    - app.alpaca.markets					
-    - docs.alpaca.markets					
-    - sentry.alpaca.markets					
-    - authx.alpaca.markets					
-    - live.alpaca.markets					
-    - unleash.alpaca.markets					
-    - paper-api.alpaca.markets					
-    - data.alpaca.markets					
-    - api.alpaca.markets					
-    - fc.yahoo.com					
+    - ntck.co
+    - url9788.noip.com
+    - noip.com
+    - notices.rei.com
+    - somni.rei.com
+    - tailscale.com
+    - wwwv2.tailscale.com
+    - login.tailscale.com
+    - alpaca.markets
+    - app.alpaca.markets
+    - docs.alpaca.markets
+    - sentry.alpaca.markets
+    - authx.alpaca.markets
+    - live.alpaca.markets
+    - unleash.alpaca.markets
+    - paper-api.alpaca.markets
+    - data.alpaca.markets
+    - api.alpaca.markets
+    - fc.yahoo.com
     - query1.finance.yahoo.com
 
 
@@ -118,6 +118,7 @@ dnsmasq:
     - address=/n8n.seadogger-homelab/192.168.1.241
     - address=/nextcloud.seadogger-homelab/192.168.1.241
     - address=/openwebui.seadogger-homelab/192.168.1.241
+    - address=/hermes.seadogger-homelab/192.168.1.241
     - address=/pihole.seadogger-homelab/192.168.1.241
     - address=/argocd.seadogger-homelab/192.168.1.241
     - address=/portal.seadogger-homelab/192.168.1.241
