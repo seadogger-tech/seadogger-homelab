@@ -38,7 +38,7 @@ spec:
                 exit 1
               fi
               echo "Connecting to hermes pod: $POD"
-              exec kubectl exec -it -n hermes-jason "$POD" -- env PATH=/opt/hermes/bin:/opt/hermes/.venv/bin:/opt/data/.local/bin:/usr/local/bin:/usr/bin:/bin bash
+              exec kubectl exec -it -n hermes-jason "$POD" -- su -s /bin/bash hermes
           ports:
             - containerPort: 7681
           env:
