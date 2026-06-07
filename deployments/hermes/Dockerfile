@@ -103,10 +103,10 @@ RUN curl -fsSL "https://github.com/realm/SwiftLint/releases/download/${SWIFTLINT
     chmod 755 /usr/local/bin/swiftlint && rm -rf /tmp/swiftlint /tmp/swiftlint.zip
 
 # ── SwiftFormat ───────────────────────────────────────────────────────────────
-RUN curl -fsSL "https://github.com/nicklockwood/SwiftFormat/releases/download/${SWIFTFORMAT_VERSION}/swiftformat_linux.zip" \
+RUN curl -fsSL "https://github.com/nicklockwood/SwiftFormat/releases/download/${SWIFTFORMAT_VERSION}/swiftformat_linux_aarch64.zip" \
     -o /tmp/swiftformat.zip && \
     unzip -q /tmp/swiftformat.zip -d /tmp/swiftformat && \
-    cp /tmp/swiftformat/swiftformat /usr/local/bin/swiftformat && \
+    cp /tmp/swiftformat/swiftformat_linux_aarch64 /usr/local/bin/swiftformat && \
     chmod 755 /usr/local/bin/swiftformat && rm -rf /tmp/swiftformat /tmp/swiftformat.zip
 
 # ── fd / bat symlinks (Debian renames these binaries) ────────────────────────
