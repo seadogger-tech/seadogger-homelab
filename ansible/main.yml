@@ -5,6 +5,10 @@
   handlers:
     - name: reboot-pi
       ansible.builtin.reboot:
+    - name: restart-journald
+      ansible.builtin.systemd:
+        name: systemd-journald
+        state: restarted
   tasks:
     - name: Configure Raspberry Pi Cluster
       import_tasks: tasks/raspberry_pi_config.yml

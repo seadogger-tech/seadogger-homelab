@@ -74,3 +74,13 @@
       when: update_rpi_firmware | default(false) | bool
       register: rpi_update
       changed_when: "'Firmware update' in rpi_update.stdout"
+
+    - name: Cap journald log size to 500MB
+      ansible.builtin.ini_file:
+        path: /etc/systemd/journald.conf
+        section: Journal
+        option: SystemMaxUse
+        value: 500M
+        no_extra_spaces: yes
+      become: true
+      notify: restart-journald
