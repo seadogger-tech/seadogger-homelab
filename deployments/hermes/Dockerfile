@@ -139,7 +139,8 @@ RUN ssh-keygen -A && \
     echo "UsePAM no"                                                   >> /etc/ssh/sshd_config && \
     echo "X11Forwarding no"                                            >> /etc/ssh/sshd_config && \
     echo "PrintMotd no"                                                >> /etc/ssh/sshd_config && \
-    echo "AcceptEnv LANG LC_*"                                         >> /etc/ssh/sshd_config
+    echo "AcceptEnv LANG LC_*"                                         >> /etc/ssh/sshd_config && \
+    echo "StrictModes no"                                              >> /etc/ssh/sshd_config
 
 # ── s6-overlay sshd service ───────────────────────────────────────────────────
 # The upstream image uses s6-overlay as PID 1 (/init). We register sshd as a
