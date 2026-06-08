@@ -149,6 +149,7 @@ RUN ssh-keygen -A && \
 COPY --chmod=0755 s6-sshd/run /etc/s6-overlay/s6-rc.d/sshd/run
 COPY s6-sshd/type /etc/s6-overlay/s6-rc.d/sshd/type
 COPY s6-sshd/dependencies.d/base /etc/s6-overlay/s6-rc.d/sshd/dependencies.d/base
+RUN touch /etc/s6-overlay/s6-rc.d/user/contents.d/sshd
 
 # Upstream image drops to hermes user via s6-setuidgid in its run scripts;
 # sshd must start as root (needs to bind :22 and manage PAM/keys), which is
