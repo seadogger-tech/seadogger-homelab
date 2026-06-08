@@ -141,7 +141,7 @@ RUN ssh-keygen -A && \
     echo "PrintMotd no"                                                >> /etc/ssh/sshd_config && \
     echo "AcceptEnv LANG LC_*"                                         >> /etc/ssh/sshd_config && \
     echo "StrictModes no"                                              >> /etc/ssh/sshd_config && \
-    echo "SetEnv PATH=/opt/hermes/bin:/opt/hermes/.venv/bin:/usr/local/bin:/usr/bin:/bin HOME=/opt/data" >> /etc/ssh/sshd_config && \
+    echo "SetEnv PATH=/opt/hermes/bin:/opt/hermes/.venv/bin:/usr/local/bin:/usr/bin:/bin HOME=/opt/data HERMES_HOME=/opt/data" >> /etc/ssh/sshd_config && \
     usermod -s /bin/bash hermes
 
 # ── s6-overlay sshd service ───────────────────────────────────────────────────
