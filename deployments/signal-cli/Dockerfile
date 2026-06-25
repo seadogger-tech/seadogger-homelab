@@ -9,18 +9,14 @@
 # arm64 we patch in the matching pre-built lib from exquo/signal-libs-build
 # (the canonical community ARM64 builds the AsamK wiki points at).
 #
-# Bump VERSION when you want a newer signal-cli release. Track:
+# Track upstream releases:
 #   https://github.com/AsamK/signal-cli/releases
-# When you bump VERSION, also update LIBSIGNAL_VERSION to match the
-# libsignal-client jar shipped with that signal-cli release. Look in
-# the unpacked tarball: lib/libsignal-client-X.Y.Z.jar
+# The matching libsignal-client version is detected from the unpacked
+# signal-cli tarball at build time so scheduled upstream rebuilds do not need
+# a manual Dockerfile edit every time AsamK bumps libsignal-client.
 FROM eclipse-temurin:25-jre
 
 ARG VERSION=0.14.4.1
-# Must match the libsignal-client-X.Y.Z.jar version that ships with the
-# above signal-cli release. Check exquo releases for available builds:
-#   https://github.com/exquo/signal-libs-build/releases
-ARG LIBSIGNAL_VERSION=0.94.1
 ARG SHA256_TARBALL=
 
 ENV SIGNAL_CLI_VERSION=${VERSION}
@@ -46,6 +42,10 @@ RUN apt-get update && \
     ln -sf "/opt/signal-cli-${VERSION}/bin/signal-cli" /usr/local/bin/signal-cli && \
     rm -f /tmp/signal-cli.tar.gz && \
     # 2. Patch libsignal_jni.so for current arch. Upstream ships x86_64 only.
+    JAR="$(ls "/opt/signal-cli-${VERSION}"/lib/libsignal-client-*.jar | head -n 1)" && \
+    LIBSIGNAL_VERSION="${JAR##*/libsignal-client-}" && \
+    LIBSIGNAL_VERSION="${LIBSIGNAL_VERSION%.jar}" && \
+    echo "Detected libsignal-client ${LIBSIGNAL_VERSION}" && \
     arch="$(uname -m)" && \
     case "$arch" in \
         x86_64)  exquo_arch="x86_64-unknown-linux-gnu" ;; \
