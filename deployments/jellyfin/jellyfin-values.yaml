@@ -23,7 +23,7 @@ controllers:
         env:
           TZ: America/New_York
         resources:
-          requests: { cpu: "200m", memory: "512Mi" }
+          requests: { cpu: "50m", memory: "512Mi" }
           limits:   { cpu: "2",    memory: "4Gi" }
         securityContext:
           privileged: false
