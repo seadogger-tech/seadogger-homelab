@@ -29,3 +29,139 @@ csi:
     - key: node-role.kubernetes.io/control-plane
       operator: Exists
       effect: NoSchedule
+
+  # CSI plugin/provisioner containers are control-plane shims (attach/mount
+  # bookkeeping), not I/O-critical daemons like OSD/mon/mgr - safe to run
+  # lean. Rook's built-in defaults (250m plugin, 100m per provisioner
+  # sidecar) reserved ~2.4 cores cluster-wide for components that measured
+  # near 0m actual usage even during active recovery.
+  csiRBDPluginResource: |
+    - name : driver-registrar
+      resource:
+        requests:
+          memory: 128Mi
+          cpu: 25m
+        limits:
+          memory: 256Mi
+    - name : csi-rbdplugin
+      resource:
+        requests:
+          memory: 512Mi
+          cpu: 100m
+        limits:
+          memory: 1Gi
+    - name : liveness-prometheus
+      resource:
+        requests:
+          memory: 128Mi
+          cpu: 25m
+        limits:
+          memory: 256Mi
+  csiRBDProvisionerResource: |
+    - name : csi-provisioner
+      resource:
+        requests:
+          memory: 128Mi
+          cpu: 50m
+        limits:
+          memory: 256Mi
+    - name : csi-resizer
+      resource:
+        requests:
+          memory: 128Mi
+          cpu: 50m
+        limits:
+          memory: 256Mi
+    - name : csi-attacher
+      resource:
+        requests:
+          memory: 128Mi
+          cpu: 50m
+        limits:
+          memory: 256Mi
+    - name : csi-snapshotter
+      resource:
+        requests:
+          memory: 128Mi
+          cpu: 50m
+        limits:
+          memory: 256Mi
+    - name : csi-rbdplugin
+      resource:
+        requests:
+          memory: 512Mi
+          cpu: 100m
+        limits:
+          memory: 1Gi
+    - name : liveness-prometheus
+      resource:
+        requests:
+          memory: 128Mi
+          cpu: 25m
+        limits:
+          memory: 256Mi
+  csiCephFSPluginResource: |
+    - name : driver-registrar
+      resource:
+        requests:
+          memory: 128Mi
+          cpu: 25m
+        limits:
+          memory: 256Mi
+    - name : csi-cephfsplugin
+      resource:
+        requests:
+          memory: 512Mi
+          cpu: 100m
+        limits:
+          memory: 1Gi
+    - name : liveness-prometheus
+      resource:
+        requests:
+          memory: 128Mi
+          cpu: 25m
+        limits:
+          memory: 256Mi
+  csiCephFSProvisionerResource: |
+    - name : csi-provisioner
+      resource:
+        requests:
+          memory: 128Mi
+          cpu: 50m
+        limits:
+          memory: 256Mi
+    - name : csi-resizer
+      resource:
+        requests:
+          memory: 128Mi
+          cpu: 50m
+        limits:
+          memory: 256Mi
+    - name : csi-attacher
+      resource:
+        requests:
+          memory: 128Mi
+          cpu: 50m
+        limits:
+          memory: 256Mi
+    - name : csi-snapshotter
+      resource:
+        requests:
+          memory: 128Mi
+          cpu: 50m
+        limits:
+          memory: 256Mi
+    - name : csi-cephfsplugin
+      resource:
+        requests:
+          memory: 512Mi
+          cpu: 100m
+        limits:
+          memory: 1Gi
+    - name : liveness-prometheus
+      resource:
+        requests:
+          memory: 128Mi
+          cpu: 25m
+        limits:
+          memory: 256Mi

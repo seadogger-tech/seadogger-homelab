@@ -266,22 +266,10 @@ csi:
   enableCephfsSnapshotter: false
   enableRBDSnapshotter: true
   enableNFSDriver: false
-
-  provisionerResources:
-    limits:
-      cpu: "200m"
-      memory: "256Mi"
-    requests:
-      cpu: "50m"
-      memory: "128Mi"
-
-  pluginResources:
-    limits:
-      cpu: "200m"
-      memory: "256Mi"
-    requests:
-      cpu: "50m"
-      memory: "128Mi"
+  # CSI plugin/provisioner container resources are set via the operator
+  # release (rook-ceph-operator-values.yaml: csi.csiRBDPluginResource etc.)
+  # - this chart's provisionerResources/pluginResources keys are not wired
+  # to the operator's per-container CSI_*_RESOURCE env vars and were a no-op.
 
 monitoring:
   enabled: false
