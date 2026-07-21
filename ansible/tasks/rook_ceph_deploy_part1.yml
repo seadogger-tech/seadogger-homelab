@@ -52,12 +52,19 @@
   changed_when: false
 
 # Step 4: Install operator
+# Chart version is pinned deliberately - an unpinned `helm upgrade` picks up
+# whatever rook-release/rook-ceph currently resolves to, and v1.20.2 shipped
+# a breaking change to the CSI controller-plugin's service account wiring
+# (ctrlplugin pods fail to schedule: "serviceaccount rbd-ctrlplugin-sa not
+# found"). Bump this deliberately, in step with rook-ceph-cluster below, and
+# verify CSI ctrlplugin pods come up before trusting an upgrade.
 - name: Install Rook-Ceph Operator
   ansible.builtin.shell:
     cmd: >-
       helm upgrade --install rook-ceph rook-release/rook-ceph
       --namespace rook-ceph
       --create-namespace
+      --version 1.19.2
       -f https://raw.githubusercontent.com/seadogger-tech/seadogger-homelab/master/deployments/rook-ceph/rook-ceph-operator-values.yaml
       --wait
   environment: "{{ env_vars }}"
@@ -89,11 +96,14 @@
       stringData:
         password: "{{ dashboard_password }}"
 
+# Pinned to match the currently-deployed cluster chart version - see the
+# operator install step above for why an unpinned Rook chart is unsafe here.
 - name: Install Rook-Ceph Cluster (without filesystem)
   ansible.builtin.shell:
     cmd: >-
       helm upgrade --install rook-ceph-cluster rook-release/rook-ceph-cluster
       --namespace rook-ceph
+      --version 1.18.1
       -f https://raw.githubusercontent.com/seadogger-tech/seadogger-homelab/master/deployments/rook-ceph/rook-ceph-cluster-values.yaml
       --wait
   environment: "{{ env_vars }}"
