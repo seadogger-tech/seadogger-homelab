@@ -35,44 +35,109 @@ jobs:
           path: upstream
           fetch-depth: 0
 
-      # Check whether the PR we cherry-pick below has been merged/closed
+      # Check whether any PR we cherry-pick below has been merged/closed
       # upstream yet. This does NOT stop the build — it just surfaces a loud
       # warning so a human notices and removes the now-unnecessary cherry-pick
       # step, instead of it silently sitting there forever (a no-op once the
       # change is already in main) or failing quietly on a future conflict.
-      - name: Check adopted-PR status (aws-samples/bedrock-access-gateway#255)
+      - name: Check adopted-PR status (all cherry-picked PRs)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          STATE=$(gh pr view 255 --repo aws-samples/bedrock-access-gateway --json state --jq .state)
-          echo "PR #255 state: $STATE"
-          if [[ "$STATE" != "OPEN" ]]; then
-            echo "::warning::aws-samples/bedrock-access-gateway#255 is now $STATE upstream. The cherry-pick step below is likely no longer needed — remove it and revert to a plain checkout of main. See core/docs/wiki/09-Apps.md#adopting-unmerged-upstream-prs-a-reusable-pattern."
-          fi
+          for PR in 255 246 247 239 198 249; do
+            STATE=$(gh pr view "$PR" --repo aws-samples/bedrock-access-gateway --json state --jq .state)
+            echo "PR #$PR state: $STATE"
+            if [[ "$STATE" != "OPEN" ]]; then
+              echo "::warning::aws-samples/bedrock-access-gateway#$PR is now $STATE upstream. The matching cherry-pick step below is likely no longer needed — remove it. See core/docs/wiki/09-Apps.md#adopting-unmerged-upstream-prs-a-reusable-pattern."
+            fi
+          done
 
-      # TEMPORARY: cherry-pick the not-yet-merged response_format/json_schema
-      # support (aws-samples/bedrock-access-gateway#255) on top of upstream
-      # main. Without this, Mealie (and any other OpenAI-SDK client using
-      # structured outputs) gets no schema enforcement from the gateway —
-      # models free-text their own JSON style, which breaks strict parsers.
-      # Remove this step once PR #255 merges upstream and drop back to a
-      # plain checkout of main.
-      # See: core/docs/wiki/09-Apps.md#model-compatibility-why-not-gpt-oss-or-nova
-      - name: Cherry-pick response_format support (upstream PR #255, unmerged)
+      # TEMPORARY: cherry-pick 6 not-yet-merged PRs on top of upstream main.
+      # Covers two real, active clients of this gateway:
+      #   - Mealie (recipe AI import/parsing) needs #255 for schema-enforced
+      #     structured output — without it, models free-text their own JSON
+      #     style and break strict parsers.
+      #   - OpenWebUI (interactive chat, confirmed connected at
+      #     192.168.1.242:6880) needs the rest for tool/function-calling
+      #     reliability and newer-model support, even though Tools aren't
+      #     enabled today — these fix hard failures the moment they are:
+      #       #246 - drop orphan tool_use/tool_result pairs (explicitly
+      #              reproduces an OpenWebUI history-rewrite scenario)
+      #       #247 - fix negative tool-call indexes in streamed responses
+      #       #239 - allow replayed tool blocks without a `tools` array
+      #              (conversation compaction/summarization)
+      #       #198 - return tool_calls instead of dropping them when a
+      #              response is truncated by max_tokens
+      #       #249 - Claude Opus 4.7 adaptive-thinking request format
+      #              (Opus 4.7 is already selectable in OpenWebUI's model
+      #              list; reasoning requests to it fail without this)
+      #
+      # Two of these conflict with each other in a small, known way — both
+      # #255 and #239 add a branch in the same spot in _parse_request, and
+      # #198 and #239 both touch the same log line. Conflicts are resolved
+      # by .github/scripts/resolve_bedrock_gateway_conflicts.py (tested
+      # locally against a fresh checkout before being adopted here) rather
+      # than inline, since embedding Python heredocs directly in this YAML's
+      # `run:` block is fragile and hard to validate. If a future upstream
+      # change touches the same region of src/api/models/bedrock.py, that
+      # script's patterns may need updating — it fails loudly rather than
+      # silently doing nothing if its expected conflict shape isn't found.
+      #
+      # Remove each cherry-pick individually once its PR merges upstream.
+      # See: core/docs/wiki/09-Apps.md#adopting-unmerged-upstream-prs-a-reusable-pattern
+      - name: Cherry-pick unmerged PRs (#255, #246, #247, #239, #198, #249)
         id: patch
         run: |
           cd upstream
-          git remote add contributor https://github.com/nijave/bedrock-access-gateway.git
-          git fetch contributor nv-response-format
-          PATCH_SHA=$(git rev-parse contributor/nv-response-format)
-          echo "patch_sha=$PATCH_SHA" >> "$GITHUB_OUTPUT"
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          if ! git cherry-pick "$PATCH_SHA"; then
-            echo "::error::Cherry-pick of PR #255 ($PATCH_SHA) failed — likely diverged from upstream main. Needs manual rebase; see workflow comments."
-            git cherry-pick --abort
-            exit 1
+
+          pick() {
+            local remote_url="$1" branch="$2" pr="$3"
+            git remote add "pr$pr" "$remote_url" 2>/dev/null || true
+            git fetch "pr$pr" "$branch"
+            local sha
+            sha="$(git rev-parse "pr$pr/$branch")"
+            if ! git cherry-pick "$sha"; then
+              echo "::error::Cherry-pick of PR #$pr ($sha) failed — likely diverged from upstream main or conflicts with an earlier cherry-pick in this list. Needs manual rebase; see workflow comments."
+              git cherry-pick --abort
+              exit 1
+            fi
+          }
+
+          # PRs with clean, conflict-free cherry-picks
+          pick https://github.com/nijave/bedrock-access-gateway.git nv-response-format 255
+          pick https://github.com/marcoruizrueda/bedrock-access-gateway.git fix/sanitize-orphan-tool-pairs 246
+          pick https://github.com/bokmann/bedrock-access-gateway.git fix/stream-tool-call-index 247
+
+          # #239 - KNOWN CONFLICT with #255 (both add a branch in
+          # _parse_request). Resolved via resolve_bedrock_gateway_conflicts.py.
+          git remote add pr239 https://github.com/rwestergren/bedrock-access-gateway.git 2>/dev/null || true
+          git fetch pr239 fix-toolconfig-replayed-tool-blocks
+          PR239_SHA="$(git rev-parse pr239/fix-toolconfig-replayed-tool-blocks)"
+          if ! git cherry-pick "$PR239_SHA"; then
+            python3 ../.github/scripts/resolve_bedrock_gateway_conflicts.py 239
+            git add src/api/models/bedrock.py
+            git -c core.editor=true cherry-pick --continue
           fi
+
+          # #198 - KNOWN CONFLICT with #239 (both touch the same log line).
+          # Resolved via resolve_bedrock_gateway_conflicts.py.
+          git remote add pr198 https://github.com/azriel-healthpoint/bedrock-access-gateway.git 2>/dev/null || true
+          git fetch pr198 bugfix/197/return-tool-use-on-max-tokens-finish-reason
+          PR198_SHA="$(git rev-parse pr198/bugfix/197/return-tool-use-on-max-tokens-finish-reason)"
+          if ! git cherry-pick "$PR198_SHA"; then
+            python3 ../.github/scripts/resolve_bedrock_gateway_conflicts.py 198
+            git add src/api/models/bedrock.py
+            git -c core.editor=true cherry-pick --continue
+          fi
+
+          pick https://github.com/bszadkowski/bedrock-access-gateway.git feat/opus-47-adaptive-thinking 249
+
+          python3 -c "import ast; ast.parse(open('src/api/models/bedrock.py').read())" || {
+            echo "::error::src/api/models/bedrock.py has invalid Python syntax after all cherry-picks — build would fail. Manual review needed."
+            exit 1
+          }
 
       - name: Compute upstream SHA
         id: sha
@@ -81,7 +146,7 @@ jobs:
           SHORT=$(git -C upstream rev-parse --short HEAD)
           echo "new_sha=$NEW_SHA"   >> "$GITHUB_OUTPUT"
           echo "short_sha=$SHORT"   >> "$GITHUB_OUTPUT"
-          echo "Upstream SHA (incl. cherry-picked #255): $NEW_SHA"
+          echo "Upstream SHA (incl. cherry-picked #255/#246/#247/#239/#198/#249): $NEW_SHA"
 
       - name: Load last built SHA (if any)
         id: last
@@ -132,7 +197,7 @@ jobs:
             ${{ env.IMAGE }}:sha-${{ steps.sha.outputs.short_sha }}
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-            org.opencontainers.image.description=Auto-built from aws-samples/bedrock-access-gateway@${{ steps.sha.outputs.new_sha }}
+            org.opencontainers.image.description=Auto-built from aws-samples/bedrock-access-gateway main + cherry-picked #255/#246/#247/#239/#198/#249 @ ${{ steps.sha.outputs.new_sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
