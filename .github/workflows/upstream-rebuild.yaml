@@ -35,6 +35,21 @@ jobs:
           path: upstream
           fetch-depth: 0
 
+      # Check whether the PR we cherry-pick below has been merged/closed
+      # upstream yet. This does NOT stop the build — it just surfaces a loud
+      # warning so a human notices and removes the now-unnecessary cherry-pick
+      # step, instead of it silently sitting there forever (a no-op once the
+      # change is already in main) or failing quietly on a future conflict.
+      - name: Check adopted-PR status (aws-samples/bedrock-access-gateway#255)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          STATE=$(gh pr view 255 --repo aws-samples/bedrock-access-gateway --json state --jq .state)
+          echo "PR #255 state: $STATE"
+          if [[ "$STATE" != "OPEN" ]]; then
+            echo "::warning::aws-samples/bedrock-access-gateway#255 is now $STATE upstream. The cherry-pick step below is likely no longer needed — remove it and revert to a plain checkout of main. See core/docs/wiki/09-Apps.md#adopting-unmerged-upstream-prs-a-reusable-pattern."
+          fi
+
       # TEMPORARY: cherry-pick the not-yet-merged response_format/json_schema
       # support (aws-samples/bedrock-access-gateway#255) on top of upstream
       # main. Without this, Mealie (and any other OpenAI-SDK client using
