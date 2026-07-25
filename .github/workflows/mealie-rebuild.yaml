@@ -178,4 +178,19 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add .github/mealie_upstream_sha
           git commit -m "ci(mealie): ${{ steps.sha.outputs.new_sha }}"
-          git push
+          # The build can run for an hour or more (full frontend + backend,
+          # cross-compiled via QEMU); a human commit to master in the
+          # meantime makes a plain `git push` fail with "fetch first". Retry
+          # with a rebase a few times before giving up — this step only
+          # updates a tracking file, so rebasing onto newer master is safe.
+          for attempt in 1 2 3 4 5; do
+            if git push; then
+              break
+            fi
+            echo "Push rejected (attempt $attempt/5) — pulling and rebasing before retry..."
+            git pull --rebase origin master
+            if [ "$attempt" = "5" ]; then
+              echo "::error::Failed to push .github/mealie_upstream_sha after 5 attempts. The image was still built and pushed successfully — only this tracking commit failed. Push manually or re-run the workflow."
+              exit 1
+            fi
+          done
