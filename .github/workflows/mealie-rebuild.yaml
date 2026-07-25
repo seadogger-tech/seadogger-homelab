@@ -1,0 +1,170 @@
+name: Rebuild Mealie with unmerged AI-import PRs
+
+on:
+  schedule:
+    - cron: "0 */6 * * *"   # every 6 hours
+  workflow_dispatch:        # allow manual run
+
+permissions:
+  contents: write           # commit .github/mealie_upstream_sha
+  packages: write           # push to GHCR
+
+concurrency:
+  group: mealie-rebuild
+  cancel-in-progress: true
+
+env:
+  IMAGE: ghcr.io/seadogger-tech/mealie
+  UPSTREAM_TAG: v3.21.0
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      # Checkout this repo (to read/write .github/mealie_upstream_sha)
+      - name: Checkout this repo (master)
+        uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
+
+      # Checkout upstream Mealie at our pinned stable tag (NOT the mealie-next
+      # dev branch — see wiki note on why this differs from the Bedrock
+      # gateway pattern, which tracks upstream's default branch continuously).
+      - name: Checkout upstream mealie-recipes/mealie @ ${{ env.UPSTREAM_TAG }}
+        uses: actions/checkout@v4
+        with:
+          repository: mealie-recipes/mealie
+          ref: ${{ env.UPSTREAM_TAG }}
+          path: upstream
+          fetch-depth: 0
+
+      # Check whether either adopted PR has been merged/closed upstream yet.
+      # Does NOT stop the build — just surfaces a loud warning so a human
+      # notices and removes the now-unnecessary cherry-pick, instead of it
+      # silently sitting there forever or eventually conflicting.
+      - name: Check adopted-PR status (mealie-recipes/mealie#7618, #7825)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          for PR in 7618 7825; do
+            STATE=$(gh pr view "$PR" --repo mealie-recipes/mealie --json state --jq .state)
+            echo "PR #$PR state: $STATE"
+            if [[ "$STATE" != "OPEN" ]]; then
+              echo "::warning::mealie-recipes/mealie#$PR is now $STATE upstream. Check whether it shipped in a Mealie release newer than ${{ env.UPSTREAM_TAG }} — if so, remove the matching cherry-pick step and bump UPSTREAM_TAG. See core/docs/wiki/09-Apps.md#adopting-unmerged-upstream-prs-a-reusable-pattern."
+            fi
+          done
+
+      # TEMPORARY: cherry-pick "Force OpenAI Scraper" checkbox
+      # (mealie-recipes/mealie#7618, unmerged) on top of our pinned stable
+      # tag. Without this, there is no way for a user to force the AI/LLM
+      # import path from Mealie's own UI — the plain scraper always runs
+      # first and "wins" whenever it extracts anything at all, even if the
+      # result is low quality (e.g. duplicated/mislabeled instruction steps).
+      # Remove this step once #7618 ships in a Mealie release newer than
+      # UPSTREAM_TAG above.
+      # See: core/docs/wiki/09-Apps.md#force-ai-import-cherry-picked-prs
+      - name: Cherry-pick Force OpenAI Scraper checkbox (upstream PR #7618, unmerged)
+        run: |
+          cd upstream
+          git remote add pr7618 https://github.com/zdenek-stursa/mealie.git
+          git fetch pr7618 feat/force-openai-scraper
+          PATCH_SHA=$(git rev-parse pr7618/feat/force-openai-scraper)
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if ! git cherry-pick "$PATCH_SHA"; then
+            echo "::error::Cherry-pick of #7618 ($PATCH_SHA) failed — likely diverged from ${{ env.UPSTREAM_TAG }}. Needs manual rebase."
+            git cherry-pick --abort
+            exit 1
+          fi
+
+      # TEMPORARY: cherry-pick "Create from Text" page
+      # (mealie-recipes/mealie#7825, unmerged) on top of the above. Gives a
+      # dedicated UI page for pasting plain recipe text (e.g. text we
+      # manually extracted from a page with broken scraper output) straight
+      # to the AI parser, no URL/HTML scraping involved at all.
+      # Remove this step once #7825 ships in a Mealie release newer than
+      # UPSTREAM_TAG above.
+      - name: Cherry-pick Create-from-Text page (upstream PR #7825, unmerged)
+        run: |
+          cd upstream
+          git remote add pr7825 https://github.com/bferd/mealie.git
+          git fetch pr7825 feat/create-recipe-from-text
+          PATCH_SHA=$(git rev-parse pr7825/feat/create-recipe-from-text)
+          if ! git cherry-pick "$PATCH_SHA"; then
+            echo "::error::Cherry-pick of #7825 ($PATCH_SHA) failed — likely conflicts with #7618 or diverged from ${{ env.UPSTREAM_TAG }}. Needs manual rebase."
+            git cherry-pick --abort
+            exit 1
+          fi
+
+      - name: Compute build identity (upstream tag + patch commits)
+        id: sha
+        run: |
+          NEW_SHA=$(git -C upstream rev-parse HEAD)
+          SHORT=$(git -C upstream rev-parse --short HEAD)
+          echo "new_sha=$NEW_SHA"   >> "$GITHUB_OUTPUT"
+          echo "short_sha=$SHORT"   >> "$GITHUB_OUTPUT"
+          echo "Build identity (${{ env.UPSTREAM_TAG }} + cherry-picks #7618/#7825): $NEW_SHA"
+
+      - name: Load last built identity (if any)
+        id: last
+        run: |
+          if [[ -f ".github/mealie_upstream_sha" ]]; then
+            echo "last_sha=$(cat .github/mealie_upstream_sha)" >> "$GITHUB_OUTPUT"
+          else
+            echo "last_sha=" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Decide if changed
+        id: changed
+        run: |
+          if [[ "${{ steps.sha.outputs.new_sha }}" == "${{ steps.last.outputs.last_sha }}" ]]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "No change; skipping build."
+          else
+            echo "changed=true"  >> "$GITHUB_OUTPUT"
+            echo "Build identity changed to ${{ steps.sha.outputs.new_sha }}; building…"
+          fi
+
+      - name: Setup QEMU (for multi-arch emulation)
+        if: steps.changed.outputs.changed == 'true'
+        uses: docker/setup-qemu-action@v3
+
+      - name: Setup Buildx
+        if: steps.changed.outputs.changed == 'true'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        if: steps.changed.outputs.changed == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & Push (amd64 + arm64)
+        if: steps.changed.outputs.changed == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: ./upstream
+          file: ./upstream/docker/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:${{ env.UPSTREAM_TAG }}-ai-import
+            ${{ env.IMAGE }}:sha-${{ steps.sha.outputs.short_sha }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.description=mealie-recipes/mealie@${{ env.UPSTREAM_TAG }} + cherry-picked #7618/#7825 (force-AI-import UI)
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Save build identity for next run
+        if: steps.changed.outputs.changed == 'true'
+        run: |
+          echo "${{ steps.sha.outputs.new_sha }}" > .github/mealie_upstream_sha
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/mealie_upstream_sha
+          git commit -m "ci(mealie): ${{ steps.sha.outputs.new_sha }}"
+          git push
