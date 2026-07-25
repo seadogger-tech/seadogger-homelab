@@ -33,7 +33,31 @@ jobs:
         with:
           repository: aws-samples/bedrock-access-gateway
           path: upstream
-          fetch-depth: 1
+          fetch-depth: 0
+
+      # TEMPORARY: cherry-pick the not-yet-merged response_format/json_schema
+      # support (aws-samples/bedrock-access-gateway#255) on top of upstream
+      # main. Without this, Mealie (and any other OpenAI-SDK client using
+      # structured outputs) gets no schema enforcement from the gateway —
+      # models free-text their own JSON style, which breaks strict parsers.
+      # Remove this step once PR #255 merges upstream and drop back to a
+      # plain checkout of main.
+      # See: core/docs/wiki/09-Apps.md#model-compatibility-why-not-gpt-oss-or-nova
+      - name: Cherry-pick response_format support (upstream PR #255, unmerged)
+        id: patch
+        run: |
+          cd upstream
+          git remote add contributor https://github.com/nijave/bedrock-access-gateway.git
+          git fetch contributor nv-response-format
+          PATCH_SHA=$(git rev-parse contributor/nv-response-format)
+          echo "patch_sha=$PATCH_SHA" >> "$GITHUB_OUTPUT"
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if ! git cherry-pick "$PATCH_SHA"; then
+            echo "::error::Cherry-pick of PR #255 ($PATCH_SHA) failed — likely diverged from upstream main. Needs manual rebase; see workflow comments."
+            git cherry-pick --abort
+            exit 1
+          fi
 
       - name: Compute upstream SHA
         id: sha
@@ -42,7 +66,7 @@ jobs:
           SHORT=$(git -C upstream rev-parse --short HEAD)
           echo "new_sha=$NEW_SHA"   >> "$GITHUB_OUTPUT"
           echo "short_sha=$SHORT"   >> "$GITHUB_OUTPUT"
-          echo "Upstream SHA: $NEW_SHA"
+          echo "Upstream SHA (incl. cherry-picked #255): $NEW_SHA"
 
       - name: Load last built SHA (if any)
         id: last
