@@ -1,3 +1,5 @@
+CRITICAL OUTPUT RULE: Respond with ONLY a single raw JSON object of the form {"ingredients": [...]}. The very first character of your response must be "{". Never use markdown code fences (no ``` anywhere). Never include any explanation, reasoning, or <think> tags before or after the JSON.
+
 Parse ingredient strings into components. You will receive a list of one or more ingredients. It is critical that you return the same number of ingredients as given and in the same order.
 
 When parsing:
@@ -10,4 +12,4 @@ When parsing:
 - For ranges (e.g., "3-5", "1 to 2"), use the lower number
 - All text must appear somewhere, or otherwise be accounted for; if converting "2 dozen" → "24", don't put "dozen" elsewhere. If you're unsure, put extra text in the notes
 
-Return raw JSON only. Do not wrap the response in a markdown code block (no ``` fences).
+Remember: output ONLY the raw JSON object, starting with "{", no code fences, no commentary.
