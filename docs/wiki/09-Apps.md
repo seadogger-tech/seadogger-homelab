@@ -106,19 +106,48 @@ env vars and into per-group UI/API settings).
 - **API key:** the gateway's own static key (`bedrock`), not a real
   Anthropic/OpenAI key.
 
-#### Model compatibility (why not gpt-oss or Nova?)
+#### Structured-output enforcement (gateway patch)
 Mealie's AI client uses the OpenAI Python SDK's structured-output helper
-(`client.chat.completions.parse()`), which requires the model to return
-**only** raw JSON matching a strict schema — no markdown, no preamble.
-The Bedrock Access Gateway does not enforce or normalize this contract;
-it just relays each model's natural output style, so failures differ by
-model:
+(`client.chat.completions.parse()`), which sends a `response_format:
+json_schema` on every request and expects the model to return **only**
+raw JSON matching that schema — no markdown, no preamble. As of upstream
+commit `274b794e` (2026-06-18), the AWS Bedrock Access Gateway silently
+**dropped `response_format` entirely** — it was accepted by the request
+schema but never translated into anything Bedrock understands, so every
+model just free-texted its own natural style and Mealie's strict
+`json.loads()` broke unpredictably (Claude sometimes wrapped output in
+` ```json ` fences, sometimes didn't).
+
+This is a confirmed, tracked upstream gap
+([aws-samples/bedrock-access-gateway#162](https://github.com/aws-samples/bedrock-access-gateway/issues/162),
+[#255](https://github.com/aws-samples/bedrock-access-gateway/issues/255)) —
+not a config option we were missing. A complete, tested fix exists as an
+**open, unmerged PR** ([#255](https://github.com/aws-samples/bedrock-access-gateway/pull/255),
+branch `nijave:nv-response-format`) that maps `response_format.json_schema`
+to Bedrock's native `outputConfig.textFormat` — real schema enforcement
+at the AWS API level, not a prompt trick.
+
+`core/.github/workflows/upstream-rebuild.yaml` cherry-picks that PR's
+single commit on top of a fresh checkout of `aws-samples/main` on every
+scheduled rebuild (every 6h), so we still track all other upstream
+changes automatically and don't freeze at a stale fork. If the cherry-pick
+ever conflicts (upstream changed something the patch touches), the
+workflow fails loudly rather than silently building without the fix —
+check the Action run and rebase manually if that happens. **Remove the
+cherry-pick step once PR #255 actually merges upstream.**
+
+Verified post-patch: 5/5 consecutive real ingredient-parse calls through
+Mealie returned clean HTTP 200 JSON with no fences, no reasoning tags,
+correct schema shape.
+
+#### Model compatibility (why not gpt-oss or Nova?)
+Even with the gateway patch, only Claude is currently usable:
 
 | Model | Result |
 |---|---|
-| `us.anthropic.claude-haiku-4-5-20251001-v1:0` | Works (with the custom prompts below) |
-| `openai.gpt-oss-20b-1:0` / `120b` | Always wraps output in `<think>...</think>` reasoning tags before the JSON — this is the model's native "harmony format" output, not a prompt issue. The gateway's reasoning-separation feature (which cleanly splits `reasoning_content` for Claude/DeepSeek) is not implemented for gpt-oss — confirmed via direct API testing, `reasoning_content` is always `null` for this model family regardless of the `reasoning_effort` parameter. |
-| `us.amazon.nova-lite-v1:0` | Returns clean, unfenced JSON but ignores the schema's object wrapper (returns a bare list instead of `{"ingredients": [...]}`) |
+| `us.anthropic.claude-haiku-4-5-20251001-v1:0` | Works — clean structured output via `outputConfig.textFormat` |
+| `openai.gpt-oss-20b-1:0` / `120b` | Still wraps output in `<think>...</think>` reasoning tags before the JSON, **even with structured output enabled** — confirmed via direct testing post-patch. This is the model's native "harmony format" output; the gateway's reasoning-separation feature (which cleanly splits `reasoning_content` for Claude/DeepSeek) is not implemented for gpt-oss — `reasoning_content` is always `null` for this model family regardless of `reasoning_effort`. This is a separate, gpt-oss-specific gap, not fixed by PR #255. |
+| `us.amazon.nova-lite-v1:0` | Not re-tested after the patch; previously ignored the schema's object wrapper (returned a bare list instead of `{"ingredients": [...]}`) |
 
 **Note:** AWS Bedrock does not host OpenAI's proprietary models (GPT-4o,
 GPT-5, etc.) in any region — verified directly against the Bedrock
@@ -126,11 +155,13 @@ GPT-5, etc.) in any region — verified directly against the Bedrock
 `gpt-oss` line is available on Bedrock; the closed GPT models remain
 exclusive to OpenAI's own API / Azure OpenAI.
 
-#### Custom prompts (anti-fence hardening)
-Even Claude needed stronger prompt wording than Mealie's stock prompts to
-reliably avoid markdown fences. Custom prompt overrides live in
-`deployments/mealie/prompts/recipes/` and are mounted into the pod via a
-Kustomize `configMapGenerator`:
+#### Custom prompts (defense in depth)
+Custom prompt overrides also live in `deployments/mealie/prompts/recipes/`
+and are mounted into the pod via a Kustomize `configMapGenerator`. These
+predate the gateway patch above (added when prompt wording was the only
+lever available) and are kept as a second layer of protection — cheap
+insurance in case a future model or gateway regression stops enforcing
+the schema again:
 
 - ConfigMap `mealie-custom-prompts` mounted at
   `/app/custom-prompts/recipes/` (Mealie expects this exact subdirectory
@@ -142,9 +173,7 @@ Kustomize `configMapGenerator`:
 - Each of the 4 prompt files (ingredient parsing, image-to-recipe,
   video-to-recipe, URL-scrape) opens and closes with an explicit,
   repeated instruction: *"first character of your response must be `{`,
-  no code fences, no `<think>` tags."* A single trailing sentence was not
-  forceful enough — the instruction needed to be prominent and repeated
-  to reliably override Claude's default fenced-JSON style.
+  no code fences, no `<think>` tags."*
 - Kustomize's `configMapGenerator` content-hashes the ConfigMap name, so
   editing a prompt file and re-deploying automatically rolls the Mealie
   pod to pick up the change — no manual restart needed.
@@ -213,7 +242,8 @@ Kustomize `configMapGenerator`:
    - **Requests hang without response:** Restart deployment to pull latest gateway image (`kubectl rollout restart deployment/bedrock-access-gateway -n bedrock-gateway`)
    - **Parameter validation errors:** Upstream fixes auto-deployed (e.g., Claude Sonnet 4.5 temperature/top_p conflict fixed in latest)
    - **Pod CrashLoopBackOff "API Key not configured":** Ensure `API_KEY` env var is set (upstream removed default in Feb 2025)
-   - **gpt-oss models leak `<think>...</think>` reasoning tags into `content`:** confirmed via direct testing (`reasoning_content` field always `null` for `openai.gpt-oss-20b-1:0`/`120b`, regardless of `reasoning_effort`). The gateway's reasoning-separation feature only covers Claude and DeepSeek R1. Breaks any client (like Mealie) expecting strict JSON-only output. Use Claude instead until the gateway adds gpt-oss support, or patch the gateway to strip the tag for this model family.
+   - **gpt-oss models leak `<think>...</think>` reasoning tags into `content`:** confirmed via direct testing (`reasoning_content` field always `null` for `openai.gpt-oss-20b-1:0`/`120b`, regardless of `reasoning_effort`), even with `response_format` structured output enabled (see below). The gateway's reasoning-separation feature only covers Claude and DeepSeek R1. Breaks any client (like Mealie) expecting strict JSON-only output. Use Claude instead until the gateway adds gpt-oss support.
+   - **`response_format`/`json_schema` was silently ignored (fixed as of 2026-07-25):** upstream never implemented OpenAI's structured-output contract — accepted the field, never enforced it, so every model free-texted its own JSON style (Claude sometimes fenced in ` ```json `, breaking strict clients like Mealie). Tracked upstream as [#162](https://github.com/aws-samples/bedrock-access-gateway/issues/162)/[#255](https://github.com/aws-samples/bedrock-access-gateway/issues/255), fixed here by cherry-picking the unmerged [PR #255](https://github.com/aws-samples/bedrock-access-gateway/pull/255) in `upstream-rebuild.yaml` — see [Mealie § Structured-output enforcement](#structured-output-enforcement-gateway-patch) for full details.
 
 ![Bedrock](images/bedrock.png)
 
