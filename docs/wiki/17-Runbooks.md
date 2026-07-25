@@ -55,3 +55,17 @@ This page provides step-by-step operational procedures for common tasks.
 - Do not commit real credentials. Use Ansible Vault for secrets and GitHub Actions secrets for CI.
 - If secrets were previously committed, rotate immediately and remove from repo history if necessary.
 
+![accent-divider](images/accent-divider.svg)
+## Edit a Home Assistant Dashboard via Code
+Don't hand-edit `/config/.storage/lovelace.dashboard_<name>` directly — HA
+owns that file and can overwrite an edit made while it's live. Use
+`core/useful_scripts/ha_dashboard_edit.py`, which calls the same
+`lovelace/config` / `lovelace/config/save` WebSocket API the frontend
+itself uses:
+1) Create a Long-Lived Access Token: HA profile (bottom-left) → Security → Long-Lived Access Tokens.
+2) Find the dashboard's real `url_path` (not necessarily its title): `kubectl exec -n home-assistant home-assistant-0 -c home-assistant -- cat /config/.storage/lovelace_dashboards`.
+3) Edit `NEW_CARDS` in the script for whatever card(s) you're adding.
+4) `kubectl cp core/useful_scripts/ha_dashboard_edit.py home-assistant/home-assistant-0:/tmp/ha_dashboard_edit.py -c home-assistant`
+5) `kubectl exec -n home-assistant home-assistant-0 -c home-assistant -- env HA_TOKEN="<token>" HA_DASHBOARD_URL_PATH="<url_path>" python3 /tmp/ha_dashboard_edit.py`
+6) Revoke the token from the same Security screen once done, if it was only needed for this edit.
+

@@ -3,6 +3,59 @@
 # ADR Index
 
 ![accent-divider](images/accent-divider.svg)
+### ADR-010: Pin Rook-Ceph Helm Chart Versions
+
+- **Status:** Implemented & Verified
+- **Date:** 2026-07-21
+
+#### Context
+
+Both Rook-Ceph installs (`ansible/tasks/rook_ceph_deploy_part1.yml`) used
+`helm upgrade --install` against `rook-release/rook-ceph` /
+`rook-release/rook-ceph-cluster` with no `--version` pin. While
+right-sizing CSI plugin/provisioner CPU requests (over-provisioned
+relative to observed usage after a node outage exposed how tight
+cluster-wide CPU had become), a routine `helm repo update` silently
+picked up chart `v1.20.2` — several minor versions ahead of the
+`v1.19.2` that had actually been running. `v1.20.2` ships a breaking
+change to the CSI controller-plugin's ServiceAccount wiring: the
+`rbd`/`cephfs` `ctrlplugin` Deployments came up looking for a
+ServiceAccount (`rbd-ctrlplugin-sa`) that chart version never created,
+so their pods failed to schedule (`FailedCreate`,
+"serviceaccount ... not found").
+
+Caught within minutes (ctrlplugin replica count dropping to 0/2) and
+rolled back via `helm rollback rook-ceph 4` before it affected any
+actual storage I/O — the CSI **node** plugins (the ones that handle
+live mounts) were never affected, only the controller-plugin sidecars.
+
+#### Decision
+
+Pin both Rook Helm releases to the versions actually verified working:
+operator `1.19.2`, cluster `1.18.1`, via explicit `--version` flags in
+the `helm upgrade --install` commands. Future chart version bumps must
+be deliberate — edit the pin, verify CSI ctrlplugin pods come up, before
+trusting the new version.
+
+#### Consequences
+
+- **Positive:**
+  - Eliminates an entire class of "chart moved out from under me"
+    incidents — the same risk that showed up here could just as easily
+    hit `rook-ceph-cluster`, or any other unpinned Helm-chart Application
+    in this repo (see `deployments/velero`, `deployments/home-assistant`,
+    `deployments/mealie`'s ArgoCD Applications for the pattern this
+    should follow elsewhere too: pin `targetRevision`, bump deliberately).
+  - The actual CSI resource right-sizing this was blocking (see
+    `deployments/home-assistant` and CPU request notes in
+    `12-Troubleshooting.md`) applied cleanly once re-run against the
+    pinned version.
+- **Negative:**
+  - Chart security/bugfix updates now require a manual bump + verification
+    step rather than arriving automatically on the next `helm repo update`.
+    Given what just happened, that's the intended tradeoff, not a cost.
+
+![accent-divider](images/accent-divider.svg)
 ### ADR-008: Ceph Dashboard Ingress Configuration
 
 - **Status:** Implemented & Verified

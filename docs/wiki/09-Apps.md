@@ -8,7 +8,62 @@ User facing applications that are applied thru ArgoCD on top of the k3s tech sta
 - Network-wide DNS sinkhole for ads and tracking.
 - Blocks ads at the network level (including in-app and smart-TV).
 - Web admin interface and API; ideal on Raspberry Pi or any Linux box.
+- All `*.seadogger-homelab` hostnames are static `dnsmasq` records defined in
+  `core/deployments/pihole/pihole-values.yaml` (`dnsmasq.customDnsEntries`) —
+  add a new app's hostname there, not through the Pi-hole UI, so it survives
+  a redeploy.
+- **30-Minute Pause button** on the portal calls a small backend
+  (`deployments/pihole-toggle`, Pro repo) that holds the Pi-hole admin
+  password server-side and calls Pi-hole's v6 API
+  (`POST /api/dns/blocking`) — the password never reaches the browser.
 ![PiHole](images/PiHole-Dashboard.png)
+
+![accent-divider](images/accent-divider.svg)
+## Home Assistant: **Website:** [https://www.home-assistant.io](https://www.home-assistant.io)
+- Home automation hub, deployed via the community
+  [pajikos/home-assistant-helm-chart](https://github.com/pajikos/home-assistant-helm-chart)
+  (`deployments/home-assistant`, Pro repo) — chart version pinned explicitly.
+- **Container mode, no Supervisor:** Core + HACS only. There is no
+  add-on store — anything you'd install as a Supervisor add-on
+  (Mosquitto, Zigbee2MQTT, ESPHome) needs to run as its own pod instead.
+- **No `hostNetwork`, no node-pinning:** standard pod networking, since
+  no USB Zigbee/Z-Wave radio is attached. mDNS-based discovery (HomeKit,
+  Chromecast, local device auto-discovery) will not work without
+  `hostNetwork: true` — revisit if that's ever needed.
+- **Reverse-proxy trust required:** HA rejects requests from a reverse
+  proxy it doesn't recognize (`400 Bad Request`, "not set-up for reverse
+  proxies"). Since we route via our own Traefik `IngressRoute` rather
+  than the chart's own `Ingress`, `ingress.external: true` +
+  `configuration.enabled: true` in the values file is what makes HA emit
+  the `http.use_x_forwarded_for` / `trusted_proxies` config — without it,
+  every request 400s.
+- **`configuration.yaml` is only regenerated if missing** — the chart's
+  init container copies its templated config to the PVC once and never
+  again once the file exists. After changing `configuration.templateConfig`
+  values, you must delete `/config/configuration.yaml` from the running
+  pod and restart it for the new template to actually apply.
+- **HACS install:** `wget -O - https://get.hacs.xyz | bash -` run inside
+  the pod (`kubectl exec ... -- bash -c "..."`), then restart the pod.
+  Not pre-installed by default.
+- **Dashboard editing via code:** see **[[17-Runbooks]]** →
+  "Edit a Home Assistant Dashboard via Code" for a reusable script
+  (`core/useful_scripts/ha_dashboard_edit.py`) that edits Lovelace
+  dashboards through HA's own WebSocket API (`lovelace/config` /
+  `lovelace/config/save`) instead of hand-editing the live `.storage`
+  file.
+- Storage: `ceph-block-data` (RBD), single replica — HA's SQLite recorder
+  DB needs a single writer.
+
+![accent-divider](images/accent-divider.svg)
+## Mealie: **Website:** [https://mealie.io](https://mealie.io)
+- Self-hosted recipe manager and meal planner
+  ([mealie-recipes/mealie](https://github.com/mealie-recipes/mealie)).
+- Plain hand-written manifests (`deployments/mealie`, Pro repo), not a
+  Helm chart — no third-party chart for Mealie has real community
+  adoption, so this follows the same pattern as Jellyfin/Signal-CLI.
+- SQLite backend (default, no separate Postgres needed) on
+  `ceph-block-data`, `Recreate` deploy strategy (single writer).
+- Image pinned (not `:latest`) — bump deliberately, verify after.
 
 ![accent-divider](images/accent-divider.svg)
 ## OpenWebUI: **Website:** [https://open-webui.com](https://open-webui.com)
@@ -93,12 +148,36 @@ The script lives in `seadogger-homelab-pro/core/useful_scripts/fetch_hdhomerun_g
 
 
 ![accent-divider](images/accent-divider.svg)
-## N8N: **Website:** [https://n8n.io](https://n8n.io)
-- Source-available, self-hostable workflow-automation platform.
-- Visual editor + optional code; 500+ integrations and webhooks/triggers.
-- Run self-hosted (Docker/Kubernetes) or use n8n Cloud.
-- Great for API automations and AI/agent workflows.
-![N8N](images/n8n-workflow.png)
+## Ember Trail
+- Family road-trip planner — custom app (`deployments/ember-trail`, Pro
+  repo), a small Python state server behind Caddy, not a third-party project.
+
+![accent-divider](images/accent-divider.svg)
+## Signal-CLI
+- Headless Signal messenger client
+  ([AsamK/signal-cli](https://github.com/AsamK/signal-cli)) exposed as an
+  HTTP daemon, used by Hermes agents to send/receive Signal messages.
+- Built via `core/deployments/signal-cli/Dockerfile`, rebuilt automatically
+  every time upstream cuts a release (`core/.github/workflows/upstream-rebuild-signal-cli.yaml`).
+- The daemon's own HTTP server rejects requests carrying a Kubernetes
+  Service `Host` header (`421`), so an nginx sidecar rewrites the `Host`
+  header before proxying to it.
+
+![accent-divider](images/accent-divider.svg)
+## Cameras
+- RTSP camera viewer. [go2rtc](https://github.com/AlexxIT/go2rtc) restreams
+  camera feeds, a small Caddy-served page (`cameras.html`) displays them.
+- **Known limitation:** browser playback is 2-3fps JPEG polling, not real
+  video — a real fix would mean switching the frontend to WebRTC/MSE
+  playback against go2rtc's stream endpoints instead of polling snapshots.
+
+![accent-divider](images/accent-divider.svg)
+## Terminal
+- Browser-accessible cluster shell:
+  [ttyd](https://github.com/tsl0922/ttyd) serving a terminal with `kubectl`
+  pre-installed (copied in from the `bitnami/kubectl` image at pod start),
+  bound to a `ServiceAccount` via RBAC (`deployments/terminal/rbac.yaml`)
+  rather than requiring a separate login.
 
 ![accent-divider](images/accent-divider.svg)
 ## JellyFin: **Website:** [https://jellyfin.org](https://jellyfin.org)

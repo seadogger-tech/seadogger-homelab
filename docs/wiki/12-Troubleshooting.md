@@ -169,6 +169,12 @@ The definitive plan is to manage the `CephNFS` resource declaratively within the
 - **Service:** ArgoCD
 - **Type:** Authentication / GitOps
 - **Status:** Known Issue - GitHub App migration needed
+- **Update (2026-07-21):** `portal` and `velero-ui` both synced cleanly
+  throughout a long session of frequent pushes (dozens of commits across
+  both repos). Whether this means the PAT was rotated, GitHub App auth
+  was already migrated, or the token simply hasn't hit its expiry yet
+  is unconfirmed — don't treat this as resolved without checking
+  `repo-credentials` directly.
 
 ### Symptoms
 ArgoCD Applications fail to sync with error:
@@ -231,6 +237,142 @@ Migrate to GitHub App authentication (tokens auto-refresh, never expire):
 ### References
 - [ArgoCD GitHub App Documentation](https://argo-cd.readthedocs.io/en/stable/user-guide/private-repositories/#github-app-credential)
 - [Issue #8](https://github.com/seadogger-tech/seadogger-homelab-pro/issues/8) - Tracking issue for migration
+
+![accent-divider.svg](images/accent-divider.svg)
+## anakin PoE+ HAT Failure and Cluster Recovery
+
+- **Date:** 2026-07-18 through 2026-07-21
+- **Service:** anakin node (PoE+ HAT), Rook-Ceph, cluster-wide CPU allocation
+- **Type:** Hardware failure / Multi-day recovery
+- **Status:** Resolved
+
+### 1. Hardware Failure
+
+- **Symptom:** `anakin.local` went `NotReady`; kubelet stopped posting
+  status. Not a DNS issue (the usual macOS mDNS cache problem, see below)
+  — the node didn't respond to ping or SSH by IP either.
+- **Root cause:** the node's PoE+ HAT failed. Confirmed physically: the
+  Ubiquiti switch showed PoE+ being drawn, but the Pi's own Ethernet
+  jack showed zero link/activity lights — the fault was on the Pi side,
+  not the network. Plugging in a USB-C power supply directly produced a
+  burnt-electronics smell, confirming actual hardware damage (not just a
+  loose connection).
+- **Resolution:** physical HAT replacement. Verified by temporarily
+  borrowing a known-good HAT from `obiwan` (see below) before the
+  replacement part arrived.
+
+### 2. Ceph Degraded (2 of 3 OSDs)
+
+- With `anakin`'s OSD down, `ceph -s` reported `HEALTH_WARN`, 24%
+  degraded objects, 142 undersized PGs. `ceph-fs-data-ec` uses `k=2,m=1`
+  erasure coding across exactly 3 hosts — with only 2 up, EC pools
+  cannot reach full redundancy no matter how long you wait; this is
+  expected, not a separate bug.
+- Marking the down OSD `out` (`ceph osd out osd.0`) is safe and fully
+  reversible — it just tells Ceph to stop counting on that device for
+  placement. When the node returns, `ceph osd in osd.0` (or Rook's own
+  reconciliation) rebalances data back onto it automatically; no data is
+  lost by marking it out in the meantime.
+- Stuck `Terminating` pods on the dead node (ArgoCD, Jellyfin, monitoring,
+  Rook CSI controllers) needed `kubectl delete pod --grace-period=0
+  --force` — the API server can't get a graceful-termination
+  confirmation from a kubelet that will never respond again.
+
+### 3. HAT Swap Test Caused a Second, Deliberate Outage
+
+- To verify the HAT theory before the replacement part arrived, `obiwan`'s
+  HAT was temporarily moved to `anakin`. **Every Ceph pool has
+  `min_size: 2`** (replicated pools included, not just the `k=2,m=1` EC
+  pool) — so taking down a *second* node, even briefly, drops the
+  cluster to 1 of 3 OSDs and makes **all** storage read/write
+  unavailable, not just degraded. This was done deliberately, with
+  `obiwan` cordoned and its non-Ceph workloads evicted first, and
+  the outage window was bounded (a few minutes) before the HAT went
+  back.
+- Confirmed the theory: `anakin` came up cleanly and pinged
+  immediately once given a working HAT.
+
+### 4. Post-Recovery: Stale CSI VolumeAttachments
+
+- After both nodes were back and OSDs re-joined, several pods
+  (`hermes-jason`'s dev pod, `signal-cli`) stayed stuck on
+  `FailedAttachVolume: volume attachment is being deleted` or
+  `Multi-Attach error`, long after the underlying node problems were
+  fixed.
+- **Root cause:** force-deleting pods on an unreachable node (step 1
+  above) doesn't cleanly release their CSI `VolumeAttachment` objects —
+  the attach/detach controller is left waiting for a detach
+  confirmation from a kubelet that already restarted. These stale
+  `VolumeAttachment`s then blocked *new* attach attempts for the same
+  PVC on any node.
+- **Resolution:** `kubectl patch volumeattachment <name> -p
+  '{"metadata":{"finalizers":null}}' --type=merge` clears the stuck
+  object without waiting for the CSI driver's own confirmation. Safe for
+  CephFS-backed volumes (`RWX`, no exclusive-lock risk); would warrant
+  more caution on RBD (`RWO`, exclusive-lock) volumes, since it bypasses
+  the detach protocol.
+- Also required a restart of the CephFS/RBD CSI **ctrlplugin** pods
+  (`kubectl delete pod ...`) to clear an in-memory "operation already in
+  progress" lock left over from the same force-deletes.
+
+### 5. Unrelated: Rook Chart Version Drift → ADR-010
+
+While investigating cluster-wide CPU pressure exposed by this outage
+(see below), an unpinned `helm upgrade` against the Rook chart repo
+picked up a breaking version and briefly took down the CSI
+controller-plugin. See **[[13-ADR-Index]]** ADR-010 for the full
+incident and the chart-pinning fix.
+
+### 6. Root Cause of Tight CPU Headroom: containerd Image Bloat
+
+- Losing a node exposed that all 4 nodes were running close to 90%+ CPU
+  *requested* (not actually *used* — real usage was 13-47%). Chasing
+  this down to yoda's mon disk-space warning (`MON_DISK_LOW`) revealed
+  the real, unrelated cause: yoda's mon store is only 113 MB, but its
+  root disk (which yoda's mon shares with the k3s control plane and
+  containerd — yoda holds no Ceph OSD) was at 77% (334 GB) because
+  containerd's image cache had accumulated ~50-60 GB of stale,
+  unreferenced `hermes-agent` image layers (`imagePullPolicy: Always` +
+  `:latest` + frequent upstream rebuilds = old layers pile up, never
+  garbage collected).
+- **Fix:** `k3s crictl rmi --prune` on yoda freed ~188 GB (77% → 34%
+  disk usage), which cleared the `MON_DISK_LOW` warning immediately.
+- **Attempted but reverted:** lowering kubelet's image-GC thresholds
+  (default 85%/80%) via `--kubelet-arg=image-gc-high-threshold-percent`
+  briefly crash-looped yoda's kubelet — those flags were removed from
+  kubelet in this Kubernetes version in favor of a structured
+  `KubeletConfiguration` YAML file. Reverted; the underlying disk-bloat
+  problem is solved via the manual prune above, the proactive-GC-tuning
+  idea is parked, not implemented.
+- Separately, actual CPU **requests** (not disk) were right-sized:
+  Rook CSI plugin/provisioner containers (~1.1 cores freed, see
+  ADR-010) and several idle-most-of-the-time app requests — jellyfin,
+  hermes, signal-cli, bedrock-gateway, minecraft pack-manager/UI
+  (~840m freed) — were lowered to match observed usage. OSD/mon/mgr/rgw
+  requests were deliberately left untouched; they exist specifically to
+  guarantee CPU during the kind of recovery burst this incident
+  produced.
+
+### Key Takeaways
+
+- A node's kubelet going silent and a DNS resolution failure produce
+  similar-looking symptoms from `kubectl` — always independently verify
+  with `ping`/`ssh` by IP before assuming it's the known macOS mDNS
+  cache issue.
+- Check `min_size` on *every* pool before taking down a second node for
+  any reason, even briefly — it's easy to reason correctly about the EC
+  pool's tolerance and forget that replicated pools have their own,
+  possibly different, threshold.
+- Force-deleting pods on a dead node is necessary but not free — it can
+  leave stale `VolumeAttachment` objects and CSI driver in-memory locks
+  that block scheduling long after the node itself recovers. Check for
+  these explicitly during recovery, don't assume "node is Ready again"
+  means "fully recovered."
+- `kubectl top nodes` requests-vs-usage gaps are worth investigating
+  even when nothing is on fire — this incident's disk-space root cause
+  (containerd image bloat) had been silently accumulating for weeks and
+  would have eventually caused its own outage independent of the
+  hardware failure.
 
 ![accent-divider.svg](images/accent-divider.svg)
 ## See Also
