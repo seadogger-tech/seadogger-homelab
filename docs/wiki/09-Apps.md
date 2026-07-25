@@ -190,6 +190,36 @@ the schema again:
    updates, and the "Today's Meals" card on the family dashboard reflects
    it without any manual step.
 
+#### Forcing the AI Import Path
+Mealie's scraper-selection order is hardcoded server-side
+(`RecipeScraperPackage` always tries first; the AI scraper only runs if
+that returns nothing at all) — there is no request-level way to force AI
+for a page the plain scraper can technically read but parses badly (e.g.
+duplicated/mislabeled instruction steps from pages that interleave
+step-number labels with restated ingredient lists). Today, the only
+workaround is manual: fetch the page, extract just the visible recipe
+text (no HTML/JSON-LD for the plain scraper to grab), and POST it to
+`/api/recipes/create/html-or-json` directly via the API.
+
+Two real, tested, unmerged upstream PRs fix this properly by adding
+actual UI controls:
+- [#7618](https://github.com/mealie-recipes/mealie/pull/7618) — a
+  "Force OpenAI Scraper" checkbox on the Import-from-URL page
+- [#7825](https://github.com/mealie-recipes/mealie/pull/7825) — a
+  dedicated "Create from Text" page
+
+Both are cherry-picked into a custom image
+(`ghcr.io/seadogger-tech/mealie:v3.21.0-ai-import`) built by
+`core/.github/workflows/mealie-rebuild.yaml`, following the same
+adopted-unmerged-PR pattern established for the Bedrock gateway — see
+[ADR-011](13-ADR-Index.md#adr-011-adopting-unmerged-upstream-prs-reusable-pattern).
+Unlike the gateway, this pipeline is pinned to a specific upstream
+**release tag** (`v3.21.0`), not the active `mealie-next` development
+branch — Mealie holds real household data, so unattended tracking of
+in-progress upstream commits would be inappropriate here. The pipeline
+only rebuilds when the cherry-picked PRs change or `UPSTREAM_TAG` is
+bumped manually.
+
 ![accent-divider](images/accent-divider.svg)
 ## OpenWebUI: **Website:** [https://open-webui.com](https://open-webui.com)
 - Self-hosted web UI for local/remote LLMs.
@@ -215,7 +245,10 @@ the schema again:
 - **Multi-arch Support:** Built for `linux/amd64` and `linux/arm64` (Raspberry Pi 5 compatible)
 - **Image Registry:** `ghcr.io/seadogger-tech/aws-bedrock-gateway:latest`
 - **Access:** MetalLB LoadBalancer at `192.168.1.242:6880`
-- **Integration:** Works seamlessly with OpenWebUI for chat interface
+- **Integration:** Confirmed actively connected to OpenWebUI's chat
+  interface — verified via OpenWebUI's own stored connection config
+  (`openai.api_base_urls` in its `webui.db`), pointed at
+  `http://192.168.1.242:6880/api/v1` with the same static `bedrock` key.
 
 ### Configuration Requirements
 1. **AWS Bedrock Model Access:**
@@ -244,6 +277,36 @@ the schema again:
    - **Pod CrashLoopBackOff "API Key not configured":** Ensure `API_KEY` env var is set (upstream removed default in Feb 2025)
    - **gpt-oss models leak `<think>...</think>` reasoning tags into `content`:** confirmed via direct testing (`reasoning_content` field always `null` for `openai.gpt-oss-20b-1:0`/`120b`, regardless of `reasoning_effort`), even with `response_format` structured output enabled (see below). The gateway's reasoning-separation feature only covers Claude and DeepSeek R1. Breaks any client (like Mealie) expecting strict JSON-only output. Use Claude instead until the gateway adds gpt-oss support.
    - **`response_format`/`json_schema` was silently ignored (fixed as of 2026-07-25):** upstream never implemented OpenAI's structured-output contract — accepted the field, never enforced it, so every model free-texted its own JSON style (Claude sometimes fenced in ` ```json `, breaking strict clients like Mealie). Tracked upstream as [#162](https://github.com/aws-samples/bedrock-access-gateway/issues/162)/[#255](https://github.com/aws-samples/bedrock-access-gateway/issues/255), fixed here by cherry-picking the unmerged [PR #255](https://github.com/aws-samples/bedrock-access-gateway/pull/255) in `upstream-rebuild.yaml` — see [Mealie § Structured-output enforcement](#structured-output-enforcement-gateway-patch) for full details.
+
+### Adopted Unmerged Upstream PRs
+`upstream-rebuild.yaml` cherry-picks 6 open, unmerged PRs on top of a
+fresh checkout of `aws-samples/main` on every scheduled rebuild — see
+[ADR-011](13-ADR-Index.md#adr-011-adopting-unmerged-upstream-prs-reusable-pattern)
+for the full rationale and the reusable pattern this establishes.
+Verified working end-to-end against the live deployed image
+(2026-07-25):
+
+| PR | Fixes | Verified via |
+|---|---|---|
+| [#255](https://github.com/aws-samples/bedrock-access-gateway/pull/255) | `response_format`/`json_schema` → real Bedrock structured output | Direct `curl` test + 5/5 clean Mealie ingredient-parse calls |
+| [#246](https://github.com/aws-samples/bedrock-access-gateway/pull/246) | Drop orphan `tool_use`/`tool_result` pairs (OpenWebUI history-rewrite scenario) | `grep -n _sanitize_tool_pairs /app/api/models/bedrock.py` on the live pod |
+| [#247](https://github.com/aws-samples/bedrock-access-gateway/pull/247) | Non-negative tool-call indexes in streaming | Present in cherry-picked commit history |
+| [#239](https://github.com/aws-samples/bedrock-access-gateway/pull/239) | Replayed tool blocks without a `tools` array (conversation compaction) | Present in cherry-picked commit history |
+| [#198](https://github.com/aws-samples/bedrock-access-gateway/pull/198) | Return `tool_calls` instead of dropping them on `max_tokens` truncation | Present in cherry-picked commit history |
+| [#249](https://github.com/aws-samples/bedrock-access-gateway/pull/249) | Claude Opus 4.7 adaptive-thinking request format | `grep -n ADAPTIVE_THINKING_MODELS /app/api/models/bedrock.py` on the live pod |
+
+`#246`/`#247`/`#239`/`#198` protect OpenWebUI's tool/function-calling
+path, which isn't enabled today (0 Tools/Functions configured in its
+`webui.db` as of this writing) but would hit these exact bugs the
+moment it is. `#249` is a live gap regardless — Opus 4.7 is already
+selectable in OpenWebUI's model dropdown.
+
+Two of the six conflict with each other in small, known ways (both
+`#255` and `#239` add a branch in `_parse_request`; `#198` and `#239`
+touch the same log line). Resolved by
+`.github/scripts/resolve_bedrock_gateway_conflicts.py`, not inline in
+the workflow YAML — see the script's docstring for exactly what each
+resolver does and why.
 
 ![Bedrock](images/bedrock.png)
 

@@ -3,6 +3,135 @@
 # ADR Index
 
 ![accent-divider](images/accent-divider.svg)
+### ADR-011: Adopting Unmerged Upstream PRs (Reusable Pattern)
+
+- **Status:** Implemented & Verified
+- **Date:** 2026-07-25
+
+#### Context
+
+Mealie's AI-import features (recipe-from-URL, ingredient parsing) route
+through the in-cluster AWS Bedrock Access Gateway
+(`ghcr.io/seadogger-tech/aws-bedrock-gateway`, auto-rebuilt from
+`aws-samples/bedrock-access-gateway`'s `main` every 6 hours). Testing
+revealed the gateway silently dropped the OpenAI `response_format`
+field entirely — accepted, never enforced — so every model free-texted
+its own JSON style. Claude Haiku sometimes wrapped output in
+` ```json ` fences, breaking Mealie's strict `json.loads()` parser
+unpredictably.
+
+This was a confirmed, tracked upstream gap
+([aws-samples/bedrock-access-gateway#162](https://github.com/aws-samples/bedrock-access-gateway/issues/162)),
+not a missing config option. A complete, tested fix existed as an
+**open, unmerged, unreviewed community PR**
+([#255](https://github.com/aws-samples/bedrock-access-gateway/pull/255))
+that maps `response_format.json_schema` to Bedrock's native
+`outputConfig.textFormat` — real schema enforcement at the AWS API
+level, not a prompt trick.
+
+A follow-up, broader survey (prompted by "are there other PRs we should
+adopt" and specifically "you're only looking at this from Mealie's
+angle — what about OpenWebUI") found the gateway also actively serves
+OpenWebUI (confirmed via its stored connection config pointing at
+`192.168.1.242:6880`), which has different, real needs: tool/function-
+calling reliability and newer-model support. Five more open PRs applied
+cleanly and address real (if not yet triggered) failure modes for that
+client. The same pattern surfaced again independently for Mealie itself
+— two more open PRs
+([#7618](https://github.com/mealie-recipes/mealie/pull/7618),
+[#7825](https://github.com/mealie-recipes/mealie/pull/7825)) add a
+"Force AI Import" checkbox and a "Create from Text" page to Mealie's own
+UI, since Mealie's scraper-selection order is hardcoded server-side with
+no request-level override — the only way to force the AI path today is
+a manual URL-fetch/extract/API-import workaround.
+
+#### Decision
+
+When a real, active bug has a complete, tested, currently-open PR
+upstream — reviewed or not — prefer adopting it over waiting indefinitely
+or hand-rolling an equivalent patch from scratch. Two different adoption
+shapes exist depending on how the upstream image is built here:
+
+**Shape A — continuous auto-rebuild** (`aws-bedrock-gateway`,
+`.github/workflows/upstream-rebuild.yaml`): the pipeline checks out
+upstream's default branch fresh on every scheduled run, then cherry-picks
+the adopted PR commit(s) on top before building. This keeps tracking
+all *other* upstream changes automatically — only the specific adopted
+fix is pinned to a manual step, not the whole codebase.
+
+**Shape B — pinned stable tag** (`mealie`,
+`.github/workflows/mealie-rebuild.yaml`): the pipeline checks out a
+fixed upstream release tag (not the active dev branch) and cherry-picks
+on top of that. Used when the upstream project's default branch is
+genuinely active development that could introduce breaking changes
+(schema migrations, etc.) — appropriate for Mealie, which holds real
+household data, inappropriate for treating like the gateway's
+continuous-tracking model.
+
+**Every adoption, regardless of shape, includes:**
+1. **A merge-status check step** that queries `gh pr view <N> --json
+   state` for each adopted PR and emits a GitHub Actions warning
+   annotation the moment it's no longer `OPEN` upstream — so a human
+   notices and removes the now-unnecessary cherry-pick, rather than it
+   silently becoming a no-op (if the diff is now redundant) or eventually
+   conflicting (if the surrounding code has since changed). This check
+   does not fail the build; it only warns.
+2. **Explicit code comments** at the cherry-pick step naming the PR,
+   why it's needed, which real client/use-case depends on it, and what
+   to do once it merges.
+3. **Verification before adoption, not after** — the exact cherry-pick
+   commands intended for the workflow are run locally first, against a
+   fresh clone, before committing them. When a cherry-pick conflicts
+   with another adopted PR (two additive patches touching adjacent code
+   are not a sign either is wrong — just that they land near each
+   other), the conflict is resolved via a **separate, committed,
+   testable script** (e.g. `.github/scripts/resolve_bedrock_gateway_conflicts.py`)
+   rather than inline Python heredocs embedded in the workflow YAML —
+   the latter is fragile (whitespace/quoting inside a YAML block scalar
+   is easy to break silently) and hard to validate ahead of time.
+4. **A syntax-validation step** (`python3 -c "import ast; ast.parse(...)"`
+   for Python targets) immediately after all cherry-picks, so a bad
+   patch application fails the build loudly instead of shipping broken
+   code.
+
+PRs adopted under this pattern (as of 2026-07-25):
+
+| Repo | PR | What it fixes | Client that needs it |
+|---|---|---|---|
+| bedrock-access-gateway | [#255](https://github.com/aws-samples/bedrock-access-gateway/pull/255) | `response_format`/`json_schema` → Bedrock structured output | Mealie |
+| bedrock-access-gateway | [#246](https://github.com/aws-samples/bedrock-access-gateway/pull/246) | Drop orphan `tool_use`/`tool_result` pairs before Converse translation | OpenWebUI (explicitly reproduces an OpenWebUI history-rewrite scenario in its own PR description) |
+| bedrock-access-gateway | [#247](https://github.com/aws-samples/bedrock-access-gateway/pull/247) | Non-negative tool-call indexes in streamed responses | OpenWebUI |
+| bedrock-access-gateway | [#239](https://github.com/aws-samples/bedrock-access-gateway/pull/239) | Allow replayed tool blocks without a `tools` array (conversation compaction) | OpenWebUI — real hard-crash scenario, documented in 3+ other projects' trackers |
+| bedrock-access-gateway | [#198](https://github.com/aws-samples/bedrock-access-gateway/pull/198) | Return `tool_calls` instead of dropping them on `max_tokens` truncation | OpenWebUI |
+| bedrock-access-gateway | [#249](https://github.com/aws-samples/bedrock-access-gateway/pull/249) | Claude Opus 4.7 adaptive-thinking request format | OpenWebUI — Opus 4.7 is already selectable in its model list; reasoning requests fail today without this |
+| mealie | [#7618](https://github.com/mealie-recipes/mealie/pull/7618) | "Force OpenAI Scraper" checkbox on Import-from-URL | Real UI button for forcing AI import, replacing the manual workaround |
+| mealie | [#7825](https://github.com/mealie-recipes/mealie/pull/7825) | "Create from Text" page | Same — pastes plain text straight to the AI parser, no URL/HTML scraping |
+
+#### Consequences
+
+- **Positive:**
+  - Real bugs get fixed today instead of waiting on an indeterminate
+    upstream review timeline — several of these PRs had zero comments
+    or reviews at time of adoption, which is normal for a healthy but
+    under-resourced open-source project, not a sign of rejection.
+  - The merge-status check means this doesn't silently rot — a human
+    gets a visible signal to clean up, rather than the workflow becoming
+    an unmaintained pile of dead cherry-picks over time.
+  - Conflict resolution is tested and versioned, not improvised at
+    build time.
+- **Negative:**
+  - Each adopted PR is a maintenance liability until it merges upstream
+    (or we decide to drop it) — a rebase may eventually be needed if
+    upstream touches the same code.
+  - Someone has to actually notice and act on the merge-status warning
+    annotations; they don't block anything by themselves.
+  - Building Mealie from source (Shape B) is a much heavier CI job than
+    a small Python service like the gateway (full Yarn frontend build +
+    multi-arch Python backend) — acceptable for an infrequent, manually
+    re-triggered build, not something to run on the gateway's aggressive
+    6-hour schedule.
+
+![accent-divider](images/accent-divider.svg)
 ### ADR-010: Pin Rook-Ceph Helm Chart Versions
 
 - **Status:** Implemented & Verified
