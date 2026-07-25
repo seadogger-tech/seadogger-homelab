@@ -20,8 +20,15 @@ spec:
         kubernetes.io/arch: arm64
       containers:
         - name: mealie
-          image: ghcr.io/mealie-recipes/mealie:v3.21.0
-          imagePullPolicy: IfNotPresent
+          # Custom build: mealie-recipes/mealie@v3.21.0 + cherry-picked
+          # unmerged upstream PRs #7618 (Force OpenAI Scraper checkbox) and
+          # #7825 (Create from Text page). Built by
+          # core/.github/workflows/mealie-rebuild.yaml - see ADR-011 and
+          # core/docs/wiki/09-Apps.md#force-ai-import-cherry-picked-prs.
+          # Revert to ghcr.io/mealie-recipes/mealie:v3.21.0 if this image
+          # ever needs to be rolled back.
+          image: ghcr.io/seadogger-tech/mealie:v3.21.0-ai-import
+          imagePullPolicy: Always
           env:
             - name: BASE_URL
               value: "https://mealie.seadogger-homelab"
