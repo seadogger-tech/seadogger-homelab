@@ -31,12 +31,16 @@ spec:
               value: "911"
             - name: PGID
               value: "911"
+            - name: OPENAI_CUSTOM_PROMPT_DIR
+              value: "/app/custom-prompts"
           ports:
             - name: http
               containerPort: 9000
           volumeMounts:
             - name: data
               mountPath: /app/data
+            - name: custom-prompts
+              mountPath: /app/custom-prompts
           resources:
             requests:
               cpu: "50m"
@@ -60,3 +64,6 @@ spec:
         - name: data
           persistentVolumeClaim:
             claimName: mealie-data
+        - name: custom-prompts
+          configMap:
+            name: mealie-custom-prompts

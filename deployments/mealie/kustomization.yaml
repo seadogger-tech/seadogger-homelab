@@ -8,3 +8,11 @@ resources:
   - pvc.yaml
   - certificate.yaml
   - ingressroutes.yaml
+
+configMapGenerator:
+  - name: mealie-custom-prompts
+    files:
+      - prompts/parse-recipe-ingredients.txt
+      - prompts/parse-recipe-image.txt
+      - prompts/parse-recipe-video.txt
+      - prompts/scrape-recipe.txt
