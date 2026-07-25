@@ -83,6 +83,16 @@ jobs:
       # dedicated UI page for pasting plain recipe text (e.g. text we
       # manually extracted from a page with broken scraper output) straight
       # to the AI parser, no URL/HTML scraping involved at all.
+      #
+      # NOTE: the PR branch's tip is a merge commit (feat branch merged with
+      # upstream mealie-next partway through review), which `git cherry-pick`
+      # cannot replay directly ("is a merge but no -m option was given").
+      # Cherry-pick the two actual feature commits instead of the branch tip:
+      #   fd8ab18e - feat: add plain-text recipe import via OpenAI
+      #   9fea1830 - chore: fix ruff formatting in test_recipe_create_from_text
+      # If the PR branch is force-pushed/rebased upstream, these SHAs may
+      # need updating — check `git log <branch>` for the actual feature
+      # commits if this step starts failing.
       # Remove this step once #7825 ships in a Mealie release newer than
       # UPSTREAM_TAG above.
       - name: Cherry-pick Create-from-Text page (upstream PR #7825, unmerged)
@@ -90,12 +100,13 @@ jobs:
           cd upstream
           git remote add pr7825 https://github.com/bferd/mealie.git
           git fetch pr7825 feat/create-recipe-from-text
-          PATCH_SHA=$(git rev-parse pr7825/feat/create-recipe-from-text)
-          if ! git cherry-pick "$PATCH_SHA"; then
-            echo "::error::Cherry-pick of #7825 ($PATCH_SHA) failed — likely conflicts with #7618 or diverged from ${{ env.UPSTREAM_TAG }}. Needs manual rebase."
-            git cherry-pick --abort
-            exit 1
-          fi
+          for PATCH_SHA in fd8ab18e 9fea1830; do
+            if ! git cherry-pick "$PATCH_SHA"; then
+              echo "::error::Cherry-pick of #7825 commit $PATCH_SHA failed — likely conflicts with #7618, diverged from ${{ env.UPSTREAM_TAG }}, or the PR branch was rebased (SHA no longer exists). Check 'git log pr7825/feat/create-recipe-from-text' for the current feature commits."
+              git cherry-pick --abort
+              exit 1
+            fi
+          done
 
       - name: Compute build identity (upstream tag + patch commits)
         id: sha
