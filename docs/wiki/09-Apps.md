@@ -22,7 +22,8 @@ User facing applications that are applied thru ArgoCD on top of the k3s tech sta
 ## Home Assistant: **Website:** [https://www.home-assistant.io](https://www.home-assistant.io)
 - Home automation hub, deployed via the community
   [pajikos/home-assistant-helm-chart](https://github.com/pajikos/home-assistant-helm-chart)
-  (`deployments/home-assistant`, Pro repo) — chart version pinned explicitly.
+  (`deployments/home-assistant` + `ansible/tasks/ha_deploy.yml`) — chart
+  version pinned explicitly.
 - **Container mode, no Supervisor:** Core + HACS only. There is no
   add-on store — anything you'd install as a Supervisor add-on
   (Mosquitto, Zigbee2MQTT, ESPHome) needs to run as its own pod instead.
@@ -47,7 +48,7 @@ User facing applications that are applied thru ArgoCD on top of the k3s tech sta
   Not pre-installed by default.
 - **Dashboard editing via code:** see **[[17-Runbooks]]** →
   "Edit a Home Assistant Dashboard via Code" for a reusable script
-  (`deployments/home-assistant/ha_dashboard_edit.py`, Pro repo) that
+  (`deployments/home-assistant/ha_dashboard_edit.py`) that
   edits Lovelace dashboards through HA's own WebSocket API
   (`lovelace/config` /
   `lovelace/config/save`) instead of hand-editing the live `.storage`
@@ -59,9 +60,10 @@ User facing applications that are applied thru ArgoCD on top of the k3s tech sta
 ## Mealie: **Website:** [https://mealie.io](https://mealie.io)
 - Self-hosted recipe manager and meal planner
   ([mealie-recipes/mealie](https://github.com/mealie-recipes/mealie)).
-- Plain hand-written manifests (`deployments/mealie`, Pro repo), not a
-  Helm chart — no third-party chart for Mealie has real community
-  adoption, so this follows the same pattern as Jellyfin/Signal-CLI.
+- Plain hand-written manifests (`deployments/mealie` +
+  `ansible/tasks/mealie_deploy.yml`), not a Helm chart — no third-party
+  chart for Mealie has real community adoption, so this follows the
+  same self-contained-Kustomize pattern as Minecraft Bedrock.
 - SQLite backend (default, no separate Postgres needed) on
   `ceph-block-data`, `Recreate` deploy strategy (single writer).
 - Image pinned (not `:latest`) — bump deliberately, verify after.

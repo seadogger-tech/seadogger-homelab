@@ -59,8 +59,8 @@ This page provides step-by-step operational procedures for common tasks.
 ## Edit a Home Assistant Dashboard via Code
 Don't hand-edit `/config/.storage/lovelace.dashboard_<name>` directly — HA
 owns that file and can overwrite an edit made while it's live. Use
-`deployments/home-assistant/ha_dashboard_edit.py` (Pro repo, alongside the
-HA deployment manifests it operates on), which calls the same
+`deployments/home-assistant/ha_dashboard_edit.py` (alongside the HA
+deployment manifests it operates on), which calls the same
 `lovelace/config` / `lovelace/config/save` WebSocket API the frontend
 itself uses:
 1) Create a Long-Lived Access Token: HA profile (bottom-left) → Security → Long-Lived Access Tokens.

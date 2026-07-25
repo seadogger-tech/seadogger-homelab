@@ -43,9 +43,10 @@ trusting the new version.
   - Eliminates an entire class of "chart moved out from under me"
     incidents — the same risk that showed up here could just as easily
     hit `rook-ceph-cluster`, or any other unpinned Helm-chart Application
-    in this repo (see `deployments/velero`, `deployments/home-assistant`,
-    `deployments/mealie`'s ArgoCD Applications for the pattern this
-    should follow elsewhere too: pin `targetRevision`, bump deliberately).
+    in this repo. Every Helm-chart-backed app added since (Home Assistant
+    via `ansible/tasks/ha_deploy.yml`, `deployments/velero`) pins
+    `targetRevision` explicitly for this reason — bump deliberately,
+    verify after.
   - The actual CSI resource right-sizing this was blocking (see
     `deployments/home-assistant` and CPU request notes in
     `12-Troubleshooting.md`) applied cleanly once re-run against the
