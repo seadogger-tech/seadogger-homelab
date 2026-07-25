@@ -40,7 +40,7 @@ spec:
             - name: data
               mountPath: /app/data
             - name: custom-prompts
-              mountPath: /app/custom-prompts
+              mountPath: /app/custom-prompts/recipes
           resources:
             requests:
               cpu: "50m"

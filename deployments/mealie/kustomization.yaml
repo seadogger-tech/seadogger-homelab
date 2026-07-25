@@ -12,7 +12,7 @@ resources:
 configMapGenerator:
   - name: mealie-custom-prompts
     files:
-      - prompts/parse-recipe-ingredients.txt
-      - prompts/parse-recipe-image.txt
-      - prompts/parse-recipe-video.txt
-      - prompts/scrape-recipe.txt
+      - prompts/recipes/parse-recipe-ingredients.txt
+      - prompts/recipes/parse-recipe-image.txt
+      - prompts/recipes/parse-recipe-video.txt
+      - prompts/recipes/scrape-recipe.txt
