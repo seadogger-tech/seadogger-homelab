@@ -68,6 +68,99 @@ User facing applications that are applied thru ArgoCD on top of the k3s tech sta
   `ceph-block-data`, `Recreate` deploy strategy (single writer).
 - Image pinned (not `:latest`) — bump deliberately, verify after.
 
+### Home Assistant Integration
+- HA's built-in `mealie` integration (core since 2024.7) connects directly
+  to Mealie's API — no HACS plugin needed.
+- **Use the in-cluster Service DNS, not the Pi-hole hostname.** HA/Mealie
+  pods resolve DNS through k3s's CoreDNS, which has no record for
+  `mealie.seadogger-homelab` (that name only exists in Pi-hole's
+  `dnsmasq.customDnsEntries`, used by browsers/LAN clients). Configure the
+  integration's host as
+  `http://mealie.mealie.svc.cluster.local:9000` instead.
+- Exposes one `calendar.mealie_<type>` entity per meal-plan entry type
+  (breakfast/lunch/dinner/side/snack/drink/dessert) plus stat sensors
+  (`sensor.mealie_recipes`, etc.). Calendars stay empty until a recipe is
+  assigned to a date in Mealie's **Meal Plan** view.
+- The family dashboard's "Today's Meals" card
+  (`custom:calendar-card-pro`, `days_to_show: 1`) reads these calendar
+  entities directly — one color-coded row per meal type. See
+  [Meal-Planning Workflow](#meal-planning-workflow) below.
+- HA polls Mealie on its own interval; to force an immediate refresh after
+  a manual test, reload the config entry:
+  `POST /api/config/config_entries/entry/{entry_id}/reload`.
+
+### AI Features (Recipe Import, Ingredient Parsing)
+Mealie's AI provider is wired to the in-cluster
+[AWS Bedrock Access Gateway](#aws-bedrock-access-gateway-websiterepo-httpsgithubcomaws-samplesbedrock-access-gateway),
+configured through Mealie's own **Group Settings → AI Providers** API
+(`/api/groups/ai-providers/*`) — not env vars (that changed as of
+Mealie v1.7+/v3.10+, which moved AI config out of `OPENAI_*` container
+env vars and into per-group UI/API settings).
+
+- **Endpoint:** `http://bedrock-access-gateway-service.bedrock-gateway.svc.cluster.local:6880/api/v1`
+  (in-cluster Service DNS — same DNS caveat as above applies here too).
+- **Model:** `us.anthropic.claude-haiku-4-5-20251001-v1:0` — the only
+  model tested that produces clean, schema-conformant JSON through this
+  gateway. See "Model compatibility" below for why other models don't
+  work as-is.
+- **API key:** the gateway's own static key (`bedrock`), not a real
+  Anthropic/OpenAI key.
+
+#### Model compatibility (why not gpt-oss or Nova?)
+Mealie's AI client uses the OpenAI Python SDK's structured-output helper
+(`client.chat.completions.parse()`), which requires the model to return
+**only** raw JSON matching a strict schema — no markdown, no preamble.
+The Bedrock Access Gateway does not enforce or normalize this contract;
+it just relays each model's natural output style, so failures differ by
+model:
+
+| Model | Result |
+|---|---|
+| `us.anthropic.claude-haiku-4-5-20251001-v1:0` | Works (with the custom prompts below) |
+| `openai.gpt-oss-20b-1:0` / `120b` | Always wraps output in `<think>...</think>` reasoning tags before the JSON — this is the model's native "harmony format" output, not a prompt issue. The gateway's reasoning-separation feature (which cleanly splits `reasoning_content` for Claude/DeepSeek) is not implemented for gpt-oss — confirmed via direct API testing, `reasoning_content` is always `null` for this model family regardless of the `reasoning_effort` parameter. |
+| `us.amazon.nova-lite-v1:0` | Returns clean, unfenced JSON but ignores the schema's object wrapper (returns a bare list instead of `{"ingredients": [...]}`) |
+
+**Note:** AWS Bedrock does not host OpenAI's proprietary models (GPT-4o,
+GPT-5, etc.) in any region — verified directly against the Bedrock
+`list-foundation-models` API in 5 regions. Only OpenAI's open-weight
+`gpt-oss` line is available on Bedrock; the closed GPT models remain
+exclusive to OpenAI's own API / Azure OpenAI.
+
+#### Custom prompts (anti-fence hardening)
+Even Claude needed stronger prompt wording than Mealie's stock prompts to
+reliably avoid markdown fences. Custom prompt overrides live in
+`deployments/mealie/prompts/recipes/` and are mounted into the pod via a
+Kustomize `configMapGenerator`:
+
+- ConfigMap `mealie-custom-prompts` mounted at
+  `/app/custom-prompts/recipes/` (Mealie expects this exact subdirectory
+  — prompt names like `recipes.parse-recipe-ingredients` map to
+  `<custom_dir>/recipes/parse-recipe-ingredients.txt`).
+- `OPENAI_CUSTOM_PROMPT_DIR=/app/custom-prompts` env var on the Mealie
+  deployment tells it to check there first, falling back to Mealie's
+  built-in prompts if a file is missing.
+- Each of the 4 prompt files (ingredient parsing, image-to-recipe,
+  video-to-recipe, URL-scrape) opens and closes with an explicit,
+  repeated instruction: *"first character of your response must be `{`,
+  no code fences, no `<think>` tags."* A single trailing sentence was not
+  forceful enough — the instruction needed to be prominent and repeated
+  to reliably override Claude's default fenced-JSON style.
+- Kustomize's `configMapGenerator` content-hashes the ConfigMap name, so
+  editing a prompt file and re-deploying automatically rolls the Mealie
+  pod to pick up the change — no manual restart needed.
+
+#### Meal-Planning Workflow
+1. **Add a recipe.** Either **+ Create → Import from URL** (Mealie tries
+   its normal scraper first; if the page lacks clean recipe markup, it
+   automatically falls back to the AI provider above) or add one by hand.
+2. **Assign it to a date.** Mealie → **Meal Plan** → click a date →
+   choose an entry type (Breakfast/Lunch/Dinner/etc.) → search/select the
+   recipe → Save.
+3. **It appears on the dashboard automatically.** HA polls the `mealie`
+   integration periodically; the matching `calendar.mealie_<type>` entity
+   updates, and the "Today's Meals" card on the family dashboard reflects
+   it without any manual step.
+
 ![accent-divider](images/accent-divider.svg)
 ## OpenWebUI: **Website:** [https://open-webui.com](https://open-webui.com)
 - Self-hosted web UI for local/remote LLMs.
@@ -120,6 +213,7 @@ User facing applications that are applied thru ArgoCD on top of the k3s tech sta
    - **Requests hang without response:** Restart deployment to pull latest gateway image (`kubectl rollout restart deployment/bedrock-access-gateway -n bedrock-gateway`)
    - **Parameter validation errors:** Upstream fixes auto-deployed (e.g., Claude Sonnet 4.5 temperature/top_p conflict fixed in latest)
    - **Pod CrashLoopBackOff "API Key not configured":** Ensure `API_KEY` env var is set (upstream removed default in Feb 2025)
+   - **gpt-oss models leak `<think>...</think>` reasoning tags into `content`:** confirmed via direct testing (`reasoning_content` field always `null` for `openai.gpt-oss-20b-1:0`/`120b`, regardless of `reasoning_effort`). The gateway's reasoning-separation feature only covers Claude and DeepSeek R1. Breaks any client (like Mealie) expecting strict JSON-only output. Use Claude instead until the gateway adds gpt-oss support, or patch the gateway to strip the tag for this model family.
 
 ![Bedrock](images/bedrock.png)
 
