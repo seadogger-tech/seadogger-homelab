@@ -1,0 +1,53 @@
+---
+- name: Mealie Deploy
+  vars:
+    kubeconfig_path: /etc/rancher/k3s/k3s.yaml
+    mealie_namespace: mealie
+    argocd_namespace: argocd
+  block:
+    - name: Create Mealie ArgoCD Application
+      kubernetes.core.k8s:
+        kubeconfig: "{{ kubeconfig_path }}"
+        state: present
+        definition:
+          apiVersion: argoproj.io/v1alpha1
+          kind: Application
+          metadata:
+            name: mealie
+            namespace: "{{ argocd_namespace }}"
+          spec:
+            project: default
+            source:
+              repoURL: https://github.com/seadogger-tech/seadogger-homelab
+              path: deployments/mealie
+              targetRevision: HEAD
+            destination:
+              server: https://kubernetes.default.svc
+              namespace: "{{ mealie_namespace }}"
+            syncPolicy:
+              automated:
+                prune: true
+                selfHeal: true
+              syncOptions:
+                - CreateNamespace=true
+
+    - name: Wait for ArgoCD Application to be Healthy
+      kubernetes.core.k8s_info:
+        kubeconfig: "{{ kubeconfig_path }}"
+        api_version: argoproj.io/v1alpha1
+        kind: Application
+        name: mealie
+        namespace: "{{ argocd_namespace }}"
+      register: app
+      retries: 30
+      delay: 10
+      until: app.resources and app.resources[0].status.health.status == "Healthy"
+
+    - name: Print connection info
+      ansible.builtin.debug:
+        msg:
+          - "✅ Mealie deployed successfully!"
+          - ""
+          - "🍽️  Mealie (recipes & meal planning):"
+          - "   URL: https://mealie.seadogger-homelab"
+          - "   First run: create an admin account through the UI."

@@ -26,12 +26,13 @@ manual_install_bedrock: true
 manual_install_pihole: true
 manual_install_prometheus: true
 manual_install_openwebui: true
-manual_install_n8n: true
 manual_install_nextcloud: true
 manual_install_jellyfin: true
 manual_install_minecraft_bedrock: true
 manual_install_traefik_dashboard: true
 manual_install_nextcloud_s3_backup: true
+manual_install_home_assistant: true
+manual_install_mealie: true
 
 # --- Secrets ---
 dashboard_password: "YourSecurePasswordHere"
@@ -101,7 +102,6 @@ pod_cleanup_list:
   - { name: "bedrock-access-gateway", namespace: "bedrock-gateway", selector: "app=bedrock-access-gateway", delete_pvc: true }
   - { name: "pihole", namespace: "pihole", selector: "app.kubernetes.io/name=pihole", delete_pvc: true }
   - { name: "openwebui", namespace: "openwebui", selector: "app.kubernetes.io/instance=openwebui", delete_pvc: true }
-  - { name: "n8n", namespace: "n8n", selector: "app.kubernetes.io/instance=n8n", delete_pvc: true }
   - { name: "nextcloud", namespace: "nextcloud", selector: "app=nextcloud", delete_pvc: true }
   - { name: "jellyfin", namespace: "jellyfin", selector: "app=jellyfin", delete_pvc: true }
   - { name: "minecraft-bedrock-server", namespace: "minecraft-bedrock", selector: "app=minecraft-bedrock-server", delete_pvc: true }
@@ -121,7 +121,6 @@ precook_namespaces:
   - { name: "argocd" }
   - { name: "rook-ceph" }
   - { name: "pihole" }
-  - { name: "n8n" }
   - { name: "bedrock-gateway" }
   - { name: "nextcloud" }
   - { name: "jellyfin" }
@@ -155,7 +154,6 @@ enable_prometheus: "{{ cold_start_stage_2_install_applications | bool and manual
 enable_bedrock: "{{ cold_start_stage_3_install_applications | bool and manual_install_bedrock | bool }}"
 enable_pihole: "{{ cold_start_stage_3_install_applications | bool and manual_install_pihole | bool }}"
 enable_openwebui: "{{ cold_start_stage_3_install_applications | bool and manual_install_openwebui | bool }}"
-enable_n8n: "{{ cold_start_stage_3_install_applications | bool and manual_install_n8n | bool }}"
 enable_nextcloud: "{{ cold_start_stage_3_install_applications | bool and manual_install_nextcloud | bool }}"
 enable_jellyfin: "{{ cold_start_stage_3_install_applications | bool and manual_install_jellyfin | bool }}"
 enable_jellyfin_secrets: "{{ cold_start_stage_3_install_applications | bool and manual_install_jellyfin | bool }}"
@@ -163,3 +161,5 @@ enable_jellyfin_xmltv_proxy: "{{ cold_start_stage_3_install_applications | bool 
 enable_minecraft_bedrock: "{{ cold_start_stage_3_install_applications | bool and manual_install_minecraft_bedrock | bool }}"
 enable_traefik_dashboard: "{{ cold_start_stage_3_install_applications | bool and manual_install_traefik_dashboard | bool }}"
 enable_nextcloud_s3_backup: "{{ cold_start_stage_3_install_applications | bool and manual_install_nextcloud_s3_backup | bool }}"
+enable_home_assistant: "{{ cold_start_stage_3_install_applications | bool and manual_install_home_assistant | bool }}"
+enable_mealie: "{{ cold_start_stage_3_install_applications | bool and manual_install_mealie | bool }}"

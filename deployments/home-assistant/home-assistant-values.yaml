@@ -1,0 +1,48 @@
+fullnameOverride: home-assistant
+
+image:
+  repository: ghcr.io/home-assistant/home-assistant
+  # Chart appVersion tracks upstream HA releases; pin explicitly rather than
+  # trailing "latest" (see hermes-agent in deployments/hermes for what that
+  # costs when an upstream image quietly changes behavior underneath you).
+  tag: "2026.7.0"
+
+replicaCount: 1
+
+# No hostNetwork / nodeSelector - no USB Zigbee/Z-Wave radio planned, so
+# there's no need to sacrifice normal pod networking or pin to a node.
+# mDNS-based discovery (HomeKit, Chromecast, local device auto-discovery)
+# won't work without hostNetwork - revisit if that's ever needed.
+hostNetwork: false
+
+service:
+  type: ClusterIP
+  port: 8080
+
+persistence:
+  enabled: true
+  storageClass: ceph-block-data
+  accessMode: ReadWriteOnce
+  size: 10Gi
+
+resources:
+  requests:
+    cpu: "100m"
+    memory: "512Mi"
+  limits:
+    cpu: "1000m"
+    memory: "1Gi"
+
+ingress:
+  enabled: false
+  # We terminate TLS and route via our own Traefik IngressRoute
+  # (ingressroutes.yaml), not this chart's Ingress resource. external:true
+  # only tells the chart's templated configuration.yaml to trust the
+  # reverse proxy (emits http.use_x_forwarded_for + trusted_proxies) -
+  # it creates no Ingress object of its own. Without this, HA rejects
+  # every request from Traefik's pod IP with "not set-up for reverse
+  # proxies" (400 Bad Request).
+  external: true
+
+configuration:
+  enabled: true

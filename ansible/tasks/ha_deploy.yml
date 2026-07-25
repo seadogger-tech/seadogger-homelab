@@ -1,0 +1,74 @@
+- name: Home Assistant deploy (pajikos/home-assistant-helm-chart) — tasks-only
+  vars:
+    kubeconfig_path: /etc/rancher/k3s/k3s.yaml
+    ha_namespace: home-assistant
+    argocd_namespace: argocd
+
+    helm_repo_url: "https://pajikos.github.io/home-assistant-helm-chart/"
+    helm_chart: "home-assistant"
+    # Pinned deliberately - see rook-ceph-operator-values.yaml for what an
+    # unpinned `helm upgrade` against a moving chart repo cost us once
+    # already this month. Bump intentionally, verify after.
+    helm_version: "0.3.72"
+    values_url: "https://raw.githubusercontent.com/seadogger-tech/seadogger-homelab/master/deployments/home-assistant/home-assistant-values.yaml"
+
+    ingress_url: "https://raw.githubusercontent.com/seadogger-tech/seadogger-homelab/master/ingress/traefik-home-assistant-ingress.yml"
+  block:
+    - name: Ensure home-assistant namespace exists
+      kubernetes.core.k8s:
+        state: present
+        kubeconfig: "{{ kubeconfig_path }}"
+        definition:
+          apiVersion: v1
+          kind: Namespace
+          metadata:
+            name: "{{ ha_namespace }}"
+
+    - name: Create/Update ArgoCD Application (pajikos/home-assistant-helm-chart)
+      kubernetes.core.k8s:
+        state: present
+        kubeconfig: "{{ kubeconfig_path }}"
+        definition:
+          apiVersion: argoproj.io/v1alpha1
+          kind: Application
+          metadata:
+            name: home-assistant
+            namespace: "{{ argocd_namespace }}"
+          spec:
+            project: default
+            source:
+              repoURL: "{{ helm_repo_url }}"
+              chart: "{{ helm_chart }}"
+              targetRevision: "{{ helm_version }}"
+              helm:
+                valueFiles: ["{{ values_url }}"]
+            destination:
+              server: https://kubernetes.default.svc
+              namespace: "{{ ha_namespace }}"
+            syncPolicy:
+              automated: { prune: true, selfHeal: true }
+              syncOptions: ["CreateNamespace=true"]
+
+    - name: Wait for Argo app to be Healthy
+      kubernetes.core.k8s_info:
+        kubeconfig: "{{ kubeconfig_path }}"
+        api_version: argoproj.io/v1alpha1
+        kind: Application
+        name: home-assistant
+        namespace: "{{ argocd_namespace }}"
+      register: app
+      retries: 30
+      delay: 10
+      until: app.resources and app.resources[0].status.health.status == "Healthy"
+
+    - name: Fetch IngressRoutes manifest (remote)
+      ansible.builtin.get_url:
+        url: "{{ ingress_url }}"
+        dest: "/tmp/traefik-home-assistant-ingress.yml"
+        mode: "0644"
+
+    - name: Apply IngressRoutes
+      kubernetes.core.k8s:
+        state: present
+        kubeconfig: "{{ kubeconfig_path }}"
+        src: "/tmp/traefik-home-assistant-ingress.yml"

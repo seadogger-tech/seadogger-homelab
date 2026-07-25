@@ -91,7 +91,6 @@ data:
         const APPS = [
           { name: "JellyFin", url: "https://jellyfin.seadogger-homelab/web", logo: "https://raw.githubusercontent.com/seadogger-tech/seadogger-homelab/refs/heads/master/assets/logos/jellyfin.svg" },
           { name: "Nextcloud", url: "https://nextcloud.seadogger-homelab/login", logo: "https://raw.githubusercontent.com/seadogger-tech/seadogger-homelab/refs/heads/master/assets/logos/nextcloud.svg" },
-          { name: "n8n", url: "https://n8n.seadogger-homelab/signin", logo: "https://raw.githubusercontent.com/seadogger-tech/seadogger-homelab/refs/heads/master/assets/logos/n8n.svg" },
           { name: "OpenWebUI", url: "https://openwebui.seadogger-homelab/auth", logo: "https://raw.githubusercontent.com/seadogger-tech/seadogger-homelab/refs/heads/master/assets/logos/openwebui.svg" },
           { name: "Pi‑hole", url: "https://pihole.seadogger-homelab/admin/login", logo: "https://raw.githubusercontent.com/seadogger-tech/seadogger-homelab/refs/heads/master/assets/logos/pi-hole.svg" },
           { name: "Ceph Dashboard", url: "https://ceph.seadogger-homelab/#/login", logo: "https://raw.githubusercontent.com/seadogger-tech/seadogger-homelab/refs/heads/master/assets/logos/ceph.svg" },

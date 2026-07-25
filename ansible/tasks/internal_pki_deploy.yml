@@ -387,12 +387,13 @@
   loop:
     - "ceph-dashboard-certificate.yml"
     - "argocd-certificate.yml"
-    - "n8n-certificate.yml"
     - "openwebui-certificate.yml"
     - "nextcloud-certificate.yml"
     - "jellyfin-certificate.yml"
     - "pihole-certificate.yml"
     - "traefik-dashboard-certificate.yml"
+    - "home-assistant-certificate.yml"
+    - "mealie-certificate.yml"
   run_once: true
   delegate_to: yoda.local
   become: false
@@ -405,12 +406,13 @@
   loop:
     - "ceph-dashboard-certificate.yml"
     - "argocd-certificate.yml"
-    - "n8n-certificate.yml"
     - "openwebui-certificate.yml"
     - "nextcloud-certificate.yml"
     - "jellyfin-certificate.yml"
     - "pihole-certificate.yml"
     - "traefik-dashboard-certificate.yml"
+    - "home-assistant-certificate.yml"
+    - "mealie-certificate.yml"
   run_once: true
   delegate_to: yoda.local
   become: false
@@ -422,12 +424,13 @@
   loop:
     - "ceph-dashboard-certificate.yml"
     - "argocd-certificate.yml"
-    - "n8n-certificate.yml"
     - "openwebui-certificate.yml"
     - "nextcloud-certificate.yml"
     - "jellyfin-certificate.yml"
     - "pihole-certificate.yml"
     - "traefik-dashboard-certificate.yml"
+    - "home-assistant-certificate.yml"
+    - "mealie-certificate.yml"
   run_once: true
   delegate_to: yoda.local
   become: false

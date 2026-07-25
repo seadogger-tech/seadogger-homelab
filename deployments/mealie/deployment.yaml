@@ -1,0 +1,62 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mealie
+  labels:
+    app: mealie
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate   # SQLite on RWO PVC; one pod only
+  selector:
+    matchLabels:
+      app: mealie
+  template:
+    metadata:
+      labels:
+        app: mealie
+    spec:
+      nodeSelector:
+        kubernetes.io/arch: arm64
+      containers:
+        - name: mealie
+          image: ghcr.io/mealie-recipes/mealie:v3.21.0
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: BASE_URL
+              value: "https://mealie.seadogger-homelab"
+            - name: TZ
+              value: "America/New_York"
+            - name: PUID
+              value: "911"
+            - name: PGID
+              value: "911"
+          ports:
+            - name: http
+              containerPort: 9000
+          volumeMounts:
+            - name: data
+              mountPath: /app/data
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "256Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1Gi"
+          readinessProbe:
+            httpGet:
+              path: /api/app/about
+              port: 9000
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/app/about
+              port: 9000
+            initialDelaySeconds: 60
+            periodSeconds: 30
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: mealie-data

@@ -114,10 +114,6 @@
       import_tasks: tasks/openwebui_deploy.yml
       when: enable_openwebui | default(true)
 
-    - name: Deploy n8n
-      import_tasks: tasks/n8n-deploy.yml
-      when: enable_n8n | default(true)
-
     - name: Deploy Nextcloud
       import_tasks: tasks/nextcloud_deploy.yml
       when: enable_nextcloud | default(true)
@@ -145,3 +141,11 @@
     - name: Deploy Minecraft Bedrock Server
       import_tasks: tasks/minecraft_bedrock_deploy.yml
       when: enable_minecraft_bedrock | default(true)
+
+    - name: Deploy Home Assistant
+      import_tasks: tasks/ha_deploy.yml
+      when: enable_home_assistant | default(true)
+
+    - name: Deploy Mealie
+      import_tasks: tasks/mealie_deploy.yml
+      when: enable_mealie | default(true)
