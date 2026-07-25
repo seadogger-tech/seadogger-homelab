@@ -47,8 +47,9 @@ User facing applications that are applied thru ArgoCD on top of the k3s tech sta
   Not pre-installed by default.
 - **Dashboard editing via code:** see **[[17-Runbooks]]** →
   "Edit a Home Assistant Dashboard via Code" for a reusable script
-  (`core/useful_scripts/ha_dashboard_edit.py`) that edits Lovelace
-  dashboards through HA's own WebSocket API (`lovelace/config` /
+  (`deployments/home-assistant/ha_dashboard_edit.py`, Pro repo) that
+  edits Lovelace dashboards through HA's own WebSocket API
+  (`lovelace/config` /
   `lovelace/config/save`) instead of hand-editing the live `.storage`
   file.
 - Storage: `ceph-block-data` (RBD), single replica — HA's SQLite recorder
