@@ -61,22 +61,72 @@ jobs:
       # import path from Mealie's own UI — the plain scraper always runs
       # first and "wins" whenever it extracts anything at all, even if the
       # result is low quality (e.g. duplicated/mislabeled instruction steps).
-      # Remove this step once #7618 ships in a Mealie release newer than
-      # UPSTREAM_TAG above.
+      #
+      # NOTE: the PR branch's TIP is a small follow-up bugfix commit, not
+      # the actual feature — cherry-picking only the tip (our original
+      # mistake) silently produces a build with none of the real feature
+      # code. Cherry-pick the real feature commit and its follow-ups, in
+      # order:
+      #   b9e120bc - feat: add Force OpenAI Scraper option to URL and bulk import (the real feature)
+      #   680131a2 - test: verify useOpenAI flag bypasses DEFAULT_SCRAPER_STRATEGIES
+      #   b3091913 - test: rewrite force-openai test as a class with shadowed autouse fixture
+      #   3229b9dd - fix: ensure @context and @type in OpenAI scraper response
+      # If the PR branch is force-pushed/rebased upstream, these SHAs may
+      # need updating — check `git log <branch>` for the actual commits if
+      # this step starts failing.
+      #
+      # KNOWN CONFLICT: b9e120bc was written against an older
+      # RecipeScraper(translator, scrapers=...) constructor; our pinned tag
+      # already has a newer RecipeScraper(repos, translator, scrapers=...)
+      # signature (repos was added independently after this PR branch
+      # forked). Resolve by keeping the newer repos-aware constructor call
+      # while applying the PR's actual behavioral change (conditional
+      # scrapers list based on use_openai) — same fix in all 3 files this
+      # touches (scraper.py, recipe_bulk_scraper.py, recipe_crud_routes.py).
+      #
+      # ALSO: even with the real feature commit applied, the checkbox is
+      # still invisible — its `v-if="$appInfo.enableOpenai"` guard checks a
+      # backend field that plain #7618 never adds (confirmed missing in
+      # current upstream mealie-next too, not just our tag — this looks
+      # like an incomplete PR, not a version-gap issue). Fixed separately by
+      # .github/scripts/patch_mealie_force_openai.py below.
+      #
+      # Remove this whole step once #7618 ships in a Mealie release newer
+      # than UPSTREAM_TAG above (and re-check whether the upstream project
+      # has by then also fixed the missing enableOpenai field itself).
       # See: core/docs/wiki/09-Apps.md#force-ai-import-cherry-picked-prs
-      - name: Cherry-pick Force OpenAI Scraper checkbox (upstream PR #7618, unmerged)
+      - name: Cherry-pick Force OpenAI Scraper feature (upstream PR #7618, unmerged)
         run: |
           cd upstream
-          git remote add pr7618 https://github.com/zdenek-stursa/mealie.git
-          git fetch pr7618 feat/force-openai-scraper
-          PATCH_SHA=$(git rev-parse pr7618/feat/force-openai-scraper)
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          if ! git cherry-pick "$PATCH_SHA"; then
-            echo "::error::Cherry-pick of #7618 ($PATCH_SHA) failed — likely diverged from ${{ env.UPSTREAM_TAG }}. Needs manual rebase."
-            git cherry-pick --abort
-            exit 1
+          git remote add pr7618 https://github.com/zdenek-stursa/mealie.git
+          git fetch pr7618 feat/force-openai-scraper
+
+          if ! git cherry-pick b9e120bc; then
+            if ! grep -q "^<<<<<<<" mealie/services/scraper/scraper.py 2>/dev/null; then
+              echo "::error::Cherry-pick of #7618's feature commit (b9e120bc) failed with no recognizable conflict marker. Needs manual investigation."
+              git cherry-pick --abort
+              exit 1
+            fi
+            python3 ../.github/scripts/resolve_mealie_force_openai_conflicts.py
+            git add mealie/services/scraper/scraper.py mealie/services/scraper/recipe_bulk_scraper.py mealie/routes/recipe/recipe_crud_routes.py
+            git -c core.editor=true cherry-pick --continue
           fi
+
+          for PATCH_SHA in 680131a2 b3091913 3229b9dd; do
+            if ! git cherry-pick "$PATCH_SHA"; then
+              echo "::error::Cherry-pick of #7618 follow-up commit $PATCH_SHA failed — likely diverged from ${{ env.UPSTREAM_TAG }} or the PR branch was rebased (SHA no longer exists). Check 'git log pr7618/feat/force-openai-scraper' for the current commits."
+              git cherry-pick --abort
+              exit 1
+            fi
+          done
+
+          python3 ../.github/scripts/patch_mealie_force_openai.py
+          python3 -c "import ast; ast.parse(open('mealie/schema/admin/about.py').read()); ast.parse(open('mealie/routes/app/app_about.py').read())" || {
+            echo "::error::AppInfo/about-route patch left invalid Python syntax. Manual review needed."
+            exit 1
+          }
 
       # TEMPORARY: cherry-pick "Create from Text" page
       # (mealie-recipes/mealie#7825, unmerged) on top of the above. Gives a

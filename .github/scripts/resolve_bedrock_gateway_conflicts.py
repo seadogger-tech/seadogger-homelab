@@ -87,7 +87,10 @@ def resolve_198():
 
 
 def _write_and_verify(content, pr):
-    if "<<<<<<<" in content or ">>>>>>>" in content or "=======" in content:
+    # Only check the actual git conflict markers (<<<<<<< / >>>>>>>), not a
+    # bare "=======" - that 7-char run is common in code/docstrings as a
+    # plain divider and produces false positives here.
+    if "<<<<<<<" in content or ">>>>>>>" in content:
         raise SystemExit(
             f"resolve_{pr}: conflict markers remain after patch — "
             "manual rebase needed."
