@@ -2449,6 +2449,31 @@ spec:
 ```
 
 ![accent-divider.svg](images/accent-divider.svg)
+### Priority 7: Portal → Home Assistant Dashboard Migration (LOW) 🟢
+
+**Timeline:** Ongoing, incremental
+**Impact:** Low urgency, high day-to-day usability — replaces static
+link tiles with live dashboard cards one app at a time
+
+**Decision record:** **[[13-ADR-Index]]** → ADR-012 (context, decision,
+and the current migrated-apps table live there — this entry only
+tracks that the initiative exists and points at the source of truth,
+so status isn't duplicated in two places).
+
+**Summary:** The Pro `portal` app (`deployments/portal/portal.html`) is
+a static, hand-edited list of link tiles. Home Assistant is already
+running in this cluster with a family dashboard; where a real HA
+integration exists for a portal-linked app, migrate that tile to a
+live HA card (camera feed, print progress, ad-block stats, etc.)
+instead of a dead link, and remove the standalone app entirely if the
+portal tile was its only reason to exist.
+
+**Not every tile is a candidate** — apps whose UI is the product
+itself (Argo CD, Traefik dashboard, Ceph Dashboard, Grafana) get no
+benefit from an HA card and are expected to stay portal-linked
+indefinitely.
+
+![accent-divider.svg](images/accent-divider.svg)
 ## Implementation Roadmap
 
 ### Phase 0: Disaster Recovery & Staging (CRITICAL) 🔴

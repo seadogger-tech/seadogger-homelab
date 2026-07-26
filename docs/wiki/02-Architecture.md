@@ -273,6 +273,7 @@ The architecture is based on a Kubernetes (k3s) cluster running on a group of Ra
 *   **Distributed Storage:** Rook-Ceph is used to provide a resilient and scalable storage layer, abstracting the underlying NVMe drives on the worker nodes.
 *   **External Access:** WireGuard VPN through Ubiquiti Dream Machine for secure remote access
 *   **Encryption:** TLS certificates for all services, encrypted VPN tunnels, and Kubernetes secrets for AWS credentials
+*   **Portal Consolidation:** The standalone `portal` app's static link tiles are being incrementally replaced by live Home Assistant dashboard cards, one app at a time, where a real HA integration exists — see ADR-012 in **[[13-ADR-Index]]** and "Portal → Home Assistant Dashboard Migration" in **[[19-Refactoring-Roadmap]]**.
 
 ![accent-divider.svg](images/accent-divider.svg)
 ## Design Patterns

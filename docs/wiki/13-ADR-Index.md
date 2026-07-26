@@ -3,6 +3,84 @@
 # ADR Index
 
 ![accent-divider](images/accent-divider.svg)
+### ADR-012: Migrate the Portal to the Home Assistant Dashboard
+
+- **Status:** In Progress
+- **Date:** 2026-07-26
+
+#### Context
+
+The Pro `portal` app (`deployments/portal/portal.html`) is a static,
+hand-written link-tile launcher — one `<a>` per app, manually edited to
+add/remove/rename tiles, with no live status, no auth-aware view
+switching, and no way to surface actual data (a camera snapshot, a
+print's progress, DNS query counts) without embedding a whole
+second app per tile.
+
+Home Assistant is already deployed as a real app in this cluster
+(`deployments/home-assistant` + `ansible/tasks/ha_deploy.yml`, see
+**[[09-Apps]]**), and this session's work wiring up cameras,
+OctoPrint, and Pi-hole onto its family dashboard demonstrated that HA's
+Lovelace dashboard can do everything the portal's tiles do, plus live
+entity state, native mobile-friendly layout (sections-grid), PIN-gated
+views (parent/child split via `pin-lock-card`), and a large existing
+HACS/core-integration ecosystem — without hand-rolling a new static
+page per app.
+
+#### Decision
+
+Incrementally replace the standalone `portal` app's tiles with real
+Home Assistant dashboard cards/integrations, one app at a time, rather
+than a single big-bang rewrite. Each migrated app:
+
+1. Gets a real HA integration or card wired to live data where one
+   exists (camera entities via ONVIF, `pi_hole` core integration,
+   `octoprint` core integration, etc.) instead of a plain link-out.
+2. Has its portal.html tile removed once the HA equivalent is verified
+   working.
+3. Has its standalone app/namespace removed if the portal tile was its
+   *only* purpose (e.g. the old `cameras` go2rtc app — see below) —
+   apps that serve a real purpose beyond being linked from the portal
+   (Jellyfin, Nextcloud, Mealie, etc.) keep running and simply gain a
+   parallel HA presence, or stay portal-linked if a dashboard card adds
+   no real value over a plain launch link.
+
+Progress is tracked in **[[19-Refactoring-Roadmap]]** → "Portal → Home
+Assistant Dashboard Migration."
+
+**Migrated so far:**
+
+| App | Old portal tile | New HA presence |
+|---|---|---|
+| Cameras (front door, pool) | `Cameras` tile → standalone go2rtc app | ONVIF integration + `picture-entity` cards on the Family Dashboard; old `cameras` app/namespace deleted |
+| OctoPrint | `Octoprint` tile → external link | Core `octoprint` integration + `picture-glance` card (camera snapshot + progress/temps) |
+| Pi-hole | `Pi‑hole` tile → external link | Core `pi_hole` integration + HACS `pi-hole-card` |
+
+#### Consequences
+
+- **Positive:**
+  - Dashboard tiles become live data (camera feed, print progress,
+    ads-blocked count) instead of dead links, with no extra app to
+    maintain per integration.
+  - Removes real infrastructure once it's redundant (the `cameras` app
+    and its go2rtc sidecar, Caddy static page, and ArgoCD Application
+    all deleted outright, not just unlinked).
+  - Reuses HA's existing auth/session model and PIN-gated dashboard
+    sections instead of the portal's flat, unauthenticated tile list.
+- **Negative:**
+  - Not every app has an HA integration worth using (some link-outs
+    will likely remain portal tiles indefinitely — e.g. Traefik
+    dashboard, Argo CD UI, Ceph Dashboard — where a native HA card adds
+    no real value over "open the app's own UI").
+  - HA integrations for less-common self-hosted apps are sometimes
+    thin or buggy (see the Pi-hole HACS card's `ha_integration` feature
+    flag bug worked around this session) — each migrated app needs the
+    same "verify against real source before trusting" diligence as any
+    other integration, not a rubber-stamp swap.
+  - This is deliberately incremental — the portal stays live and
+    useful throughout, not replaced in one migration event.
+
+![accent-divider](images/accent-divider.svg)
 ### ADR-011: Adopting Unmerged Upstream PRs (Reusable Pattern)
 
 - **Status:** Implemented & Verified
