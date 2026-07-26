@@ -54,7 +54,7 @@ Assistant Dashboard Migration."
 |---|---|---|
 | Cameras (front door, pool) | `Cameras` tile → standalone go2rtc app | ONVIF integration + `picture-entity` cards on the Family Dashboard; old `cameras` app/namespace deleted |
 | OctoPrint | `Octoprint` tile → external link | Core `octoprint` integration + `picture-glance` card (camera snapshot + progress/temps) |
-| Pi-hole | `Pi‑hole` tile → external link | Core `pi_hole` integration + HACS `pi-hole-card` |
+| Pi-hole | `Pi‑hole` tile → external link + custom "Pause 30 min" button (`deployments/pihole-toggle`, a bespoke password-holding sidecar built solely for that button) | Core `pi_hole` integration + HACS `pi-hole-card` (native `pi_hole.disable` service call, configurable duration); `pihole-toggle` app deleted, portal's Pi-hole pause bar removed |
 
 #### Consequences
 
