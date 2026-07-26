@@ -53,6 +53,12 @@ User facing applications that are applied thru ArgoCD on top of the k3s tech sta
   (`lovelace/config` /
   `lovelace/config/save`) instead of hand-editing the live `.storage`
   file.
+- **RTSP cameras:** the two Amcrest IP2M-844E cameras (front door, pool)
+  are wired in via the core **ONVIF** integration (manual IP entry —
+  WS-Discovery/UDP multicast doesn't reach the pod, so auto-discovery
+  finds nothing) rather than a standalone go2rtc app. Replaced the old
+  `cameras` app (removed; see git history), which was a 2-3fps
+  JPEG-polling stopgap.
 - Storage: `ceph-block-data` (RBD), single replica — HA's SQLite recorder
   DB needs a single writer.
 
@@ -352,14 +358,6 @@ The script lives in `seadogger-homelab-pro/core/useful_scripts/fetch_hdhomerun_g
 - The daemon's own HTTP server rejects requests carrying a Kubernetes
   Service `Host` header (`421`), so an nginx sidecar rewrites the `Host`
   header before proxying to it.
-
-![accent-divider](images/accent-divider.svg)
-## Cameras
-- RTSP camera viewer. [go2rtc](https://github.com/AlexxIT/go2rtc) restreams
-  camera feeds, a small Caddy-served page (`cameras.html`) displays them.
-- **Known limitation:** browser playback is 2-3fps JPEG polling, not real
-  video — a real fix would mean switching the frontend to WebRTC/MSE
-  playback against go2rtc's stream endpoints instead of polling snapshots.
 
 ![accent-divider](images/accent-divider.svg)
 ## Terminal
