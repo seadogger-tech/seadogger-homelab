@@ -9,11 +9,21 @@ image:
 
 replicaCount: 1
 
-# No hostNetwork / nodeSelector - no USB Zigbee/Z-Wave radio planned, so
-# there's no need to sacrifice normal pod networking or pin to a node.
-# mDNS-based discovery (HomeKit, Chromecast, local device auto-discovery)
-# won't work without hostNetwork - revisit if that's ever needed.
-hostNetwork: false
+# hostNetwork required for mDNS/SSDP auto-discovery (Apple TV, UniFi,
+# Chromecast, HomeKit) - those rely on LAN multicast, which never reaches a
+# pod behind the normal CNI overlay regardless of Service type (a
+# ClusterIP/LoadBalancer only proxies unicast traffic to a stable address,
+# it can't bridge multicast onto the pod's network namespace). Pinned to
+# yoda via nodeSelector below so HA's real IP (yoda's 192.168.1.95) stays
+# stable across restarts instead of following whichever node it lands on.
+hostNetwork: true
+# Required when hostNetwork is true - otherwise the pod loses in-cluster
+# DNS resolution (e.g. pihole-web.pihole.svc.cluster.local) while gaining
+# LAN access, per the chart's own values.yaml comment.
+dnsPolicy: ClusterFirstWithHostNet
+
+nodeSelector:
+  kubernetes.io/hostname: yoda
 
 service:
   type: ClusterIP
