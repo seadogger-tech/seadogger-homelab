@@ -110,6 +110,10 @@
       import_tasks: tasks/pihole_deploy.yml
       when: enable_pihole | default(true)
 
+    - name: Deploy CoreDNS custom zone override for seadogger-homelab
+      import_tasks: tasks/coredns_custom_deploy.yml
+      when: enable_pihole | default(true)
+
     - name: Deploy OpenWebUI
       import_tasks: tasks/openwebui_deploy.yml
       when: enable_openwebui | default(true)

@@ -1,0 +1,42 @@
+---
+# Pins the *.seadogger-homelab DNS zone to Pi-hole only, so CoreDNS never
+# falls through to the node's public fallback nameserver (8.8.8.8) for
+# this private LAN domain. See deployments/coredns/coredns-custom.yaml for
+# the full rationale. Runs after Pi-hole so its LoadBalancer IP already
+# exists.
+- name: Set KUBECONFIG global
+  ansible.builtin.set_fact:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+
+- name: Apply CoreDNS custom zone override for seadogger-homelab
+  kubernetes.core.k8s:
+    src: "https://raw.githubusercontent.com/seadogger-tech/seadogger-homelab/master/deployments/coredns/coredns-custom.yaml"
+    state: present
+    kubeconfig: "{{ KUBECONFIG }}"
+    apply: true
+
+- name: Restart CoreDNS to pick up the custom zone override
+  kubernetes.core.k8s:
+    kubeconfig: "{{ KUBECONFIG }}"
+    state: patched
+    kind: Deployment
+    name: coredns
+    namespace: kube-system
+    definition:
+      spec:
+        template:
+          metadata:
+            annotations:
+              kubectl.kubernetes.io/restartedAt: "{{ ansible_date_time.iso8601 }}"
+
+- name: Wait for CoreDNS rollout to complete
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ KUBECONFIG }}"
+    kind: Pod
+    namespace: kube-system
+    label_selectors:
+      - "k8s-app=kube-dns"
+  register: coredns_pods
+  retries: 30
+  delay: 5
+  until: coredns_pods is defined and 'resources' in coredns_pods and (coredns_pods.resources | selectattr('status.phase', 'equalto', 'Running') | list | length > 0)

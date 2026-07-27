@@ -1,0 +1,32 @@
+# k3s's bundled CoreDNS auto-mounts an optional ConfigMap named
+# "coredns-custom" (kube-system) at /etc/coredns/custom and imports files
+# from it into the Corefile - no CoreDNS redeploy needed, just
+# recreate/restart the coredns pod to pick up changes. *.server files add
+# a whole new top-level server block (what we need here); *.override
+# files are merged inside the existing "." block instead.
+#
+# Without this, the *.seadogger-homelab zone was being resolved
+# inconsistently: the node's /etc/resolv.conf lists both Pi-hole
+# (192.168.1.250) and a public fallback (8.8.8.8) as nameservers, and
+# CoreDNS's default "forward . /etc/resolv.conf" plugin would sometimes
+# query the public fallback for a *.seadogger-homelab name - which
+# correctly NXDOMAINs there, since it's a private LAN-only zone. This
+# block pins that one zone to Pi-hole only, leaving the default forward
+# (used for everything else, e.g. real internet lookups) untouched.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: coredns-custom
+  namespace: kube-system
+data:
+  # Must be named *.server (not *.override) - .override files are merged
+  # INSIDE the main "." server block (plugin directives only), while
+  # .server files are imported at file scope and can declare a whole new
+  # server block like this one. Using .override here caused a Corefile
+  # parse error ("Unknown directive 'seadogger-homelab:53'") and put
+  # CoreDNS into CrashLoopBackOff.
+  seadogger-homelab.server: |
+    seadogger-homelab:53 {
+        # Must match loadBalancerIP in deployments/pihole/pihole-values.yaml
+        forward . 192.168.1.250
+    }
