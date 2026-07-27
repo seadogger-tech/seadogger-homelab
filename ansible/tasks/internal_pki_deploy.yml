@@ -483,6 +483,39 @@
   when: ansible_facts['os_family'] == 'RedHat'
 
 # ─────────────────────────────
+# Cert-only trust for app pods (no private key)
+# ─────────────────────────────
+# Node-level trust (above) only covers the HOST OS - individual pods have
+# their own isolated container filesystem and never see it. Apps that make
+# outbound HTTPS calls to another app's *.seadogger-homelab ingress hostname
+# (e.g. Home Assistant's Nextcloud integration) need their own copy of the
+# CA trust anchor. internal-root-ca-secret (cert-manager namespace) also
+# holds the CA's PRIVATE KEY, so it must never be mounted directly into an
+# app pod - this creates a separate, cert-only Secret per namespace instead.
+- name: Create home-assistant namespace (if not already present)
+  kubernetes.core.k8s:
+    api_version: v1
+    kind: Namespace
+    name: home-assistant
+    state: present
+    kubeconfig: "{{ KUBECONFIG }}"
+  run_once: true
+
+- name: Create cert-only internal CA Secret for Home Assistant
+  kubernetes.core.k8s:
+    definition:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: internal-root-ca-cert-only
+        namespace: home-assistant
+      type: Opaque
+      stringData:
+        root-ca.crt: "{{ ca_slurp.content | b64decode }}"
+    kubeconfig: "{{ KUBECONFIG }}"
+  run_once: true
+
+# ─────────────────────────────
 # Optional cleanup (on yoda)
 # ─────────────────────────────
 - name: Clean up temporary CA config files on yoda (keep keys/certs!)

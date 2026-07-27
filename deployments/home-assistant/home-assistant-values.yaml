@@ -56,3 +56,40 @@ ingress:
 
 configuration:
   enabled: true
+
+# Trust our internal CA for outbound HTTPS calls HA makes to other apps'
+# *.seadogger-homelab ingress hostnames (e.g. the Nextcloud integration) -
+# the base image only ships the standard public CA list, which has never
+# heard of our private CA. internal-root-ca-cert-only (a cert-only Secret,
+# no private key - see ansible/tasks/internal_pki_deploy.yml) is mounted
+# read-only and merged with the image's existing CA bundle by an
+# initContainer, since the main container's /etc/ssl/certs needs to be
+# writable for update-ca-certificates but the base image build shouldn't
+# be modified directly.
+additionalVolumes:
+  - name: internal-ca-cert
+    secret:
+      secretName: internal-root-ca-cert-only
+  - name: ssl-certs
+    emptyDir: {}
+
+initContainers:
+  - name: trust-internal-ca
+    image: ghcr.io/home-assistant/home-assistant:2026.7.0
+    command: ["/bin/sh", "-c"]
+    args:
+      - |
+        set -e
+        cp -a /etc/ssl/certs/. /ssl-certs-out/
+        cp /internal-ca-cert/root-ca.crt /ssl-certs-out/internal-root-ca.pem
+        cat /internal-ca-cert/root-ca.crt >> /ssl-certs-out/ca-certificates.crt
+    volumeMounts:
+      - name: internal-ca-cert
+        mountPath: /internal-ca-cert
+        readOnly: true
+      - name: ssl-certs
+        mountPath: /ssl-certs-out
+
+additionalMounts:
+  - name: ssl-certs
+    mountPath: /etc/ssl/certs
