@@ -153,3 +153,7 @@
     - name: Deploy Mealie
       import_tasks: tasks/mealie_deploy.yml
       when: enable_mealie | default(true)
+
+    - name: Deploy Basic Memory
+      import_tasks: tasks/basic_memory_deploy.yml
+      when: enable_basic_memory | default(true)

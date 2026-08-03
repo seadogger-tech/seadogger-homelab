@@ -1,0 +1,74 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: basic-memory
+  labels:
+    app: basic-memory
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate   # SQLite on RWO PVC; one pod only
+  selector:
+    matchLabels:
+      app: basic-memory
+  template:
+    metadata:
+      labels:
+        app: basic-memory
+    spec:
+      nodeSelector:
+        kubernetes.io/arch: arm64
+      containers:
+        - name: basic-memory
+          image: ghcr.io/basicmachines-co/basic-memory:latest
+          imagePullPolicy: Always
+          command:
+            - basic-memory
+            - mcp
+            - --transport
+            - sse
+            - --host
+            - "0.0.0.0"
+            - --port
+            - "8000"
+          env:
+            - name: BASIC_MEMORY_DEFAULT_PROJECT
+              value: "main"
+            - name: BASIC_MEMORY_SYNC_CHANGES
+              value: "true"
+            - name: BASIC_MEMORY_LOG_LEVEL
+              value: "INFO"
+            - name: BASIC_MEMORY_SYNC_DELAY
+              value: "1000"
+          ports:
+            - name: http
+              containerPort: 8000
+          volumeMounts:
+            - name: data
+              mountPath: /app/data
+            - name: config
+              mountPath: /home/appuser/.basic-memory
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          readinessProbe:
+            tcpSocket:
+              port: 8000
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 30
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: basic-memory-data
+        - name: config
+          persistentVolumeClaim:
+            claimName: basic-memory-config
