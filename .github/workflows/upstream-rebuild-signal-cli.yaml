@@ -139,5 +139,20 @@ jobs:
             echo "Tag file already up to date; nothing to commit."
           else
             git commit -m "ci(upstream): signal-cli ${{ steps.tag.outputs.new_tag }}"
-            git push
+            # The build can run for several minutes; a human commit to
+            # master in the meantime makes a plain `git push` fail with
+            # "fetch first". Retry with a rebase a few times before giving
+            # up — this step only updates a tracking file, so rebasing
+            # onto newer master is safe.
+            for attempt in 1 2 3 4 5; do
+              if git push; then
+                break
+              fi
+              echo "Push rejected (attempt $attempt/5) — pulling and rebasing before retry..."
+              git pull --rebase origin master
+              if [ "$attempt" = "5" ]; then
+                echo "::error::Failed to push $TAG_FILE after 5 attempts. The image was still built and pushed successfully — only this tracking commit failed. Push manually or re-run the workflow."
+                exit 1
+              fi
+            done
           fi
