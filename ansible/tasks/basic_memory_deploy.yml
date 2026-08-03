@@ -50,5 +50,5 @@
           - ""
           - "🧠 Basic Memory (MCP knowledge store):"
           - "   URL: https://basic-memory.seadogger-homelab"
-          - "   MCP endpoint (SSE): https://basic-memory.seadogger-homelab/sse"
+          - "   MCP endpoint (SSE): https://basic-memory.seadogger-homelab/mcp"
           - "   Not internet-exposed — internal IngressRoute only, no built-in auth."
