@@ -22,6 +22,21 @@ spec:
         runAsUser: 1000
         runAsGroup: 1000
         fsGroup: 1000
+      initContainers:
+        - name: fix-permissions
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - chown -R 1000:1000 /app/data /home/appuser/.basic-memory
+          securityContext:
+            runAsUser: 0
+            runAsGroup: 0
+          volumeMounts:
+            - name: data
+              mountPath: /app/data
+            - name: config
+              mountPath: /home/appuser/.basic-memory
       containers:
         - name: basic-memory
           image: ghcr.io/basicmachines-co/basic-memory:latest
