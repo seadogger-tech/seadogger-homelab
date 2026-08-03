@@ -486,6 +486,43 @@ Full file system access:
 **Note:** Xbox/PlayStation/Switch don't allow direct server entry without using Xbox Insider or connecting from another device first.
 
 ![accent-divider.svg](images/accent-divider.svg)
+## Basic Memory: **Website:** [https://docs.basicmemory.com](https://docs.basicmemory.com)
+- Self-hosted MCP knowledge server
+  ([basicmachines-co/basic-memory](https://github.com/basicmachines-co/basic-memory))
+  — stores its knowledge base as plain Markdown files (plus a rebuildable
+  SQLite index), queryable by any MCP client over SSE.
+- Plain hand-written manifests (`deployments/basic-memory` +
+  `ansible/tasks/basic_memory_deploy.yml`), matching the Mealie pattern —
+  no Helm chart, ArgoCD Application created once by Ansible, everything
+  else GitOps-owned.
+- Two RWO PVCs on `ceph-block-data`: `basic-memory-data` (the Markdown
+  vault, mounted at `/app/data`) and `basic-memory-config` (SQLite index
+  + config, mounted at `/home/appuser/.basic-memory`). `Recreate` deploy
+  strategy — SQLite, single writer, same reasoning as Mealie.
+- **Non-root container gotcha:** the image runs as fixed `uid/gid 1000`
+  (`appuser`) and `chmod`s its own config directory at startup.
+  `fsGroup: 1000` alone isn't enough — kubelet's CSI ownership handling
+  for Ceph RBD only `chgrp`s the mount (owner stays `root`), and POSIX
+  `chmod` requires actual ownership, not just group-write access. Fixed
+  with a root `initContainer` that `chown -R 1000:1000` both PVCs before
+  the main container starts. Worth checking for on any future
+  non-root-image deployment before re-debugging this from scratch.
+- **MCP endpoint:** `https://basic-memory.seadogger-homelab/mcp` — SSE
+  transport only (the image doesn't support streamable-HTTP). Confirmed
+  from the pod's own FastMCP startup log; the vendor docs don't state
+  the path.
+- **Not internet-exposed.** Internal-only IngressRoute + internal PKI
+  cert, same posture as Jellyfin/Home Assistant. The upstream image
+  ships no auth of its own — its docs explicitly warn not to expose it
+  publicly.
+- First run is empty; content comes from an MCP client's `write_note`
+  tool, the CLI's `basic-memory tool write-note`, or one of the
+  built-in importers under `basic-memory import` (`claude
+  conversations`, `claude projects`, `chatgpt`, `memory-json`). See
+  [Importing a Claude.ai Export into Basic Memory](17-Runbooks#importing-a-claudeai-export-into-basic-memory)
+  for the process and its rough edges.
+
+![accent-divider.svg](images/accent-divider.svg)
 ## See Also
 
 - **[[18-Setting-Up-n8n-Connections]]** - N8N configuration guide

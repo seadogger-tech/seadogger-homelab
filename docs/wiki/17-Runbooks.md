@@ -70,3 +70,53 @@ itself uses:
 5) `kubectl exec -n home-assistant home-assistant-0 -c home-assistant -- env HA_TOKEN="<token>" HA_DASHBOARD_URL_PATH="<url_path>" python3 /tmp/ha_dashboard_edit.py`
 6) Revoke the token from the same Security screen once done, if it was only needed for this edit.
 
+![accent-divider](images/accent-divider.svg)
+## Importing a Claude.ai Export into Basic Memory
+Claude.ai exports (Settings → Account → Export Data) unzip into
+`conversations.json`, a `projects/` directory (or `projects.json`),
+`design_chats/`, `memories.json`, and `users.json`. Basic Memory
+(see [09-Apps#basic-memory](09-Apps#basic-memory-website-httpsdocsbasicmemorycom))
+has built-in importers for some of these; the rest need manual handling.
+The pod has no network access to your Mac, so files go in via `kubectl cp`.
+
+1) Copy the export file(s) into the running pod:
+   `kubectl cp <local-file> basic-memory/<pod>:/tmp/<file> -c basic-memory`
+
+2) **Conversations** — built-in importer, works as-is:
+   `kubectl exec -n basic-memory <pod> -c basic-memory -- basic-memory import claude conversations /tmp/conversations.json --folder claude-conversations`
+
+3) **Projects** — the importer expects one combined `projects.json`
+   array, but a real export gives a `projects/` directory of individual
+   `<uuid>.json` files. Combine them first:
+   `python3 -c "import json, glob; json.dump([json.load(open(f)) for f in sorted(glob.glob('projects/*.json'))], open('projects_combined.json','w'))"`,
+   then `kubectl cp` the combined file in and run
+   `basic-memory import claude projects /tmp/projects.json --base-folder claude-projects`.
+   **Known gap:** this importer only pulls a project's attached `docs`
+   and `prompt_template` — it silently writes nothing for the project's
+   own `description` or for Claude's separate `memories.json →
+   project_memories` summary, even when those have real content. Write
+   those by hand (step 5) if you want them kept.
+
+4) **`design_chats/`** (Projects-scoped chat exports) — schema doesn't
+   match `conversations.json`: messages use `role`/`content` (a dict
+   with embedded attachments) instead of `sender`/`text`. Forcing this
+   through the conversations importer silently mis-parses or drops
+   content. Read the file directly and hand-format a note (step 5)
+   instead of trusting the importer with it.
+
+5) **Anything the importers don't cover** (project descriptions,
+   `memories.json`'s profile summary, `design_chats/`): write it
+   directly with the CLI, piping content via stdin so markdown
+   with quotes/newlines doesn't need shell-escaping:
+   `cat note.md | kubectl exec -i -n basic-memory <pod> -c basic-memory -- basic-memory tool write-note --title "..." --folder "..." --tags "imported-from-claude"`
+
+6) Reindex so the new content is searchable:
+   `kubectl exec -n basic-memory <pod> -c basic-memory -- basic-memory reindex --search`
+
+7) Clean up the copied export file from the pod's ephemeral storage —
+   it's never written to the persistent vault, but there's no reason to
+   leave tens of MB of conversation history sitting in `/tmp`:
+   `kubectl exec -n basic-memory <pod> -c basic-memory -- rm -f /tmp/conversations.json`
+
+`users.json` (just your account record) has no knowledge content — skip it.
+

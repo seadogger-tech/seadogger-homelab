@@ -30,6 +30,32 @@ This document provides a comprehensive analysis of the Seadogger Homelab codebas
 - **Modern Wait Conditions:** Proper use of Kubernetes wait conditions vs hardcoded sleeps
 - **Working System:** Fully functional deployment completing in ~30 minutes
 
+### Recent Validation: Basic Memory Deployment (2026-08-03)
+
+Basic Memory (self-hosted MCP knowledge server,
+`ghcr.io/basicmachines-co/basic-memory`) was deployed as a live test of
+the target GitOps pattern described in Priority 1.5 / [#50](https://github.com/seadogger-tech/seadogger-homelab/issues/50):
+Ansible creates only the ArgoCD `Application` object
+(`core/ansible/tasks/basic_memory_deploy.yml`), and ArgoCD owns every
+actual resource via Kustomize (`core/deployments/basic-memory/`) — no
+ingress fetched separately via `get_url`, no manual `kubectl apply`
+outside the one-time Application bootstrap. This is the cleanest
+instance of the pattern so far, following Mealie's precedent (see
+[09-Apps#basic-memory](09-Apps#basic-memory-website-httpsdocsbasicmemorycom)).
+
+**Reusable pattern discovered — non-root containers on RWO Ceph RBD PVCs:**
+`fsGroup` alone is not sufficient for a container that `chmod`s its own
+mount point at startup. Kubelet's CSI ownership handling for RBD volumes
+only `chgrp`s the mount to `fsGroup`, leaving `owner=root` — a non-root
+process can *write* into a `fsGroup`-writable directory but cannot
+`chmod` it, since POSIX requires actual ownership (or `CAP_FOWNER`) for
+that call. The fix is a root `initContainer` that `chown -R <uid>:<gid>`
+the mounted PVC(s) before the main container starts (see
+`core/deployments/basic-memory/deployment.yaml`). Any future app image
+that runs as a fixed non-root UID and manages its own directory
+permissions will hit this — worth checking for on first deploy rather
+than re-debugging from scratch.
+
 ### Critical Issues ⚠️
 
 #### 0. **NO DISASTER RECOVERY FOR PRODUCTION DATA** 🔴 **CRITICAL**
@@ -74,6 +100,37 @@ This document provides a comprehensive analysis of the Seadogger Homelab codebas
 - PVC data loss during app redeployments
 - Service disruptions testing new configurations
 - Unable to test major infrastructure changes safely
+
+#### 0c. **NO GUARD AGAINST ACCIDENTAL CLUSTER WIPE** 🔴 **CRITICAL**
+
+**Issue:** `config.yml` can be left with `cold_start_stage_1_wipe_cluster: true`
+after a cold-start session, with nothing preventing a routine
+`ansible-playbook main.yml` run from silently wiping the production
+cluster.
+
+**Discovered:** 2026-08-03, while deploying Basic Memory —
+`core/ansible/config.yml` was found on disk with
+`cold_start_stage_1_wipe_cluster: true` still set from an earlier
+session. The Basic Memory ArgoCD `Application` was applied directly via
+`kubectl` instead of running the playbook, specifically to avoid this.
+
+**Current State:**
+- ❌ No confirmation prompt before a wipe-stage run
+- ❌ No lint/CI check flagging `cold_start_stage_1_wipe_cluster: true`
+  left in a config on disk
+- ❌ Stage flags are ordinary booleans in a gitignored file — nothing
+  distinguishes "I meant to wipe today" from "I forgot to flip this
+  back" after the last cold start
+
+**Impact:** A routine playbook run — e.g. to pick up a new app's
+`enable_*` flag, as happened tonight — can wipe the production cluster
+with no warning.
+
+**Suggested Fix:** Gate any task guarded by
+`cold_start_stage_1_wipe_cluster` behind an explicit
+`--extra-vars "confirm_wipe=yes"` (or an interactive `ansible.builtin.pause`
+requiring a typed confirmation), so the destructive path requires a
+deliberate per-run opt-in rather than a persistent config value.
 
 #### 1. **Secrets Management (MEDIUM PRIORITY)**
 
