@@ -213,6 +213,137 @@ Per AGENTS.md policy the image is **always pinned to a release tag, never
 
 ![accent-divider](images/accent-divider.svg)
 
+## Multi-Profile Routing (Kanban Orchestrator)
+
+A single `hermes-<user>` pod can host several **profiles**
+(`/opt/data/profiles/<name>/`, each with its own `config.yaml`, `.env`,
+sessions and skills). One profile acts as the router; the others are
+specialist workers. Established 2026-08-03 on `hermes-jason`
+(`default` + `homelab-it-engineer` + `gmail-email-assistant`).
+
+### Rule 1 — exactly one profile owns each messaging account
+
+**Profiles must never share a Signal account.** Upstream docs require
+unique credentials per platform per profile; newer Hermes hard-refuses
+to start the second gateway. Our version instead fought over the account
+via `--replace` handoffs roughly every 20s indefinitely — a respawn
+storm that silently degraded Signal for every profile involved
+(observed for hours before it was diagnosed).
+
+Only the router profile gets `SIGNAL_*` vars in its `.env`. Specialists
+have them commented out and correctly log
+`No messaging platforms enabled`. Their gateways still run, for cron and
+kanban work.
+
+### Rule 2 — one dispatcher, enforced by a lock
+
+`kanban.dispatch_in_gateway: true` embeds the task dispatcher in the
+gateway (60s tick). With several profile gateways running, a
+machine-global advisory lock at `/opt/data/kanban/.dispatcher.lock`
+serialises them — the winner logs `holding singleton dispatcher lock`,
+the rest log `this gateway will NOT dispatch`. Concurrent dispatchers
+would double reclaim frequency and can corrupt WAL index pages, hence
+the backstop.
+
+**The lock is won by whichever gateway starts first**, so keep
+`kanban.*` settings consistent across profiles, or the effective
+behaviour depends on a startup race.
+
+### Rule 3 — the router needs the `kanban` toolset
+
+This is the non-obvious one. `tools/kanban_tools.py::_check_kanban_mode`
+enables kanban tools when **either**:
+
+1. `HERMES_KANBAN_TASK` is set (dispatcher-spawned worker), **or**
+2. the profile lists `kanban` in its `toolsets:` config.
+
+A router profile is neither a worker nor a `kanban`-toolset profile by
+default, so it gets **zero kanban tools** and cannot open a task. The
+symptom is subtle: instead of erroring, the agent just does all the work
+itself and never routes. Fix:
+
+```yaml
+# /opt/data/config.yaml  (router profile)
+toolsets:
+  - hermes-cli
+  - kanban
+```
+
+Because the router has no `HERMES_KANBAN_TASK`, this grants the
+**orchestrator** surface (`kanban_create`, `kanban_list`, `kanban_link`,
+`kanban_unblock`) rather than the worker lifecycle surface.
+
+> ⚠️ `hermes doctor` prints `kanban (runtime-gated; loaded only for
+> dispatcher-spawned workers)` **unconditionally** — `doctor.py` only
+> tests the env var and ignores the profile-toolset path. Do not trust
+> it here. Verify with:
+> ```bash
+> /opt/hermes/.venv/bin/python3 -c "import sys; sys.path.insert(0,'/opt/hermes'); \
+>   from tools import kanban_tools as kt; print(kt._check_kanban_mode())"
+> ```
+
+### Rule 4 — routing is task dispatch, not live chat handoff
+
+Messaging the router does **not** transparently switch you into a
+specialist mid-conversation (that is upstream feature request #24913,
+unshipped). Work reaches specialists as dispatched kanban tasks and
+results return through the router. `kanban_create` also requires an
+explicit `assignee`, and `kanban.auto_decompose` only fans out tasks
+**already in `triage`** — it never converts an inbound chat message into
+a task.
+
+### Working configuration
+
+```yaml
+# router profile — /opt/data/config.yaml
+toolsets: [hermes-cli, kanban]
+kanban:
+  dispatch_in_gateway: true
+  orchestrator_profile: default   # set explicitly; '' resolves via the
+                                  # active profile, which `hermes profile
+                                  # use` mutates
+  auto_decompose: true
+```
+
+Specialists are routed to by **role description**, not name —
+`hermes profile describe <name>` text is fed to
+`auxiliary.kanban_decomposer` by `_build_roster()`. A profile with no
+description is a poor routing target.
+
+### Verified end-to-end flow
+
+```
+Signal msg → default → kanban_create(assignee=homelab-it-engineer)
+          → dispatcher tick (≤60s) → spawns:
+             hermes -p homelab-it-engineer ... chat -q work kanban task t_xxxx
+          → task done → result back through default's Signal connection
+```
+
+### Known limitation — file attachments
+
+Report files produced by an agent **cannot be delivered over Signal**:
+Hermes passes attachments to `signal-cli` by local path, but `signal-cli`
+runs in its own pod mounting only `/data` and cannot see `/opt/data`.
+Every attachment fails with `AttachmentInvalidException` while the text
+reply still arrives, so it fails invisibly. Tracked as
+[pro#13](https://github.com/seadogger-tech/seadogger-homelab-pro/issues/13).
+
+### Kanban DB on CephFS
+
+`/opt/data` is CephFS. SQLite WAL on a network filesystem intermittently
+surfaces
+`kanban.db is not writable: ... kanban.db-wal is read-only for this user`,
+which then succeeds on retry — the filesystem is fine (verify with a
+plain `touch`). If it becomes frequent, Hermes supports
+`database.journal_mode: DELETE` for exactly this case (its config
+comment names NFS/SMB/virtiofs).
+
+> Run `hermes kanban *` commands **as the `hermes` user**
+> (`su hermes -c '...'`). Running them as root via `kubectl exec` can
+> produce spurious not-writable errors.
+
+![accent-divider](images/accent-divider.svg)
+
 ## Troubleshooting
 
 ### Pod is `CrashLoopBackOff` with "Goodbye!" in logs
@@ -236,6 +367,32 @@ Daemon isn't reachable. Check from inside the hermes pod:
 kubectl -n hermes-<user> exec -it deploy/hermes -- \
     curl -sf http://signal-cli.signal-cli.svc.cluster.local:8080/api/v1/check
 ```
+
+### Signal: incoming messages silently dropped, sends work fine
+signal-cli `< 0.14.5` hits [AsamK/signal-cli#2059](https://github.com/AsamK/signal-cli/issues/2059)
+— Signal changed sealed-sender envelopes ~2026-06-10 and older clients
+NPE on **every** inbound message:
+```
+Exception: getServerGuid(...) must not be null (NullPointerException)
+```
+Messages never reach Hermes. Fix is a version bump (≥ 0.14.5). Note the
+rebuild workflow only pushes the image + updates core's tag tracker — it
+deliberately does **not** touch pro's `deployment.yaml`, so bump the
+`image:` tag there manually.
+
+### The router agent does the work itself instead of routing
+The router profile is missing the `kanban` toolset, so it has no
+`kanban_create` tool and no way to open a task. See
+[Rule 3](#rule-3--the-router-needs-the-kanban-toolset). `hermes doctor`
+is misleading here — verify with `_check_kanban_mode()` directly.
+
+### Two profiles fight over Signal (`--replace` handoff loop)
+More than one profile has `SIGNAL_*` in its `.env`. Symptoms:
+`Signal account already in use (PID ...)`, alternating
+`explicit --replace handoff completed`, and
+`Gateway (re)started 6 times in 120s — backing off`. Comment the
+`SIGNAL_*` block out of every profile except the router. See
+[Rule 1](#rule-1--exactly-one-profile-owns-each-messaging-account).
 
 ![accent-divider](images/accent-divider.svg)
 
