@@ -18,6 +18,10 @@ spec:
     spec:
       nodeSelector:
         kubernetes.io/arch: arm64
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
       containers:
         - name: basic-memory
           image: ghcr.io/basicmachines-co/basic-memory:latest
