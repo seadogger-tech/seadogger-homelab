@@ -49,7 +49,15 @@ ingress:
 persistence:
   config:
     enabled: true
-    size: 5Gi
+    # 5Gi -> 15Gi (2026-08-04). Jellyfin 12's `MoveTrickplayFiles`
+    # migration relocated trickplay scrub-preview tiles INTO the config
+    # volume (/config/data/trickplay). That alone is ~1.6G for 183 items
+    # and grows with the library, which filled the 5Gi volume and put
+    # Jellyfin in CrashLoopBackOff -- it refuses to start with <2GiB free
+    # ("The path `/config/data` has insufficient free space").
+    # NOTE: this is headroom, not a root-cause fix. Trickplay growth is
+    # unbounded as the library grows; see 09-Apps for tuning options.
+    size: 15Gi
     accessMode: ReadWriteOnce
     storageClass: ceph-fs-data-ec
     globalMounts:
