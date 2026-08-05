@@ -35,6 +35,18 @@ manual_install_home_assistant: true
 manual_install_mealie: true
 manual_install_basic_memory: true
 
+# --- Node DNS (power-failure recovery path) ---
+# Nodes resolve via Pi-hole, but Pi-hole runs ON this cluster. Without a
+# fallback that is a deadlock after power loss: no DNS -> no image pull ->
+# no Pi-hole -> no DNS. Pi-hole stays PRIMARY so filtering is preserved;
+# the fallback is only used when Pi-hole does not answer. Applied to the
+# NetworkManager profile (NOT /etc/resolv.conf, which NM rewrites on
+# reboot) by tasks/pihole_deploy.yml. See core#59.
+pihole_dns_lb_ip: "192.168.1.250"    # must match deployments/pihole/pihole-values.yaml serviceDns.loadBalancerIP
+node_dns_fallback: "1.1.1.1"
+node_dns_search: "local"
+node_nm_connection: "Wired connection 1"
+
 # --- Secrets ---
 dashboard_password: "YourSecurePasswordHere"
 aws_bedrock_api_key_id: "YOUR_AWS_ACCESS_KEY_ID_HERE"

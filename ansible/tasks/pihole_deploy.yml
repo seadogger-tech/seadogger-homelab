@@ -56,3 +56,63 @@
     kubeconfig: "{{ KUBECONFIG }}"
     state: present
     src: "/tmp/traefik-pihole-ingress.yml"
+
+# Step 5: Break the node -> Pi-hole circular DNS dependency.
+#
+# Every node resolves DNS via Pi-hole's LoadBalancer, but Pi-hole RUNS on
+# this cluster. After a power failure that is a deadlock: kubelet cannot
+# pull the Pi-hole/cloudflared image without DNS, and there is no DNS
+# until that image runs. On 2026-08-04 this took the whole house offline
+# for hours and needed manual SSH on every node to recover.
+#
+# Fix: give each node Pi-hole as PRIMARY (filtering preserved) with a
+# public resolver as SECONDARY, used only when Pi-hole does not answer.
+# NetworkManager owns /etc/resolv.conf on these nodes, so editing that
+# file directly does NOT survive a reboot -- the setting must live in the
+# connection profile.
+#
+# Pods are unaffected: CoreDNS forwards explicitly to Pi-hole (see
+# coredns_custom_deploy.yml), so no workload can reach this fallback.
+# Only kubelet/containerd image pulls and NTP use it.
+#
+# See core#59 and 12-Troubleshooting "Power Failure -> Cluster-Wide DNS
+# Deadlock". The matching UDM firewall exception lives in the
+# "K3s Nodes Pi-hole Egress" address group.
+- name: Pin node DNS to Pi-hole with a public fallback (power-failure recovery path)
+  ansible.builtin.shell: |
+    set -e
+    conn="{{ node_nm_connection | default('Wired connection 1') }}"
+    want_dns="{{ pihole_dns_lb_ip | default('192.168.1.250') }},{{ node_dns_fallback | default('1.1.1.1') }}"
+    cur_dns="$(nmcli -t -g ipv4.dns connection show "$conn" 2>/dev/null || true)"
+    cur_ign="$(nmcli -t -g ipv4.ignore-auto-dns connection show "$conn" 2>/dev/null || true)"
+    if [ "$cur_dns" = "$want_dns" ] && [ "$cur_ign" = "yes" ]; then
+      echo "NOCHANGE"
+    else
+      nmcli connection modify "$conn" \
+        ipv4.ignore-auto-dns yes \
+        ipv4.dns "{{ pihole_dns_lb_ip | default('192.168.1.250') }} {{ node_dns_fallback | default('1.1.1.1') }}" \
+        ipv4.dns-search "{{ node_dns_search | default('local') }}"
+      nmcli connection up "$conn" >/dev/null 2>&1 || true
+      echo "CHANGED"
+    fi
+  args:
+    executable: /bin/bash
+  register: node_dns_pin
+  changed_when: "'CHANGED' in node_dns_pin.stdout"
+  delegate_to: "{{ item }}"
+  loop: "{{ groups['cluster'] }}"
+  loop_control:
+    label: "{{ item }}"
+
+- name: Verify node resolver order (Pi-hole must be first)
+  ansible.builtin.command:
+    cmd: grep -E '^nameserver' /etc/resolv.conf
+  register: node_resolv
+  changed_when: false
+  failed_when: >
+    (node_resolv.stdout_lines | length) < 2 or
+    (pihole_dns_lb_ip | default('192.168.1.250')) not in node_resolv.stdout_lines[0]
+  delegate_to: "{{ item }}"
+  loop: "{{ groups['cluster'] }}"
+  loop_control:
+    label: "{{ item }}"
