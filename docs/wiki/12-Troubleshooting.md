@@ -375,6 +375,91 @@ incident and the chart-pinning fix.
   hardware failure.
 
 ![accent-divider.svg](images/accent-divider.svg)
+## Power Failure → Cluster-Wide DNS Deadlock (2026-08-04)
+
+**Symptom:** After a house power failure, "every wired interface is
+down." Nothing resolves — but the network is actually fine. Nodes ping,
+the gateway responds, k3s is `Ready` on all four nodes. Nearly every pod
+sits in `ImagePullBackOff` with:
+
+```
+dial tcp: lookup registry-1.docker.io: Try again
+```
+
+### Root cause — a three-way circular dependency
+
+1. **Pi-hole's only upstream is its own `cloudflared` sidecar**
+   (`FTLCONF_dns_upstreams=127.0.0.1#5053`, DoH). No fallback.
+2. That sidecar is `crazymax/cloudflared:latest` with
+   **`imagePullPolicy: Always`**. `Always` forces kubelet to contact
+   Docker Hub on *every* container start — even when a valid copy is
+   cached locally. Reaching Docker Hub needs DNS.
+3. **Every node resolves via `192.168.1.250`** — the Pi-hole
+   LoadBalancer. Pi-hole runs *on* the cluster that depends on it.
+
+So: DNS needs cloudflared → cloudflared needs a registry pull → the pull
+needs DNS. Nothing recovers on its own.
+
+**Compounding factor:** Raspberry Pis have no battery-backed RTC. Three
+of four nodes came back with clocks up to **2m39s** off. That skewed the
+Ceph mons (`clock skew detected on mon.d, mon.e`, 143 slow ops), which
+made PVC mounts time out — so Pi-hole couldn't start even once its image
+was available. NTP couldn't correct it because NTP also needs DNS.
+
+### Recovery procedure
+
+```bash
+# 1. Break the DNS loop — temporary public resolver on every node.
+#    NOTE: ansible_user is `pi`, not your laptop username.
+for h in 192.168.1.95 192.168.1.96 192.168.1.97 192.168.1.98; do
+  ssh pi@$h 'sudo sed -i "1i nameserver 1.1.1.1" /etc/resolv.conf'
+done
+
+# 2. Resync clocks (fixes the Ceph mon skew / slow ops)
+for h in 192.168.1.96 192.168.1.97 192.168.1.98; do
+  ssh pi@$h 'sudo systemctl restart systemd-timesyncd'
+done
+# verify: timedatectl | grep synchronized   -> "yes" on all nodes
+
+# 3. Let the images pull, then kick anything stuck in backoff
+kubectl get pods -A --no-headers | awk '$4 ~ /ImagePull|ErrImage/ {print $1" "$2}' \
+  | while read ns p; do kubectl delete pod -n "$ns" "$p" --wait=false; done
+
+# 4. Once Pi-hole is 2/2 and resolving, remove the temporary resolver
+for h in 192.168.1.95 192.168.1.96 192.168.1.97 192.168.1.98; do
+  ssh pi@$h 'sudo sed -i "/^nameserver 1.1.1.1$/d" /etc/resolv.conf'
+done
+```
+
+### Traps found the hard way
+
+- **`/etc/resolv.conf` is managed by NetworkManager on these nodes**
+  (`systemd-resolved` and `dhcpcd` are both inactive). A manual edit is
+  **not persistent** — it is lost on reboot, so this workaround does not
+  protect against the *next* power failure. See
+  [19-Refactoring-Roadmap](19-Refactoring-Roadmap) Priority 9 for the
+  durable options.
+- **Don't restart CoreDNS to "fix" DNS during an outage.** Doing so
+  during this incident rescheduled it onto a node with no cached CoreDNS
+  image, taking cluster DNS down completely. If you must, pin it first:
+  `kubectl patch deploy coredns -n kube-system -p '{"spec":{"template":{"spec":{"nodeSelector":{"kubernetes.io/hostname":"<node-with-image>"}}}}}'`
+- **Check which nodes actually have an image cached** before letting a
+  pod reschedule:
+  ```bash
+  kubectl get nodes -o json | python3 -c "
+  import json,sys
+  for n in json.load(sys.stdin)['items']:
+      names=[i for img in n['status'].get('images',[]) for i in img.get('names',[])]
+      print(n['metadata']['name'], [i for i in names if 'cloudflared' in i] or 'NOT CACHED')"
+  ```
+  Note this list can be **stale** — it may report an image kubelet no
+  longer has. Trust the `Pulling` event over the node status.
+- **ArgoCD is also DNS-blocked during the outage** (`failed to get
+  command args to log: helm pull ... lookup ... server misbehaving`), so
+  `selfHeal` won't fight your emergency patches — but it *will* revert
+  them the moment DNS recovers. Anything you want to keep must go in git.
+
+![accent-divider.svg](images/accent-divider.svg)
 ## See Also
 
 - **[[04-Bootstrap-and-Cold-Start]]** - Deployment procedures and common issues

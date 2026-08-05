@@ -3145,6 +3145,136 @@ rclone sync source dest \
   --s3-upload-concurrency 4  # S3 parallel parts
 ```
 
+## Kopia Blob Types vs. Deep Archive Lifecycle
+
+**Discovered 2026-08-04.** The 7-day Deep Archive lifecycle is working as
+designed for bulk data, but it is also archiving a small number of Kopia
+**index** blobs, which breaks repository maintenance and adds a
+prerequisite step to restores.
+
+### Design intent (unchanged)
+
+A 24–48 hour restore window is an **accepted, deliberate requirement** —
+this homelab is explicitly not built for high availability, and Deep
+Archive is what makes ~$11/month for 3.3TB possible. Restoring from
+Deep Archive by issuing `restore-object` and waiting for retrieval is
+the *normal, supported* procedure here, not a failure mode. It has been
+exercised successfully (OpenWebUI rollback, ~2 months of history).
+
+### What the repository actually looks like
+
+Kopia names blobs by type using the first character of the filename:
+
+| Prefix | Contents | Size | Needs instant read? |
+|---|---|---|---|
+| `p…` | **data packs** — the actual backed-up bytes | bulk | No — archive freely |
+| `x…` | **index blobs** — the map of what is where | tiny | **Yes** |
+| `q…` | metadata packs | small | **Yes** |
+| `_log…` | repo logs | small | No |
+| `kopia.repository`, `kopia.blobcfg`, `kopia.maintenance` | repo config | tiny | **Yes** |
+
+Live audit of `s3://seadogger-homelab-backup/velero/kopia/`:
+
+```
+150942  p_data_pack       DEEP_ARCHIVE     <- correct, this is the cost win
+  1975  _log              STANDARD
+   363  x_INDEX           STANDARD
+   165  q_metadata_pack   STANDARD
+   152  x_INDEX           DEEP_ARCHIVE     <- the problem
+    31  p_data_pack       STANDARD
+    15  _log              DEEP_ARCHIVE
+     1  q_metadata_pack   DEEP_ARCHIVE     <- the problem
+     3  kopia.repository / .maintenance / .blobcfg   STANDARD
+```
+
+150,942 data packs in Deep Archive is the strategy working. The issue is
+**152 index blobs + 1 metadata pack** that aged across the same 7-day
+boundary, because the lifecycle rule matches the whole repo prefix rather
+than just data packs.
+
+### Consequences
+
+**1. Repo maintenance fails continuously.** The `*-kopia-maintain-job-*`
+pods in `velero` error every ~5 minutes with:
+
+```
+error loading index blob xn0_08e7e69b8f23840ff8e8a274b4ed0507-...:
+getContent: unable to complete GetBlob(...) despite 10 retries:
+The operation is not valid for the object's storage class
+```
+
+Maintenance is what prunes expired snapshots and compacts indexes.
+While it cannot run, the repository never garbage-collects — storage
+and cost creep upward, and index count grows unbounded.
+
+**2. Restores still work, but gained a prerequisite step.** Kopia must
+read the index before it can determine *which* data packs to fetch. If
+the index blobs it needs are themselves in Deep Archive, the repo cannot
+be opened at all until those are restored first. Restores are therefore
+still entirely possible — this is not data loss and not a broken backup
+— but the runbook is now **two** retrieval rounds, not one:
+
+```bash
+# Round 1 — restore the INDEX/metadata blobs (small, fast tier is fine)
+aws s3api list-objects-v2 --bucket seadogger-homelab-backup \
+  --prefix velero/kopia/<app>/x \
+  --query 'Contents[?StorageClass==`DEEP_ARCHIVE`].Key' --output text \
+| tr '\t' '\n' | while read k; do
+    aws s3api restore-object --bucket seadogger-homelab-backup --key "$k" \
+      --restore-request '{"Days":7,"GlacierJobParameters":{"Tier":"Standard"}}'
+  done
+# Standard tier ≈ 12h for Deep Archive; Expedited is NOT available for Deep Archive.
+
+# Round 2 — then the data packs the restore actually needs (Bulk = cheapest)
+#   ...same pattern with --prefix velero/kopia/<app>/p
+```
+
+Backups themselves are unaffected — writes succeed to any storage class.
+Every scheduled backup has been `Completed`, verified through 2026-08-04.
+
+### The fix
+
+S3 lifecycle filters are plain **string** prefixes, not path segments,
+so a rule can target only data packs by including the blob-type
+character:
+
+```json
+{
+  "Rules": [
+    { "Id": "KopiaJellyfinDataPacksOnly",
+      "Status": "Enabled",
+      "Filter": { "Prefix": "velero/kopia/jellyfin/p" },
+      "Transitions": [{ "Days": 7, "StorageClass": "DEEP_ARCHIVE" }] },
+    { "Id": "KopiaNextcloudDataPacksOnly",
+      "Status": "Enabled",
+      "Filter": { "Prefix": "velero/kopia/nextcloud/p" },
+      "Transitions": [{ "Days": 7, "StorageClass": "DEEP_ARCHIVE" }] },
+    { "Id": "KopiaOpenwebuiDataPacksOnly",
+      "Status": "Enabled",
+      "Filter": { "Prefix": "velero/kopia/openwebui/p" },
+      "Transitions": [{ "Days": 7, "StorageClass": "DEEP_ARCHIVE" }] }
+  ]
+}
+```
+
+One rule per repo, each ending in `/p`. Index, metadata, log and repo
+config blobs then stay in STANDARD permanently. Cost impact is
+negligible — roughly 500 small objects versus 150,000 data packs — while
+maintenance starts working again and restores return to a single
+retrieval round.
+
+**Already-archived index blobs must be restored once and re-uploaded**
+(or left to be superseded as maintenance rewrites indexes) — changing
+the lifecycle rule alone does not pull existing objects back out of
+Deep Archive.
+
+> **IAM note:** `k8up-backup-user` cannot read the lifecycle policy —
+> `s3:GetLifecycleConfiguration` is not in its policy, so
+> `get-bucket-lifecycle-configuration` returns `AccessDenied`. Use an
+> admin identity to inspect or change lifecycle rules.
+
+Tracked as [core#58](https://github.com/seadogger-tech/seadogger-homelab/issues/58).
+
 ## Maintenance Procedures
 
 ### Monthly Maintenance

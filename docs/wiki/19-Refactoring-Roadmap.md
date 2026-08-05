@@ -2647,6 +2647,70 @@ pod.
   [pro#13](https://github.com/seadogger-tech/seadogger-homelab-pro/issues/13).
 
 ![accent-divider.svg](images/accent-divider.svg)
+### Priority 9: Cluster Nodes Depend on Pi-hole for DNS (HIGH) 🟠
+
+**Timeline:** Before the next power event
+**Impact:** High — the cluster cannot self-recover from any event that
+takes Pi-hole down; manual SSH intervention is required every time
+**Demonstrated:** 2026-08-04 power failure (see
+[12-Troubleshooting](12-Troubleshooting#power-failure--cluster-wide-dns-deadlock-2026-08-04))
+
+#### Problem
+
+All four nodes resolve DNS via `192.168.1.250` — the Pi-hole
+LoadBalancer. Pi-hole runs **on the cluster that depends on it**. Any
+event that stops Pi-hole also removes the cluster's ability to pull the
+image needed to restart Pi-hole. It is a hard circular dependency, and
+it took the whole house offline for hours.
+
+It also compounds: NTP cannot resolve its pool servers, so node clocks
+drift (Pis have no battery-backed RTC), which skews the Ceph mons, which
+stalls PVC mounts, which prevents Pi-hole from starting even once its
+image is available.
+
+#### Options
+
+Ordered roughly by robustness. **These interact with the UDM DNS
+lockdown work** (port-53 DNAT to Pi-hole), so whichever is chosen likely
+needs a matching firewall exception for the four node IPs — otherwise
+the fallback resolver is transparently redirected back to Pi-hole and
+provides no protection.
+
+| # | Option | Pros | Cons |
+|---|---|---|---|
+| 1 | **NM static DNS on nodes: Pi-hole primary + public fallback**<br>`nmcli con mod "Wired connection 1" ipv4.ignore-auto-dns yes ipv4.dns "192.168.1.250 1.1.1.1"` | Persists reboots; keeps Pi-hole filtering as primary; ~10 min to apply | Needs DNAT exception; ~5s stall per lookup while failing over |
+| 2 | **Point nodes at the router (`192.168.1.1`)** | Router already has upstream resolvers; no per-node config drift | Node queries bypass Pi-hole filtering; depends on UDM DNS behaviour |
+| 3 | **Per-host DHCP option on the UDM** giving the 4 nodes a different resolver | Centrally managed, no node-local state | UDM per-host DNS options are limited; still needs DNAT exception |
+| 4 | **Node-local caching resolver** (dnsmasq/systemd-resolved) with Pi-hole primary, public fallback | Fast failover, caches, survives Pi-hole restarts gracefully | Most moving parts; another daemon per node |
+| 5 | **Pin cloudflared + `imagePullPolicy: IfNotPresent`** | Removes the most common trigger; small, in-git change | **Not sufficient alone** — proved insufficient on 2026-08-04 when the pod rescheduled to a node with no cached image |
+
+**Recommendation:** Option 1 **plus** Option 5. Option 5 removes the
+usual trigger; Option 1 removes the entire failure class. Neither alone
+is enough — pinning does not help a pod that lands on a node without the
+image, and a fallback resolver does not stop `imagePullPolicy: Always`
+from needing the registry on every start.
+
+#### Also fix regardless of option
+
+`crazymax/cloudflared:latest` + `imagePullPolicy: Always` is the worst
+possible combination: `Always` forces a registry round-trip on **every**
+container start even when a valid image is cached locally. Pin to a
+release tag and set `IfNotPresent`. This is the same class of problem as
+[#43 — Fix "latest" versions](https://github.com/seadogger-tech/seadogger-homelab/issues/43).
+
+#### Acceptance
+
+Pull node power, restore it, and the cluster returns to service with **no
+SSH intervention**.
+
+#### Related
+
+- Tracked as [core#59](https://github.com/seadogger-tech/seadogger-homelab/issues/59).
+- The current mitigation (`nameserver 1.1.1.1` appended to
+  `/etc/resolv.conf`) is **not persistent** — NetworkManager owns that
+  file on these nodes and rewrites it on reboot.
+
+![accent-divider.svg](images/accent-divider.svg)
 ## Implementation Roadmap
 
 ### Phase 0: Disaster Recovery & Staging (CRITICAL) 🔴
