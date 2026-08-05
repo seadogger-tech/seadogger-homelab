@@ -40,6 +40,25 @@ spec:
               value: "seadogger-world"
             - name: SERVER_PORT
               value: "19132"
+            # Pin the Bedrock Dedicated Server build. itzg defaults to
+            # LATEST, so BDS silently upgrades on every container restart.
+            # That is what broke this server: the 2026-08-04 power-failure
+            # recovery restarted the pod, BDS auto-upgraded 1.26.34.3 ->
+            # 1.26.40.8 (see backup-pre-* dirs on the PVC), and the newer
+            # build no longer fit in the memory limit -> OOMKilled every
+            # ~8 minutes. Bump deliberately, and take a world backup first
+            # (Bedrock upgrades the world format and does not downgrade
+            # cleanly).
+            - name: VERSION
+              value: "1.26.40.8"
+            # Bedrock default is 10-12. This was 32 in server.properties on
+            # the PVC and undeclared here, so nothing in git explained it.
+            # View distance is a RADIUS, so loaded-chunk count scales with
+            # its square -- 32 is ~7x the chunk memory of 12. Combined with
+            # box64 emulation overhead that is what pushed it over the
+            # limit. Declared here so the PVC copy can no longer drift.
+            - name: VIEW_DISTANCE
+              value: "12"
           ports:
             - name: bedrock-udp
               containerPort: 19132
@@ -52,7 +71,13 @@ spec:
               memory: "512Mi"
               cpu: "500m"
             limits:
-              memory: "1500Mi"
+              # 1500Mi -> 2Gi. Modest headroom for the BDS 1.26.40.8
+              # upgrade; VIEW_DISTANCE=12 above is the actual fix. Kept
+              # small on purpose: anakin already has 96% of memory
+              # *requests* allocated, so a large limit risks trading a
+              # container OOM for node-level pressure that would evict
+              # other pods. Request stays 512Mi so scheduling is unchanged.
+              memory: "2Gi"
               cpu: "1500m"   # box64 emulation needs headroom
           readinessProbe:
             exec:
