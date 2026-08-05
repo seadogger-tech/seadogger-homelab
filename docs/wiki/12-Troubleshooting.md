@@ -459,6 +459,139 @@ done
   `selfHeal` won't fight your emergency patches — but it *will* revert
   them the moment DNS recovers. Anything you want to keep must go in git.
 
+### Permanent fixes applied (2026-08-05)
+
+The manual recovery above should no longer be needed. All of this is now
+either in git or in the UDM controller config:
+
+| Fix | Where | Effect |
+|---|---|---|
+| cloudflared pinned `2025.9.1` + `IfNotPresent` | `deployments/pihole/pihole-values.yaml` | kubelet no longer needs a registry round-trip to start the DoH sidecar. Chart default was already `IfNotPresent`; the values file had overridden it to `Always`. |
+| Node DNS = Pi-hole primary + `1.1.1.1` fallback | `ansible/tasks/pihole_deploy.yml` (NetworkManager profile) | Nodes can resolve during a Pi-hole outage → images pull → cluster self-heals |
+| CoreDNS forwards explicitly to Pi-hole | `forward . 192.168.1.250` | Pods cannot reach the node fallback, so filtering is never bypassed |
+| CoreDNS image seeded on all 4 nodes | one-time pre-pull | A CoreDNS reschedule can no longer land on a node without the image |
+
+**Why the node fix lives in NetworkManager, not `/etc/resolv.conf`:**
+NM owns that file on these nodes (`systemd-resolved` and `dhcpcd` are
+both inactive) and rewrites it on reboot. Editing `resolv.conf` directly
+looks like it works and then silently vanishes — which is exactly how the
+deadlock stays armed.
+
+**Why CoreDNS must be pinned explicitly:** it previously used
+`forward . /etc/resolv.conf`, inheriting whatever the node used. Once the
+node gained a `1.1.1.1` fallback, CoreDNS would have inherited it too —
+and its `forward` plugin defaults to `policy random`, which
+*load-balances* rather than failing over. Roughly half of all pod DNS
+would have gone to `1.1.1.1` unfiltered, permanently. Pinning is what
+makes the node fallback safe to have.
+
+![accent-divider.svg](images/accent-divider.svg)
+## DNS Enforcement on the UDM (2026-08-05)
+
+Before this work, "everything uses Pi-hole" was a **convention, not a
+rule** — DHCP handed out `192.168.1.250` on all three networks, but
+nothing stopped a device from ignoring it.
+
+### What was actually broken
+
+Four DNS firewall rules existed and were enabled, and had **matched zero
+packets** since they were written:
+
+```
+num   pkts bytes target
+1        0     0 RETURN   ← allow Pi-hole DNS
+4        0     0 DROP     ← "drop hardcoded DNS"
+7    3626K  926M RETURN   ← default allow-everything
+```
+
+Three independent defects:
+
+1. **Port group on both Source and Destination.** The rule required
+   *source port 53 AND destination port 53*. Real queries use an
+   ephemeral source port (`sport=33124 dport=53`), so nothing ever
+   matched.
+2. **Wrong source address.** The allow rules matched
+   `src = 192.168.1.250`, the MetalLB VIP. Kubernetes SNATs pod egress to
+   the **node IP**, so the VIP never appears as a source. The VIP is
+   ingress-only.
+3. **Dead MAC filter.** The allow rules were pinned to
+   `dc:a6:32:f2:73:9d` — a `dc:a6:32` (Pi 4-era) MAC with no active
+   lease. The current nodes are all `2c:cf:67` (Pi 5). It was almost
+   certainly the original Pi-hole host from before the Pi 5 rebuild.
+
+### The corrected design
+
+```
+group "K3s Nodes Pi-hole Egress" = 192.168.1.95, .96, .97, .98
+
+20001 ACCEPT  src=K3s Nodes            dst=port 53    (recovery escape hatch)
+20002 ACCEPT  src=K3s Nodes            dst=port 443   (Pi-hole's cloudflared DoH)
+20003 DROP    src=(any)                dst=port 53    (hardcoded DNS)
+20004 DELETED
+```
+
+The node group does double duty: it is both Pi-hole's real egress
+identity *and* the power-failure recovery exception. Because Pi-hole
+relocates between nodes, **all four IPs must be listed** — a rule pinned
+to one node IP works until the next reschedule.
+
+> ⚠️ **Rule 20004 was deleted, not fixed.** It targeted `DNSSEC_Port`,
+> which is **port 443**. Correcting it the way 20003 needed correcting —
+> `any → dst port 443` — would have dropped **all outbound HTTPS for the
+> entire network**. DNSSEC is port 53; port 443 for DNS is DoH, and DoH
+> can only be blocked by destination address, never by port.
+
+### Closing the router's own DNS hole
+
+`WAN_OUT` rules structurally cannot see LAN→router traffic, and blocking
+it was impossible on two of three networks anyway — `br2` (IoT) and `br3`
+(gaming) use `UBIOS_GUEST_LOCAL_USER`, whose **built-in allow sits above
+any user rule**:
+
+```
+1  RETURN tcp dpt:53
+2  RETURN udp dpt:53   ← built-in, cannot be overridden
+7  DROP all
+```
+
+The real cause was not a missing rule but a **Google fallback on the WAN
+interface**:
+
+```
+wan_dns1: 192.168.1.250      wan_dns2: 8.8.8.8   ← the hole
+```
+
+dnsmasq queried both, so roughly half the answers it returned to LAN
+clients were unfiltered Google results. **Clearing `wan_dns2`** makes
+Pi-hole the router's only upstream, so every device still querying
+`192.168.1.1` now receives Pi-hole-filtered answers — corralled rather
+than broken, across all three networks, with no firewall rules and no
+IoT breakage.
+
+Verified:
+
+```
+via router 192.168.1.1:  doubleclick.net → 0.0.0.0       (filtered)
+                         github.com      → 140.82.114.4
+via Pi-hole    .250:     doubleclick.net → 0.0.0.0       (identical)
+```
+
+**Tradeoff:** the UDM now depends solely on Pi-hole for its own DNS.
+During a Pi-hole outage the router loses name resolution — UniFi cloud,
+update checks, speed tests. Routing, NAT, DHCP and firewalling are all
+IP-based and unaffected, so the internet keeps working.
+
+### Verifying enforcement is live
+
+```bash
+ssh udm 'iptables -L UBIOS_WAN_OUT_USER -v -n --line-numbers'
+```
+
+DROP counters climbing = hardcoded DNS is being blocked. Allow counters
+climbing = Pi-hole egress and the node escape hatch are working. **All
+zeros means the rules are silently doing nothing** — which is exactly the
+state this section exists to prevent recurring.
+
 ![accent-divider.svg](images/accent-divider.svg)
 ## See Also
 

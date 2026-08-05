@@ -2647,13 +2647,34 @@ pod.
   [pro#13](https://github.com/seadogger-tech/seadogger-homelab-pro/issues/13).
 
 ![accent-divider.svg](images/accent-divider.svg)
-### Priority 9: Cluster Nodes Depend on Pi-hole for DNS (HIGH) 🟠
+### Priority 9: Cluster Nodes Depend on Pi-hole for DNS ✅ RESOLVED 2026-08-05
 
-**Timeline:** Before the next power event
-**Impact:** High — the cluster cannot self-recover from any event that
-takes Pi-hole down; manual SSH intervention is required every time
+**Status:** Implemented and verified. Retained as a record of the failure
+mode and the reasoning, because the trap is easy to reintroduce.
 **Demonstrated:** 2026-08-04 power failure (see
 [12-Troubleshooting](12-Troubleshooting#power-failure--cluster-wide-dns-deadlock-2026-08-04))
+
+#### Resolution summary
+
+| # | Change | Where |
+|---|---|---|
+| 1 | UDM firewall groups/rules corrected — node IPs replace the MetalLB VIP, dead Pi 4 MAC removed | UDM controller |
+| 2 | CoreDNS pinned `forward . 192.168.1.250`; node DNS = Pi-hole primary + `1.1.1.1` fallback via NetworkManager; CoreDNS image seeded on all 4 nodes | `ansible/tasks/pihole_deploy.yml`, CoreDNS ConfigMap |
+| 3 | Port-53 enforcement made functional (port group moved to Destination only) — DROP counters now climbing | UDM rule 20003 |
+| 4 | Router DNS hole closed by clearing `wan_dns2: 8.8.8.8` | UDM WAN config |
+| 5 | Rule 20004 **deleted** — "fixing" it would have blocked all outbound HTTPS | UDM |
+
+**Option chosen:** 1 + 5 from the table below, exactly as recommended —
+pinning removed the common trigger, node DNS independence removed the
+failure class. Neither alone was sufficient: `IfNotPresent` was reverted
+by ArgoCD once DNS returned, and separately the pod rescheduled onto a
+node with no cached image, taking house DNS down a second time.
+
+**Still outstanding:** the Phase 6 acceptance test (pull power, confirm
+zero-touch recovery) has **not** been run. Until it is, this is verified
+by reasoning and component tests, not end to end.
+
+The original analysis follows.
 
 #### Problem
 
