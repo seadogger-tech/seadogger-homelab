@@ -25,7 +25,26 @@ serviceDHCP:
 # DNS over HTTPS configuration
 doh:
   enabled: true
-  pullPolicy: Always
+  # PINNED + IfNotPresent -- do not revert to `latest`/`Always`.
+  #
+  # This sidecar is Pi-hole's ONLY upstream (FTLCONF_dns_upstreams=
+  # 127.0.0.1#5053), and every cluster node resolves DNS via Pi-hole's
+  # LoadBalancer. With `Always`, kubelet must reach Docker Hub on every
+  # container start even when the image is already cached locally --
+  # which needs DNS, which needs this container. The 2026-08-04 power
+  # failure deadlocked exactly there and took the whole house offline
+  # until nodes were given a temporary resolver over SSH.
+  #
+  # 2025.9.1 is byte-identical to the `latest` that was running
+  # (sha256:9b4e856d18f6f6367330c56d91452f5fe3b6bd235f1210dcd9f6bd7373cad9be),
+  # so this pin is a no-op for behaviour. Bump deliberately.
+  #
+  # NOTE: this alone does NOT fully close the deadlock -- a pod that
+  # reschedules onto a node with no cached copy still needs a pull. See
+  # core#59 / Roadmap Priority 9 for the node-DNS fix that does.
+  repository: "crazymax/cloudflared"
+  tag: "2025.9.1"
+  pullPolicy: IfNotPresent
   envVars: {
     DOH_UPSTREAM: "https://1.1.1.1/dns-query"
   }
