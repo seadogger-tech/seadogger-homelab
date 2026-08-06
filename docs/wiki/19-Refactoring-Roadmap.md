@@ -103,36 +103,39 @@ than re-debugging from scratch.
 - Service disruptions testing new configurations
 - Unable to test major infrastructure changes safely
 
-#### 0c. **NO GUARD AGAINST ACCIDENTAL CLUSTER WIPE** 🔴 **CRITICAL**
+#### 0c. **Stale wipe flag in `config.yml`** 🟢 **LOW** — *corrected 2026-08-05*
 
-**Issue:** `config.yml` can be left with `cold_start_stage_1_wipe_cluster: true`
-after a cold-start session, with nothing preventing a routine
-`ansible-playbook main.yml` run from silently wiping the production
-cluster.
+> ⚠️ **This entry was originally written as a CRITICAL finding claiming a
+> routine `ansible-playbook main.yml` run could wipe the cluster. That was
+> wrong.** `main.yml` contains **zero** references to the wipe flag —
+> verified by `grep`. The only consumer is `tasks/wipe_k3s_cluster.yml`,
+> reached exclusively through `cleanup.yml`. `config.yml` states this
+> plainly ("This has NO EFFECT on `main.yml`"). Corrected here rather than
+> deleted, so the mistaken claim does not get rediscovered and re-acted on.
 
-**Discovered:** 2026-08-03, while deploying Basic Memory —
-`core/ansible/config.yml` was found on disk with
-`cold_start_stage_1_wipe_cluster: true` still set from an earlier
-session. The Basic Memory ArgoCD `Application` was applied directly via
-`kubectl` instead of running the playbook, specifically to avoid this.
+**Actual issue:** `cold_start_stage_1_wipe_cluster` can be left `true` in
+`config.yml` after a cold start. It does not endanger `main.yml`, but it
+does mean a later `cleanup.yml` run — perhaps intended only to reset a
+single pod via `pod_cleanup_list` — will proceed all the way through the
+k3s wipe stage.
 
-**Current State:**
-- ❌ No confirmation prompt before a wipe-stage run
-- ❌ No lint/CI check flagging `cold_start_stage_1_wipe_cluster: true`
-  left in a config on disk
-- ❌ Stage flags are ordinary booleans in a gitignored file — nothing
-  distinguishes "I meant to wipe today" from "I forgot to flip this
-  back" after the last cold start
+**Existing safeguards (the design is already reasonable):**
+- ✅ Destructive operations live in a separately named playbook
+  (`cleanup.yml`), not the deployment path
+- ✅ `tasks/wipe_k3s_cluster.yml` no-ops with a clear message when the
+  flag is false
+- ✅ Physical disk wiping sits behind a *second* independent flag,
+  `perform_physical_disk_wipe`
 
-**Impact:** A routine playbook run — e.g. to pick up a new app's
-`enable_*` flag, as happened tonight — can wipe the production cluster
-with no warning.
+**Residual risk:** low, and confined to operators who run `cleanup.yml`
+for a narrow purpose without re-reading the stage flags first.
 
-**Suggested Fix:** Gate any task guarded by
-`cold_start_stage_1_wipe_cluster` behind an explicit
-`--extra-vars "confirm_wipe=yes"` (or an interactive `ansible.builtin.pause`
-requiring a typed confirmation), so the destructive path requires a
-deliberate per-run opt-in rather than a persistent config value.
+**Optional hardening:** require `--extra-vars "confirm_wipe=yes"` on the
+wipe task so the destructive path needs a deliberate per-run opt-in
+rather than a persistent config value. Worth doing, but this is
+defence-in-depth on an already-gated path, not a missing guard.
+
+Flag set back to `false` on 2026-08-05.
 
 #### 0d. **HERMES CONFIG IS NOT REPRODUCIBLE FROM GIT** 🟡 **MEDIUM**
 
