@@ -55,28 +55,47 @@ cephClusterSpec:
                     - obiwan.local
                     - rey.local
 
+  # Requests right-sized 2026-08-05 against measured steady-state usage.
+  # CPU was reserving ~4 cores cluster-wide that were never used: yoda and
+  # anakin sat at 96-97% CPU-allocated while actually running at 13-16%,
+  # which is why Pi-hole failed to schedule with "Insufficient cpu" during
+  # the 2026-08-04 power-failure recovery.
+  #
+  # Measured (kubectl top, steady state):
+  #   mon  x3   requested 500m / used 26-36m      -> ~18x over
+  #   mgr  x2   requested 500m / used 56-73m      -> ~8x over
+  #   osd  x3   requested 500m / used 24-44m      -> ~15x over
+  #
+  # Memory is deliberately NOT reduced. mons use 445-459Mi of a 512Mi
+  # request (~88%) and are correctly sized. OSDs are the opposite problem:
+  # they request 1Gi but actually use 1.6-1.9Gi, so the scheduler has been
+  # under-counting them by ~1Gi each and packing nodes too tightly. Their
+  # request is raised to match reality.
+  #
+  # Limits are unchanged -- they are the safety ceiling, not the
+  # scheduling input.
   resources:
     mgr:
       limits:
         cpu: "1"
         memory: "1536Mi"
       requests:
-        cpu: "500m"
+        cpu: "150m"      # was 500m; measured 56-73m
         memory: "768Mi"
     mon:
       limits:
         cpu: "1"
         memory: "1Gi"
       requests:
-        cpu: "500m"
-        memory: "512Mi"
+        cpu: "100m"      # was 500m; measured 26-36m
+        memory: "512Mi"  # unchanged -- measured 445-459Mi, correctly sized
     osd:
       limits:
         cpu: "1"
         memory: "2Gi"
       requests:
-        cpu: "500m"
-        memory: "1Gi"
+        cpu: "150m"      # was 500m; measured 24-44m
+        memory: "2Gi"    # was 1Gi; measured 1.6-1.9Gi -- request now honest
     prepareosd:
       limits:
         cpu: "500m"
