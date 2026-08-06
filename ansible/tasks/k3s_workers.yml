@@ -23,6 +23,44 @@
         chdir: "~"
         creates: /var/lib/rancher/k3s/agent/kubelet.kubeconfig
 
+    # Keep containerd image bloat from tripping Ceph's mon disk warning.
+    #
+    # Worker root filesystems are only ~59Gi (the 4TB NVMe is a separate
+    # partition used by the Ceph OSDs). kubelet's default image GC does not
+    # start reclaiming until the disk is 85% full, but a Ceph mon warns at
+    # 30% free -- i.e. 70% used. So kubelet stays idle through the exact
+    # window where Ceph is already unhappy, and unused images accumulate
+    # indefinitely.
+    #
+    # Seen 2026-08-05: anakin hit 70% with 35Gi of containerd images (45
+    # images, all reclaimable) and Ceph reported "mon e is low on available
+    # space". Pruning recovered 14Gi and cleared it to HEALTH_OK. obiwan
+    # (63%) and rey (66%) were close behind, so this is systemic, not a
+    # one-off.
+    #
+    # Setting the high threshold below Ceph's warn point makes kubelet
+    # reclaim before Ceph ever complains.
+    - name: Configure kubelet image GC below Ceph's mon disk-warning threshold
+      ansible.builtin.copy:
+        dest: /etc/rancher/k3s/config.yaml
+        mode: "0644"
+        content: |
+          # Managed by ansible (tasks/k3s_workers.yml). Do not hand-edit.
+          kubelet-arg:
+            - "image-gc-high-threshold={{ kubelet_image_gc_high | default(65) }}"
+            - "image-gc-low-threshold={{ kubelet_image_gc_low | default(50) }}"
+      register: k3s_kubelet_cfg
+
+    # throttle: 1 so only one worker restarts at a time -- pods keep running
+    # (containerd is untouched) but the node briefly goes NotReady, and we
+    # do not want all workers doing that simultaneously.
+    - name: Restart k3s-agent to apply kubelet GC thresholds
+      ansible.builtin.systemd:
+        name: k3s-agent
+        state: restarted
+      throttle: 1
+      when: k3s_kubelet_cfg.changed
+
     - name: Wait until K3s agent service is active
       ansible.builtin.shell: systemctl is-active --quiet k3s-agent
       register: k3s_agent_status

@@ -47,6 +47,15 @@ node_dns_fallback: "1.1.1.1"
 node_dns_search: "local"
 node_nm_connection: "Wired connection 1"
 
+# --- kubelet image GC (keeps containerd bloat from tripping Ceph) ---
+# Worker root filesystems are ~59Gi. kubelet's default GC waits until 85%
+# used, but a Ceph mon warns at 30% free (70% used) -- so images pile up
+# through the exact window Ceph is already unhappy. Reclaim earlier.
+# Seen 2026-08-05: anakin hit 70% with 35Gi of images -> "mon e is low on
+# available space". See tasks/k3s_workers.yml.
+kubelet_image_gc_high: 65
+kubelet_image_gc_low: 50
+
 # --- Secrets ---
 dashboard_password: "YourSecurePasswordHere"
 aws_bedrock_api_key_id: "YOUR_AWS_ACCESS_KEY_ID_HERE"
