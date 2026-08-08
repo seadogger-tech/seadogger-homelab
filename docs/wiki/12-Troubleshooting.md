@@ -593,6 +593,86 @@ zeros means the rules are silently doing nothing** — which is exactly the
 state this section exists to prevent recurring.
 
 ![accent-divider.svg](images/accent-divider.svg)
+## VLAN Isolation Severs DNS (2026-08-08)
+
+Adding "block IoT → trusted LAN" isolation rules took **DNS down for the
+entire IoT VLAN**. Symptoms looked unrelated: phones reported "no
+internet", and the Samsung FamilyHub fridge could not load its Home
+Assistant dashboard.
+
+### Root cause
+
+**Pi-hole lives on the trusted LAN at `192.168.1.250`.** A reject rule
+covering `IoT → 192.168.1.0/24` therefore blackholes DNS along with
+everything else. No resolution means clients never even attempt a
+connection — so the Home Assistant allow rule read **0 packets** and
+looked broken, when in fact nothing ever got far enough to use it.
+
+The tell was in the packet capture — every IoT client, including the
+fridge, talking only to port 53 and getting nowhere:
+
+```
+192.168.50.61  → 192.168.1.250:53   A? api-global.netflix.com
+192.168.50.80  → 192.168.1.250:53   A? pool.ntp.org        ← the fridge
+```
+
+An earlier capture filtered with `not port 53` showed **nothing at all**,
+which was misread as "no traffic" when it actually meant "the only
+traffic here is the DNS we excluded."
+
+### Three compounding traps
+
+1. **UniFi appends new rules to the bottom.** The DNS and Home Assistant
+   ACCEPTs were created *after* the rejects, so they landed at
+   `rule_index` 20003/20004 — below all three drops, permanently dead.
+   Rules whose names contain "**else**" belong last; anything created
+   later lands in the dead zone by default.
+2. **The controller renders from an in-memory cache, not Mongo.** Editing
+   `rule_index` directly changed the DB but left iptables untouched.
+   Only a **reboot** made the controller re-read from disk. Worse, a GUI
+   save in that state can write the *stale cached order* back to Mongo
+   and silently undo the edit.
+3. **Established connections bypass the USER chain.** They match the
+   conntrack `ESTABLISHED,RELATED` fast path first, so an allow rule
+   counts only *new* connections (the SYN). A rule reading 0 while
+   traffic flows is normal — check `/proc/net/nf_conntrack` before
+   concluding the path is broken.
+
+### Working configuration
+
+```
+20000 ACCEPT  IoT → 192.168.1.250   tcp+udp 53     (Pi-hole)
+20001 ACCEPT  192.168.50.80 → 192.168.1.241  tcp 443   (fridge → HA)
+20002 REJECT  IoT → Trusted LAN
+20003 REJECT  IoT → VPN
+20004 REJECT  IoT → Gaming
+```
+
+`l2_isolation` is safe to leave **on**: it blocks client-to-client
+traffic *within* the VLAN, while the fridge→HA path is routed via the
+gateway and unaffected.
+
+> **DNSSEC needs no extra ports.** It rides on port 53 and only enlarges
+> responses. Allow **TCP 53 as well as UDP** — oversized signed answers
+> set the truncate bit and force a TCP retry. UDP-only DNS works until it
+> randomly doesn't.
+
+### Rule of thumb
+
+Any new VLAN isolation rule must carve out the infrastructure that VLAN
+depends on — **DNS to `192.168.1.250` first** — and the carve-out must be
+ordered *above* the drops. Verify with counters, never with the UI:
+
+```bash
+ssh udm 'iptables -L UBIOS_LAN_IN_USER -v -n --line-numbers'
+```
+
+Allow counters climbing and REJECT counters flat means it is working. An
+allow rule at 0 while a REJECT climbs means the rule is below the drops
+or scoped past the client you are testing from — the same failure that
+consumed most of this incident.
+
+![accent-divider.svg](images/accent-divider.svg)
 ## See Also
 
 - **[[04-Bootstrap-and-Cold-Start]]** - Deployment procedures and common issues
