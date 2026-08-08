@@ -1,0 +1,144 @@
+---
+# Network UPS Tools (NUT) - UPS monitoring on the control plane node.
+#
+# The UPS is a Phoenixtec/Voltronic "Smart-Battery" (USB 06da:ffff) plugged
+# into yoda. It is driven by usbhid-ups (Phoenixtec/Liebert HID subdriver).
+#
+# MONITOR ONLY -- this deliberately does NOT shut anything down. nut-monitor
+# is disabled and masked below, so no power event can ever trigger an
+# automatic poweroff. Alerting is handled by Home Assistant via the NUT
+# integration, which talks to upsd over the network. Coordinated cluster
+# shutdown is a separate, larger piece of work (ordering workers before the
+# control plane, stopping Ceph OSDs cleanly) and is intentionally not
+# attempted here.
+#
+# WHY THE DRIVER MUST STAY RUNNING: with nothing polling it, this UPS resets
+# its USB HID interface every ~151 seconds -- observed 108 re-enumerations in
+# 4.5 hours, with the device number climbing on every cycle. Once usbhid-ups
+# holds the interface open the flapping stops completely (0 disconnects over a
+# 4-minute window covering ~1.6 cycles). If it ever starts re-enumerating
+# again, check that nut-driver@ is actually running before suspecting the
+# cable or the Pi's USB power.
+
+- name: Install NUT server and client
+  ansible.builtin.apt:
+    name:
+      - nut-server
+      - nut-client
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Configure the UPS driver
+  ansible.builtin.copy:
+    dest: /etc/nut/ups.conf
+    owner: root
+    group: nut
+    mode: "0640"
+    content: |
+      # Managed by Ansible - tasks/nut_ups_deploy.yml
+      [{{ nut_ups_name }}]
+          driver = usbhid-ups
+          port = auto
+          # Pinned by USB ID so a re-enumeration (new device number) still
+          # matches. Do not switch to a bus/device path.
+          vendorid = 06DA
+          productid = FFFF
+          desc = "{{ nut_ups_desc }}"
+          pollinterval = 5
+  register: nut_ups_conf
+
+- name: Configure upsd listeners
+  ansible.builtin.copy:
+    dest: /etc/nut/upsd.conf
+    owner: root
+    group: nut
+    mode: "0640"
+    content: |
+      # Managed by Ansible - tasks/nut_ups_deploy.yml
+      # Home Assistant runs hostNetwork on this same node, so localhost is
+      # sufficient for it; the LAN address is kept for upsc from a laptop.
+      LISTEN 127.0.0.1 3493
+      LISTEN {{ ansible_host }} 3493
+  register: nut_upsd_conf
+
+- name: Configure the monitoring user
+  ansible.builtin.copy:
+    dest: /etc/nut/upsd.users
+    owner: root
+    group: nut
+    mode: "0640"
+    content: |
+      # Managed by Ansible - tasks/nut_ups_deploy.yml
+      # Read-only consumer for the Home Assistant NUT integration. "upsmon
+      # slave" grants status reads without the shutdown authority that
+      # "upsmon master" carries.
+      [{{ nut_monitor_user }}]
+          password = {{ nut_monitor_password }}
+          upsmon slave
+  register: nut_upsd_users
+  no_log: true
+
+- name: Set NUT mode to netserver
+  ansible.builtin.copy:
+    dest: /etc/nut/nut.conf
+    owner: root
+    group: nut
+    mode: "0640"
+    content: |
+      # Managed by Ansible - tasks/nut_ups_deploy.yml
+      MODE=netserver
+  register: nut_mode_conf
+
+# Monitor-only posture. nut-monitor is what would execute SHUTDOWNCMD on a
+# low-battery event; masking it makes an accidental cluster poweroff
+# impossible rather than merely unconfigured.
+- name: Disable and mask nut-monitor (no automatic shutdown)
+  ansible.builtin.systemd:
+    name: nut-monitor
+    state: stopped
+    enabled: false
+    masked: true
+  failed_when: false
+
+- name: Enable and start NUT services
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    state: started
+    enabled: true
+    daemon_reload: true
+  loop:
+    - "nut-driver@{{ nut_ups_name }}"
+    - nut-server
+
+- name: Restart NUT services when configuration changed
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    state: restarted
+  loop:
+    - "nut-driver@{{ nut_ups_name }}"
+    - nut-server
+  when: >
+    nut_ups_conf.changed or nut_upsd_conf.changed
+    or nut_upsd_users.changed or nut_mode_conf.changed
+
+- name: Wait for the driver to attach
+  ansible.builtin.pause:
+    seconds: 6
+  when: >
+    nut_ups_conf.changed or nut_upsd_conf.changed
+    or nut_upsd_users.changed or nut_mode_conf.changed
+
+# Fail loudly rather than leaving a UPS that reports nothing. A silent NUT is
+# indistinguishable from a healthy one until the power actually goes out.
+- name: Verify the UPS is reporting
+  ansible.builtin.command: "upsc {{ nut_ups_name }} ups.status"
+  register: nut_status
+  changed_when: false
+  retries: 3
+  delay: 5
+  until: nut_status.rc == 0 and nut_status.stdout is search('(OL|OB)')
+
+- name: Report UPS status
+  ansible.builtin.debug:
+    msg: "UPS {{ nut_ups_name }}: {{ nut_status.stdout }}"

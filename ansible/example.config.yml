@@ -34,6 +34,17 @@ manual_install_nextcloud_s3_backup: true
 manual_install_home_assistant: true
 manual_install_mealie: true
 manual_install_basic_memory: true
+manual_install_nut_ups: false
+
+# --- UPS Monitoring (NUT) ---
+# Set manual_install_nut_ups true only if a UPS is attached to the control
+# plane node's USB bus. MONITOR ONLY - nut-monitor is masked by the task, so
+# no power event triggers an automatic shutdown. Adjust vendorid/productid in
+# tasks/nut_ups_deploy.yml for a different UPS; run `nut-scanner -U` to find
+# the right driver and IDs.
+nut_ups_name: "homelab-ups"
+nut_ups_desc: "Homelab UPS"
+nut_monitor_user: "hamonitor"
 
 # --- Node DNS (power-failure recovery path) ---
 # Nodes resolve via Pi-hole, but Pi-hole runs ON this cluster. Without a
@@ -71,6 +82,9 @@ nextcloud_s3_backup_region: "us-east-1"
 # Note: The XMLTV proxy deployment is managed in deployments/jellyfin/xmltv-proxy.yaml
 # Credentials are provided via a Kubernetes Secret created externally (not via this Ansible)
 # The proxy serves uncompressed XMLTV at: http://xmltv-proxy.jellyfin/xmltv.xml
+# --- NUT monitoring user (read-only; consumed by Home Assistant) ---
+nut_monitor_password: "CHANGE_ME"
+
 hdhomerun_email: "YOUR_EMAIL@example.com"
 hdhomerun_device_ids: "YOUR_DEVICE_ID_HERE"
 
@@ -186,3 +200,4 @@ enable_nextcloud_s3_backup: "{{ cold_start_stage_3_install_applications | bool a
 enable_home_assistant: "{{ cold_start_stage_3_install_applications | bool and manual_install_home_assistant | bool }}"
 enable_mealie: "{{ cold_start_stage_3_install_applications | bool and manual_install_mealie | bool }}"
 enable_basic_memory: "{{ cold_start_stage_3_install_applications | bool and manual_install_basic_memory | bool }}"
+enable_nut_ups: "{{ cold_start_stage_3_install_applications | bool and manual_install_nut_ups | bool }}"
