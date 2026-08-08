@@ -74,6 +74,48 @@ additionalVolumes:
     emptyDir: {}
 
 initContainers:
+  # Do not let Home Assistant start until DNS actually works.
+  #
+  # Integrations that authenticate at startup fail PERMANENTLY if DNS is
+  # not yet available and never retry -- the config entry just sits dead
+  # until HA is restarted by hand. The ecobee integration does exactly
+  # this: it refreshes an OAuth token against auth.ecobee.com within
+  # ~25s of startup, and on NameResolutionError it gives up for good.
+  #
+  # This bites on every power event, because HA races Pi-hole on the way
+  # back up. CoreDNS forwards only to Pi-hole (deliberately -- it stops
+  # pods bypassing DNS filtering, see core#59), so while Pi-hole is still
+  # starting, pods have no resolution at all. Hit twice: 2026-08-04 and
+  # again 2026-08-07 during the brownout cycling.
+  #
+  # Fails OPEN: after ~5 minutes it starts HA regardless, so a genuine
+  # DNS outage degrades HA rather than preventing it from running at all.
+  - name: wait-for-dns
+    image: busybox:1.37
+    command: ["/bin/sh", "-c"]
+    args:
+      - |
+        for i in $(seq 1 60); do
+          if nslookup "${DNS_CANARY:-github.com}" >/dev/null 2>&1; then
+            echo "DNS ready after $((i*5))s"
+            exit 0
+          fi
+          echo "waiting for DNS ($i/60)"
+          sleep 5
+        done
+        echo "WARNING: DNS still unresolvable after 5m - starting anyway"
+        exit 0
+    env:
+      - name: DNS_CANARY
+        value: "github.com"
+    resources:
+      requests:
+        cpu: "10m"
+        memory: "16Mi"
+      limits:
+        cpu: "100m"
+        memory: "64Mi"
+
   - name: trust-internal-ca
     image: ghcr.io/home-assistant/home-assistant:2026.7.0
     command: ["/bin/sh", "-c"]
