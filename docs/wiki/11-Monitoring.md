@@ -95,6 +95,92 @@ The stack is deployed through ArgoCD using the kube-prometheus manifests, with a
 ![btop-Dashboard.png](images/btop-Dashboard.png)
 
 ![accent-divider.svg](images/accent-divider.svg)
+## UPS Monitoring (NUT)
+
+A Phoenixtec/Voltronic "Smart-Battery" UPS (USB `06da:ffff`) is attached to
+yoda and monitored by **Network UPS Tools** via the `usbhid-ups` driver.
+Deployed by `ansible/tasks/nut_ups_deploy.yml`, enabled with
+`manual_install_nut_ups` in `config.yml`.
+
+### Monitor only - by design
+
+`nut-monitor` is **disabled and masked**, so no power event can trigger an
+automatic shutdown. This is deliberate: the readings were proven first, and
+coordinated cluster shutdown (ordering workers before the control plane,
+stopping Ceph OSDs cleanly) is a separate piece of work that has not been
+attempted. Masking makes an accidental cluster poweroff impossible rather
+than merely unconfigured.
+
+Home Assistant consumes `upsd` through the NUT integration. HA runs
+`hostNetwork` pinned to yoda, so `127.0.0.1:3493` reaches it with no service
+or ingress involved.
+
+### The USB quirk that looks like dying hardware
+
+With nothing polling it, this UPS **resets its USB HID interface every ~151
+seconds** - 108 re-enumerations in 4.5 hours, the device number climbing on
+every cycle. It is not the cable and not Pi 5 USB power. Once `usbhid-ups`
+holds the interface open it stops completely (0 disconnects across a window
+covering ~1.6 expected cycles).
+
+> If the UPS starts flapping again, confirm `nut-driver@homelab-ups` is
+> actually running **before** suspecting hardware.
+
+### Measured runtime (2026-08-08, full cluster load)
+
+A controlled mains-pull from 92% to 24%, sampled every 60s (70 samples):
+
+```
+92→82  1.00 %/min      overall     0.992 %/min
+82→72  1.00 %/min      full 100→0  101 min
+72→62  0.95 %/min
+62→52  1.00 %/min      >=50%       0.987 %/min
+52→42  1.00 %/min      <50%        0.999 %/min
+42→32  1.00 %/min
+32→24  1.00 %/min
+```
+
+**Discharge is linear across the entire range** - no knee below 50%, so a
+linear projection is trustworthy anywhere. The UPS's own `battery.runtime`
+tracked measured reality within 1-3 minutes at every sampled point.
+
+Caveat: `battery.runtime` is **charge-derived, not load-aware** (roughly
+`charge% x 1 min`). It matches today because the cluster happens to draw
+~1%/min. Add hardware and the estimate silently becomes optimistic while
+actual runtime shortens - drive any future threshold off `battery.charge`
+plus a re-measured rate, not off `battery.runtime`.
+
+### Key numbers for a future shutdown policy
+
+| Value | Measured |
+|-------|----------|
+| Runtime from full | **101 min** |
+| Discharge rate | **~1.0 %/min** |
+| `LB` (low battery) asserted at | **29%** (~29 min remaining) |
+
+The UPS raises `LB` at 29%, which is generous - a full cluster shutdown
+needs perhaps 3-5 minutes. If coordinated shutdown is ever enabled, `LB`
+alone is a sound trigger with a wide margin; no custom percentage threshold
+is required.
+
+### Available data is limited
+
+Only `battery.charge`, `battery.runtime`, and `ups.status` are reported.
+There is **no load, input voltage, or output voltage** - so no brownout
+detection, which matters given that a weak 120V leg caused the 2026-08-07
+flickering. `battery.voltage` and `battery.runtime` ship **disabled** in the
+HA integration and must be enabled by hand.
+
+### Verifying
+
+```bash
+ssh pi@192.168.1.95 'upsc homelab-ups'
+```
+
+`ups.status: OL` = on mains, `OB DISCHRG` = on battery, trailing `LB` = low
+battery. If `upsc` errors, check `nut-driver@homelab-ups` and `nut-server`.
+
+![accent-divider.svg](images/accent-divider.svg)
 ## See Also
 
 - **[[10-Benchmarking]]** - Performance testing and metrics
