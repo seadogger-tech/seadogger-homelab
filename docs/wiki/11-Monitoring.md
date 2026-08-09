@@ -180,6 +180,93 @@ ssh pi@192.168.1.95 'upsc homelab-ups'
 `ups.status: OL` = on mains, `OB DISCHRG` = on battery, trailing `LB` = low
 battery. If `upsc` errors, check `nut-driver@homelab-ups` and `nut-server`.
 
+### The dashboard card
+
+Lives on the **HomeLab view** of the `dashboard-family` dashboard. One
+`vertical-stack` occupying a full-width grid slot (`columns: 36`):
+
+```
+vertical-stack
+├── entities            Status · Runtime remaining · Charge
+└── horizontal-stack
+    ├── gauge           Battery  (0-100 %)
+    └── gauge           Runtime  (0-120 min)
+```
+
+**Every threshold is minutes or the UPS's own `LB` flag - no percentages.**
+Charge % is displayed but never decided on: a percentage is a fuel gauge,
+minutes are what you act on. As the pack ages, 90% of a degraded battery may
+only be 60 minutes, and thresholds written in percent would silently rot.
+
+| Element | Condition | Colour |
+|---------|-----------|--------|
+| Battery gauge + all borders | `LB` asserted | 🔴 `#e53935` |
+| | On battery | 🟠 `#ff8f00` |
+| | On mains | 🟢 `#43a047` |
+| Runtime gauge + its border | `LB` asserted | 🔴 `#e53935` |
+| | <= 60 min | 🟠 `#ff8f00` |
+| | > 60 min | 🟢 `#43a047` |
+
+**Pulse** (battery gauge only, 2.5s fade to 30% opacity): `LB` asserted, or
+charging with < 90 min runtime. Red pulse = act now; green pulse = mains is
+back but the reserve has not returned.
+
+`LB` is the single definition of "critical" for both gauges. It is the UPS's
+own judgement and moves as the battery degrades - a pack that starts
+asserting `LB` at 45 minutes instead of 29 turns the card red at the right
+moment with no edit. **60 minutes** is the only hand-chosen number, and it is
+a preference ("warn me before I'm down to an hour"), not a hardware claim.
+
+### How the colours actually work (card-mod)
+
+Three non-obvious things, each of which cost a failed attempt:
+
+1. **Do not override `--gauge-color`.** HA sets it *inline* on the gauge
+   element, so a `ha-card { --gauge-color: ... }` rule loses the cascade and
+   the gauge falls back to the theme default (purple).
+2. **Override what the severity bands resolve to instead.** HA maps
+   `severity` to `var(--error-color)` / `var(--warning-color)` /
+   `var(--success-color)`. Redefining those on `ha-card` works because the
+   inline `var()` resolves through the cascade.
+3. **Pin the gauge to a single band** so the template owns the colour
+   outright - `severity: {red: -1, yellow: 0, green: <max+1>}` puts every
+   value in the "yellow" band, then `--warning-color` is set from Jinja.
+
+```yaml
+severity: {red: -1, yellow: 0, green: 121}
+card_mod:
+  style: |
+    {% set rt = states("sensor.homelab_ups_battery_runtime") | int(0) %}
+    {% set lb = "LB" in states("sensor.homelab_ups_status_data") %}
+    {% set rcol = "#e53935" if lb else ("#ff8f00" if rt <= 60 else "#43a047") %}
+    ha-card {
+      border: 2px solid {{ rcol }};
+      --warning-color: {{ rcol }};
+    }
+```
+
+`LB` is read from `sensor.homelab_ups_status_data` (raw NUT flags such as
+`OB DISCHRG LB`) rather than the friendly `sensor.homelab_ups_status`, and
+matched as a substring so no status combination is missed.
+
+### Editing it
+
+**Use the WebSocket API, not `/config/.storage/*`.** Home Assistant holds
+the entity registry in memory and flushes it over file edits on shutdown -
+enabling two NUT sensors by editing `core.entity_registry` was silently
+reverted. Dashboard (`lovelace.*`) edits happen to survive, but only because
+HA rewrites those solely on UI changes; that is luck, not a guarantee.
+
+`sensor.homelab_ups_battery_runtime` is displayed in **minutes** via a
+registry option (`unit_of_measurement: min`, `suggested_display_precision: 0`),
+not a template - NUT reports seconds. This converts everywhere, including
+history graphs.
+
+> When changing the unit of a sensor, check every template that referenced
+> it. The on-battery banner kept dividing by 60 after the switch and showed
+> "2 min" instead of 106. Gauges and entity rows were immune because they do
+> no arithmetic.
+
 ![accent-divider.svg](images/accent-divider.svg)
 ## See Also
 
