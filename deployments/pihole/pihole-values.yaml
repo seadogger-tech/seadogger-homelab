@@ -45,8 +45,23 @@ doh:
   repository: "crazymax/cloudflared"
   tag: "2025.9.1"
   pullPolicy: IfNotPresent
+  # DOH_UPSTREAM was a NO-OP -- the image never reads that name, so cloudflared
+  # ran on its built-in defaults (1.1.1.1 + 1.0.0.1) with no --upstream flag on
+  # the command line. The correct variable is TUNNEL_DNS_UPSTREAM.
+  #
+  # Those defaults look like redundancy but are the SAME PROVIDER on the same
+  # anycast network, so they fail together -- which is exactly what happened on
+  # 2026-08-10: both Cloudflare addresses unreachable for 13m33s, taking house
+  # DNS with them.
+  #
+  # Listing three independent operators means a single provider outage costs a
+  # retry instead of the house. IPs are used deliberately rather than hostnames
+  # (dns.quad9.net, dns.google): a hostname would need DNS resolved before it
+  # could serve DNS, which is the bootstrap deadlock this is meant to survive.
+  # Verified 2026-08-10 that all three certs carry IP SANs for these addresses
+  # and answer RFC 8484 wire-format POSTs with HTTP 200.
   envVars: {
-    DOH_UPSTREAM: "https://1.1.1.1/dns-query"
+    TUNNEL_DNS_UPSTREAM: "https://1.1.1.1/dns-query,https://9.9.9.9/dns-query,https://8.8.8.8/dns-query"
   }
 
   # Probes must NOT gate on upstream reachability.
