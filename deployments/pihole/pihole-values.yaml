@@ -49,6 +49,52 @@ doh:
     DOH_UPSTREAM: "https://1.1.1.1/dns-query"
   }
 
+  # Probes must NOT gate on upstream reachability.
+  #
+  # The chart default for BOTH probes is
+  #   nslookup -po=5053 cloudflare.com 127.0.0.1
+  # which only succeeds if Cloudflare is reachable. That turns any upstream
+  # blip into a total house outage, twice over:
+  #
+  #   readiness fails -> the pod leaves the Service endpoints -> the MetalLB
+  #     VIP 192.168.1.250 has NO backend. Pi-hole is still running and could
+  #     answer thousands of cached queries, but nothing can reach it.
+  #   liveness fails  -> kubelet restarts cloudflared every 100s
+  #     (failureThreshold 10 x period 10s), and each restart drops in-flight
+  #     queries. Restarting cannot fix an unreachable upstream.
+  #
+  # 2026-08-10: Cloudflare DoH was unreachable for 13m33s (01:02:12 ->
+  # 01:15:45Z, 5,628 errors, both 1.1.1.1 and 1.0.0.1). cloudflared was
+  # killed 10 times and the entire house lost DNS - not because Pi-hole
+  # failed, but because the probes removed it from service.
+  #
+  # A TCP check on 5053 detects the only failure a restart can actually
+  # repair: the process being dead or wedged and not listening. cloudflared
+  # listens on both tcp and udp 5053 (verified), so this is a valid check.
+  # Upstream outages now degrade DNS to cache-only instead of removing it.
+  probes:
+    liveness:
+      enabled: true
+      probe:
+        # exec: null is required - Helm deep-merges values, so without it the
+        # chart's default nslookup handler survives and the rendered probe has
+        # BOTH exec and tcpSocket, which the API server rejects.
+        exec: null
+        tcpSocket:
+          port: 5053
+      initialDelaySeconds: 60
+      failureThreshold: 6      # 60s of a dead socket before restarting
+      timeoutSeconds: 5
+    readiness:
+      enabled: true
+      probe:
+        exec: null
+        tcpSocket:
+          port: 5053
+      initialDelaySeconds: 60
+      failureThreshold: 3
+      timeoutSeconds: 5
+
 persistentVolumeClaim:
   enabled: true
   size: 10Gi
