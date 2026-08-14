@@ -7,7 +7,10 @@ controllers:
       hostNetwork: true
       dnsPolicy: ClusterFirstWithHostNet
       annotations:
-        backup.velero.io/backup-volumes-excludes: media
+        # media = the read-only mount of Nextcloud's data (3.3 TiB) - Nextcloud
+        # owns it and backs it up itself; including it here would duplicate the
+        # entire library. cache = regenerable transcode scratch.
+        backup.velero.io/backup-volumes-excludes: media,cache
       securityContext:
         runAsUser: 1000
         runAsGroup: 1000
