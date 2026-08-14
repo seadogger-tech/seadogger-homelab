@@ -1,27 +1,69 @@
+# Open WebUI - Helm values
+#
+# CRITICAL: fullnameOverride must stay set to `open-webui`.
+#
+# Chart 7.6.0 named resources with the `name` helper (-> `open-webui`). Chart 12
+# and later switched to `fullname`, which for release `openwebui` + chart
+# `open-webui` renders as `openwebui-open-webui`. Without the override, an
+# upgrade renames the PVC, Service and workload all at once: Open WebUI comes up
+# on a brand-new empty volume and asks you to create an admin account (which
+# looks like authentication broke, but is really an empty database), the
+# IngressRoute pointing at `open-webui:8080` stops resolving, and ArgoCD prunes
+# the old PVC. This is what forced the rollback from chart 12.8.1 in March 2026.
+# The PV reclaim policy is Retain, which is the only reason that wasn't data loss.
+fullnameOverride: open-webui
+
 ollama:
   enabled: false
 
 pipelines:
   enabled: false
 
-# Disable automatic model downloads on startup (causes hangs on Pi)
-env:
+# NOTE: the key is `extraEnvVars`, not `env`. An earlier change to `env` was
+# silently inert - the chart never read it, so ENABLE_RAG_WEB_SEARCH and
+# ENABLE_MODEL_FILTER were never actually applied.
+#
+# Setting this list also replaces the chart's default extraEnvVars, which is
+# just the OPENAI_API_KEY placeholder `0p3n-w3bu!` - nothing worth keeping.
+extraEnvVars:
+  # Disable automatic model downloads on startup (causes hangs on Pi)
   - name: ENABLE_RAG_WEB_SEARCH
     value: "False"
   - name: ENABLE_MODEL_FILTER
     value: "False"
+  # Without an explicit key, start.sh writes a generated one to the RELATIVE
+  # path `.webui_secret_key`, which resolves to /app/backend/.webui_secret_key -
+  # the container overlay, not the PVC mounted at /app/backend/data. It is
+  # therefore regenerated on every pod recreation, invalidating every session
+  # and logging all users out on each restart and upgrade. Sourcing it from a
+  # Secret makes logins survive.
+  #
+  # The Secret is created out-of-band (see openwebui_deploy.yml) so the value
+  # never lands in this public repo, and so ArgoCD does not manage or prune it.
+  - name: WEBUI_SECRET_KEY
+    valueFrom:
+      secretKeyRef:
+        name: openwebui-secret-key
+        key: WEBUI_SECRET_KEY
 
 persistence:
   enabled: true
   size: 250Gi
   storageClass: "ceph-block-data"
-  accessMode: ReadWriteMany
+  # Must match the existing PVC exactly - accessModes is immutable, and a
+  # mismatch makes ArgoCD fail every sync while reporting Healthy. The previous
+  # `accessMode: ReadWriteMany` (singular) was both the wrong key and the wrong
+  # value: this is RBD, which is ReadWriteOnce.
+  accessModes:
+    - ReadWriteOnce
 
-# Service configuration
 service:
   type: ClusterIP
+  # The IngressRoute targets open-webui:8080, so the service port stays 8080.
+  # `targetPort` is not a key this chart reads; the container port is
+  # `containerPort`.
   port: 8080
-  targetPort: 8080
+  containerPort: 8080
 
 ingress:
   enabled: false

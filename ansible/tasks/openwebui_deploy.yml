@@ -4,7 +4,40 @@
   ansible.builtin.set_fact:
     KUBECONFIG: /etc/rancher/k3s/k3s.yaml
 
-# Step 2: Create ArgoCD OpenWebUI Application
+# Step 2a: Ensure a persistent JWT signing key exists before the app starts.
+#
+# Without WEBUI_SECRET_KEY set, Open WebUI's start.sh generates one into the
+# relative path `.webui_secret_key`, which lands on the container's overlay
+# filesystem rather than the PVC mounted at /app/backend/data. It is therefore
+# regenerated on every pod recreation, silently logging every user out on each
+# restart and upgrade. Created here rather than in the Helm values so the value
+# never lands in the public repo, and so ArgoCD neither manages nor prunes it.
+- name: Check for existing OpenWebUI secret key
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ KUBECONFIG }}"
+    api_version: v1
+    kind: Secret
+    name: openwebui-secret-key
+    namespace: openwebui
+  register: openwebui_secret_key
+  failed_when: false
+
+- name: Create OpenWebUI secret key (only if absent - never rotate in place)
+  kubernetes.core.k8s:
+    kubeconfig: "{{ KUBECONFIG }}"
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: openwebui-secret-key
+        namespace: openwebui
+      type: Opaque
+      stringData:
+        WEBUI_SECRET_KEY: "{{ lookup('ansible.builtin.password', '/dev/null', length=64, chars=['ascii_letters', 'digits']) }}"
+  when: openwebui_secret_key.resources | default([]) | length == 0
+
+# Step 2b: Create ArgoCD OpenWebUI Application
 - name: Create OpenWebUI ArgoCD Application
   ansible.builtin.k8s:
     kubeconfig: "{{ KUBECONFIG }}"
@@ -20,7 +53,11 @@
         source:
           repoURL: https://open-webui.github.io/helm-charts
           chart: open-webui
-          targetRevision: "7.6.0"
+          # Chart 16.0.0 = Open WebUI 0.11.0. Upgrading past chart 12 REQUIRES
+          # fullnameOverride in the values file - see the note there before
+          # changing this. Alembic migrations are one-way, so a downgrade means
+          # restoring the PVC from a Velero backup, not just moving this pin.
+          targetRevision: "16.0.0"
           helm:
               valueFiles:
                 - https://raw.githubusercontent.com/seadogger-tech/seadogger-homelab/master/deployments/openwebui/openwebui-values.yaml
