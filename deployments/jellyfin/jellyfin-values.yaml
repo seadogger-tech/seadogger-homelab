@@ -15,6 +15,17 @@ controllers:
         runAsUser: 1000
         runAsGroup: 1000
         fsGroup: 1000
+        # Without this, kubelet recursively chowns every fsGroup-eligible volume
+        # on each start - including the media mount, which is Nextcloud's 3.3 TiB
+        # library. That walk was taking minutes per restart and doing sustained
+        # metadata writes against Nextcloud's data.
+        #
+        # OnRootMismatch checks the volume root and skips the walk when it already
+        # matches. It does today: Nextcloud's data tree is uid 33 / gid 1000 mode
+        # 2770, already chgrp'd to 1000 by earlier runs of this very policy, and
+        # the setgid bit means new files keep inheriting gid 1000. So Jellyfin
+        # retains group access and nothing needs re-chowning.
+        fsGroupChangePolicy: OnRootMismatch
         # Group 33 = www-data, Group 44 = video (for V4L2 hardware acceleration)
         supplementalGroups: [33, 44]
     containers:
