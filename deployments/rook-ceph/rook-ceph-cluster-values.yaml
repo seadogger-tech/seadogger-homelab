@@ -225,13 +225,25 @@ cephFileSystems:
       metadataServer:
         activeCount: 1
         activeStandby: true
+        # These MUST stay in step with `mds_cache_memory_limit` in Ceph's own
+        # config. They were 256Mi against a 4Gi cache limit - a 16x mismatch.
+        # The MDS grew its metadata cache toward 4Gi exactly as configured, hit
+        # the 256Mi cgroup ceiling, and was OOMKilled: 35 restarts on mds-a and
+        # 33 on mds-b over 18 days, each one failing CephFS over to the standby
+        # and stalling all 11 clients. It was also a steady source of dead
+        # containers, whose overlay layers are what filled the node disks.
+        #
+        # Raising the container to 4Gi is not an option on 8GB Pi nodes, so the
+        # cache limit was lowered to 1Gi instead (see rook_ceph_deploy_part2)
+        # and the container given 1.5Gi - cache is not the MDS's only memory
+        # use, so the container needs headroom above the cache figure.
         resources:
           limits:
-            cpu: "200m"
-            memory: "256Mi"
+            cpu: "1000m"
+            memory: "1536Mi"
           requests:
             cpu: "100m"
-            memory: "128Mi"
+            memory: "512Mi"
         placement:
           nodeAffinity:
             requiredDuringSchedulingIgnoredDuringExecution:

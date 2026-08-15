@@ -347,7 +347,7 @@ incident and the chart-pinning fix.
 - Separately, actual CPU **requests** (not disk) were right-sized:
   Rook CSI plugin/provisioner containers (~1.1 cores freed, see
   ADR-010) and several idle-most-of-the-time app requests — jellyfin,
-  hermes, signal-cli, bedrock-gateway, minecraft pack-manager/UI
+  hermes, signal-cli, bedrock-gateway
   (~840m freed) — were lowered to match observed usage. OSD/mon/mgr/rgw
   requests were deliberately left untouched; they exist specifically to
   guarantee CPU during the kind of recovery burst this incident

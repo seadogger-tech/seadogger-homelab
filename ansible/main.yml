@@ -142,9 +142,6 @@
       import_tasks: tasks/traefik_dashboard_deploy.yml
       when: enable_traefik_dashboard | default(true)
 
-    - name: Deploy Minecraft Bedrock Server
-      import_tasks: tasks/minecraft_bedrock_deploy.yml
-      when: enable_minecraft_bedrock | default(true)
 
     # Host-level service, not a k8s workload - the UPS is on yoda's USB bus.
     # Ordered before Home Assistant because HA consumes upsd over the NUT
@@ -161,6 +158,3 @@
       import_tasks: tasks/mealie_deploy.yml
       when: enable_mealie | default(true)
 
-    - name: Deploy Basic Memory
-      import_tasks: tasks/basic_memory_deploy.yml
-      when: enable_basic_memory | default(true)

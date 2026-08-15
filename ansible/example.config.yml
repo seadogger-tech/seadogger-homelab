@@ -28,12 +28,10 @@ manual_install_prometheus: true
 manual_install_openwebui: true
 manual_install_nextcloud: true
 manual_install_jellyfin: true
-manual_install_minecraft_bedrock: true
 manual_install_traefik_dashboard: true
 manual_install_nextcloud_s3_backup: true
 manual_install_home_assistant: true
 manual_install_mealie: true
-manual_install_basic_memory: true
 manual_install_nut_ups: false
 
 # --- UPS Monitoring (NUT) ---
@@ -140,7 +138,6 @@ pod_cleanup_list:
   - { name: "openwebui", namespace: "openwebui", selector: "app.kubernetes.io/instance=openwebui", delete_pvc: true }
   - { name: "nextcloud", namespace: "nextcloud", selector: "app=nextcloud", delete_pvc: true }
   - { name: "jellyfin", namespace: "jellyfin", selector: "app=jellyfin", delete_pvc: true }
-  - { name: "minecraft-bedrock-server", namespace: "minecraft-bedrock", selector: "app=minecraft-bedrock-server", delete_pvc: true }
 
 # --- INFRASTRUCTURE CLEANUP ---
 run_infrastructure_cleanup: false
@@ -160,7 +157,6 @@ precook_namespaces:
   - { name: "bedrock-gateway" }
   - { name: "nextcloud" }
   - { name: "jellyfin" }
-  - { name: "minecraft-bedrock" }
 
 
 # ===================================================================================
@@ -194,10 +190,8 @@ enable_nextcloud: "{{ cold_start_stage_3_install_applications | bool and manual_
 enable_jellyfin: "{{ cold_start_stage_3_install_applications | bool and manual_install_jellyfin | bool }}"
 enable_jellyfin_secrets: "{{ cold_start_stage_3_install_applications | bool and manual_install_jellyfin | bool }}"
 enable_jellyfin_xmltv_proxy: "{{ cold_start_stage_3_install_applications | bool and manual_install_jellyfin | bool }}"
-enable_minecraft_bedrock: "{{ cold_start_stage_3_install_applications | bool and manual_install_minecraft_bedrock | bool }}"
 enable_traefik_dashboard: "{{ cold_start_stage_3_install_applications | bool and manual_install_traefik_dashboard | bool }}"
 enable_nextcloud_s3_backup: "{{ cold_start_stage_3_install_applications | bool and manual_install_nextcloud_s3_backup | bool }}"
 enable_home_assistant: "{{ cold_start_stage_3_install_applications | bool and manual_install_home_assistant | bool }}"
 enable_mealie: "{{ cold_start_stage_3_install_applications | bool and manual_install_mealie | bool }}"
-enable_basic_memory: "{{ cold_start_stage_3_install_applications | bool and manual_install_basic_memory | bool }}"
 enable_nut_ups: "{{ cold_start_stage_3_install_applications | bool and manual_install_nut_ups | bool }}"

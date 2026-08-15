@@ -168,6 +168,19 @@
   until: pools_exist.rc == 0
   changed_when: false
 
+# Ceph's own MDS cache limit must stay in step with the container memory limit
+# set in rook-ceph-cluster-values.yaml. Ceph defaults this to 4Gi, but the MDS
+# containers are capped far below that on 8GB Pi nodes - the MDS then grows its
+# cache toward 4Gi exactly as told, hits the cgroup ceiling, and is OOMKilled in
+# a loop. Observed: 35 restarts on mds-a, 33 on mds-b over 18 days, each one
+# failing CephFS over to the standby and briefly stalling every client.
+- name: Align MDS cache limit with the container memory limit
+  ansible.builtin.shell: |
+    POD="$(kubectl -n rook-ceph get pods -l app=rook-ceph-tools -o jsonpath='{.items[0].metadata.name}')"
+    kubectl -n rook-ceph exec "$POD" -- ceph config set mds mds_cache_memory_limit 1073741824
+  environment: "{{ env_vars }}"
+  changed_when: true
+
 - name: Unset all default StorageClasses
   ansible.builtin.shell: |
     for sc in $(kubectl get storageclass -o jsonpath='{.items[*].metadata.name}'); do
