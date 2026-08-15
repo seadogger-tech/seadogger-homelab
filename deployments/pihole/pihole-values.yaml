@@ -23,11 +23,10 @@ serviceDns:
     # one protocol - which takes the cluster's DNS with it, since nodes resolve
     # through Pi-hole.
     #
-    # Migrating prefix: metallb.universe.tf/* is deprecated in MetalLB 0.15
-    # ("Support might get removed in future versions"). Both are set during the
-    # transition so MetalLB never sees the two Services as unshared; the
-    # deprecated one is removed in a follow-up once the new key is confirmed.
-    metallb.universe.tf/allow-shared-ip: "pihole-shared-ip"
+    # Uses the metallb.io/* prefix. The old metallb.universe.tf/* form was
+    # deprecated in MetalLB 0.15 ("Support might get removed in future
+    # versions") and has been removed here - keeping it would have meant a
+    # routine MetalLB upgrade silently splitting the shared IP.
     metallb.io/allow-shared-ip: "pihole-shared-ip"
 
 # DHCP service configuration
