@@ -21,6 +21,15 @@ spec:
             runAsUser: 33
             runAsGroup: 33
             fsGroup: 33
+            # Without this, every nightly run recursively rewrites group
+            # ownership across the whole 3.3 TiB Nextcloud volume before the
+            # container starts - observed mid-run at "processed 30252 files".
+            # OnRootMismatch checks the volume root and skips the walk when it
+            # already matches, which it does once Jellyfin also uses fsGroup 33
+            # (see jellyfin-values.yaml). The two previously disagreed - 33 here
+            # against 1000 there - so each side chowned the volume back and
+            # forth daily, and neither could ever skip the walk.
+            fsGroupChangePolicy: OnRootMismatch
           containers:
           - name: s3-sync
             image: amazon/aws-cli:latest

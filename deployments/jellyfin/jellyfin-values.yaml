@@ -14,7 +14,16 @@ controllers:
       securityContext:
         runAsUser: 1000
         runAsGroup: 1000
-        fsGroup: 1000
+        # fsGroup MUST match the nextcloud-s3-backup CronJob, which uses 33.
+        # This was 1000, so the two recursively chowned the shared 3.3 TiB
+        # Nextcloud volume against each other - Jellyfin to 1000 on every
+        # restart, the CronJob back to 33 every night at 02:00. Neither could
+        # ever skip the walk, because the root never matched what it wanted.
+        #
+        # 33 is the correct value: Nextcloud owns this data as 33:33 and the
+        # setgid bit propagates gid 33 to new files. Jellyfin still runs as uid
+        # 1000 and reaches the data through supplementalGroups below.
+        fsGroup: 33
         # Without this, kubelet recursively chowns every fsGroup-eligible volume
         # on each start - including the media mount, which is Nextcloud's 3.3 TiB
         # library. That walk was taking minutes per restart and doing sustained
