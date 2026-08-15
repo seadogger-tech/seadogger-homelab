@@ -181,6 +181,22 @@
   environment: "{{ env_vars }}"
   changed_when: true
 
+# Same class of fault as the MDS above, and considerably worse in effect.
+# Ceph defaults osd_memory_target to 4Gi while the OSD containers are capped at
+# 3Gi (rook-ceph-cluster-values.yaml). Left at the default the OSDs grow toward
+# 4Gi and are OOM-killed at the cgroup wall - 739 kills on one node alone, 43
+# OSD restarts, each one dropping a replica on a 3-host cluster where
+# size=3/min_size=2 leaves no rebuild headroom.
+#
+# 2Gi target sits comfortably inside the 3Gi container limit, since the target
+# governs BlueStore cache rather than total process RSS.
+- name: Align OSD memory target with the container memory limit
+  ansible.builtin.shell: |
+    POD="$(kubectl -n rook-ceph get pods -l app=rook-ceph-tools -o jsonpath='{.items[0].metadata.name}')"
+    kubectl -n rook-ceph exec "$POD" -- ceph config set osd osd_memory_target 2147483648
+  environment: "{{ env_vars }}"
+  changed_when: true
+
 - name: Unset all default StorageClasses
   ansible.builtin.shell: |
     for sc in $(kubectl get storageclass -o jsonpath='{.items[*].metadata.name}'); do

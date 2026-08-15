@@ -90,9 +90,27 @@ cephClusterSpec:
         cpu: "100m"      # was 500m; measured 26-36m
         memory: "512Mi"  # unchanged -- measured 445-459Mi, correctly sized
     osd:
+      # The limit MUST stay above `osd_memory_target` (set to 2Gi in
+      # rook_ceph_deploy_part1.yml), not merely above measured usage.
+      #
+      # This was limit 2Gi against a 4Gi osd_memory_target - Ceph's default.
+      # The OSDs grew toward 4Gi exactly as configured and were OOM-killed at
+      # the 2Gi cgroup wall, over and over: 739 OOM kills on rey, 256 on yoda,
+      # 43 OSD restarts between the three. Every kill drops an OSD, and with
+      # size=3/min_size=2 across only three hosts that means zero redundancy
+      # until it comes back. It was also the main source of journald volume -
+      # each kill writes a kernel stack trace, which is why the nodes with the
+      # most kills sat pinned at the 500MB journal cap.
+      #
+      # osd_memory_target governs BlueStore cache, not total RSS, so the
+      # container needs roughly 30-50% headroom above it for everything else
+      # the process allocates. 2Gi target / 3Gi limit gives that.
+      #
+      # The request stays at 2Gi: it already matches measured steady state, and
+      # raising it would add scheduling pressure on nodes already ~87% committed.
       limits:
         cpu: "1"
-        memory: "2Gi"
+        memory: "3Gi"    # was 2Gi; must exceed osd_memory_target (2Gi) + overhead
       requests:
         cpu: "150m"      # was 500m; measured 24-44m
         memory: "2Gi"    # was 1Gi; measured 1.6-1.9Gi -- request now honest
