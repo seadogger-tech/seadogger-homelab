@@ -16,7 +16,19 @@ serviceDns:
   type: LoadBalancer
   externalTrafficPolicy: Local
   annotations:
+    # This sharing key is what puts pihole-dns-tcp and pihole-dns-udp on the
+    # SAME LoadBalancer IP. DNS needs TCP and UDP on port 53 at one address,
+    # and Kubernetes will not put both protocols in a single Service here.
+    # Lose the key and MetalLB hands them separate IPs, breaking resolution on
+    # one protocol - which takes the cluster's DNS with it, since nodes resolve
+    # through Pi-hole.
+    #
+    # Migrating prefix: metallb.universe.tf/* is deprecated in MetalLB 0.15
+    # ("Support might get removed in future versions"). Both are set during the
+    # transition so MetalLB never sees the two Services as unshared; the
+    # deprecated one is removed in a follow-up once the new key is confirmed.
     metallb.universe.tf/allow-shared-ip: "pihole-shared-ip"
+    metallb.io/allow-shared-ip: "pihole-shared-ip"
 
 # DHCP service configuration
 serviceDHCP:

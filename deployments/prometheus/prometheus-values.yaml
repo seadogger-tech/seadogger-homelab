@@ -19,6 +19,7 @@ grafana:
     loadBalancerIP: "192.168.1.246"
     annotations:
       metallb.universe.tf/allow-shared-ip: prometheus
+      metallb.io/allow-shared-ip: prometheus
   persistence:
     enabled: true
     storageClass: "ceph-block-data"
@@ -42,6 +43,7 @@ prometheusOperator:
     port: 9090
     annotations:
       metallb.universe.tf/allow-shared-ip: prometheus
+      metallb.io/allow-shared-ip: prometheus
   resources:
     limits:
       cpu: 200m
@@ -78,6 +80,7 @@ alertmanager:
     loadBalancerIP: "192.168.1.245"
     annotations:
       metallb.universe.tf/allow-shared-ip: prometheus
+      metallb.io/allow-shared-ip: prometheus
 
 nodeExporter:
   resources:
