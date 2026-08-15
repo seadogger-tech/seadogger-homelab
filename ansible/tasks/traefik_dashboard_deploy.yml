@@ -19,6 +19,21 @@
         valuesContent: |
           additionalArguments:
             - "--api.insecure=true"
+          # Traefik ships with no resource requests, which puts it in the
+          # BestEffort QoS class - first to be evicted when a node runs out of
+          # memory, ahead of whatever caused the pressure. Traefik is the
+          # ingress for every service in the cluster, so it is the last thing
+          # that should be sacrificed to reclaim memory.
+          #
+          # Sized against observed steady state (~75 MiB) with headroom. The
+          # limit is generous on purpose: throttling or OOM-killing the ingress
+          # to save a little memory trades a small problem for a total outage.
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              memory: 512Mi
 
 # Step 3: Wait for Traefik to restart with new config
 - name: Wait for Traefik deployment to be ready

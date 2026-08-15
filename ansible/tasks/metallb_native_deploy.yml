@@ -19,6 +19,19 @@
     state: present
     kubeconfig: "{{ KUBECONFIG }}"
 
+# Resource requests are set deliberately, and not for capacity reasons.
+#
+# The MetalLB chart ships no requests, which makes every speaker and the
+# controller QoS class BestEffort - the first thing the kubelet evicts when a
+# node runs out of memory, ahead of whatever actually caused the pressure.
+# Losing all four speakers means losing LoadBalancer announcement for every
+# service in the cluster, including Pi-hole's DNS on 192.168.1.250, which the
+# nodes themselves resolve through.
+#
+# Modest requests move them to Burstable so they are no longer first in line.
+# Sized against observed steady state (speakers 69-95 MiB, controller 64 MiB)
+# with headroom; limits are deliberately generous because a speaker being
+# OOM-killed is worse than one briefly using more than expected.
 - name: Deploy MetalLB with Helm (atomic + wait; no hard sleeps)
   kubernetes.core.helm:
     name: metallb
@@ -29,6 +42,21 @@
     atomic: true
     wait: true
     wait_timeout: 600s
+    values:
+      controller:
+        resources:
+          requests:
+            cpu: 25m
+            memory: 96Mi
+          limits:
+            memory: 512Mi
+      speaker:
+        resources:
+          requests:
+            cpu: 25m
+            memory: 128Mi
+          limits:
+            memory: 512Mi
 
 # --- Replace fixed sleep with CRD establishment checks ---
 - name: Define required MetalLB CRDs
