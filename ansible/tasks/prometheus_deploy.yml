@@ -56,6 +56,23 @@
         destination:
           server: https://kubernetes.default.svc
           namespace: monitoring
+        # kube-prometheus ships an HA topology - 2 Prometheus, 3 Alertmanager -
+        # which costs ~1.4 GiB on a 4-node Pi cluster for redundancy nobody is
+        # consuming here. Replicas are dropped to 1 below.
+        #
+        # The upstream manifests are synced directly (no values file, and no
+        # kustomization.yaml upstream to overlay), so selfHeal would revert any
+        # replica change within minutes. ignoreDifferences on just that field
+        # lets the scale-down stick while everything else stays managed.
+        ignoreDifferences:
+          - group: monitoring.coreos.com
+            kind: Prometheus
+            jsonPointers:
+              - /spec/replicas
+          - group: monitoring.coreos.com
+            kind: Alertmanager
+            jsonPointers:
+              - /spec/replicas
         syncPolicy:
           automated:
             prune: true
@@ -73,6 +90,39 @@
   until: monitoring_ns.resources | length > 0
   retries: 30
   delay: 10
+
+# Step 5b: Scale the HA topology down to single replicas.
+#
+# Upstream kube-prometheus runs 2 Prometheus + 3 Alertmanager. On this cluster
+# that is ~1.4 GiB of RAM for redundancy of metrics nobody consumes, on nodes
+# that need the headroom for Ceph OSDs and mons. Measured before/after:
+# monitoring namespace 3193 MiB -> 1771 MiB.
+#
+# Paired with ignoreDifferences on the Application above - without that, ArgoCD
+# selfHeal reverts these within minutes. prometheus-adapter is deliberately left
+# alone: it serves v1beta1.metrics.k8s.io, which is what `kubectl top` and any
+# HPA read. It only costs ~91 MiB and removing it would hand that API back to
+# kube-system/metrics-server, which is a needless risk for the saving.
+- name: Scale Prometheus and Alertmanager to single replicas
+  kubernetes.core.k8s:
+    kubeconfig: "{{ KUBECONFIG }}"
+    state: patched
+    api_version: monitoring.coreos.com/v1
+    kind: "{{ item.kind }}"
+    name: "{{ item.name }}"
+    namespace: monitoring
+    definition:
+      spec:
+        replicas: 1
+  loop:
+    - { kind: "Prometheus", name: "k8s" }
+    - { kind: "Alertmanager", name: "main" }
+  loop_control:
+    label: "{{ item.kind }}/{{ item.name }} -> replicas=1"
+  retries: 10
+  delay: 15
+  register: prom_scale
+  until: prom_scale is succeeded
 
 # Step 6: Create LoadBalancer Services
 - name: Create Prometheus LoadBalancer Service
