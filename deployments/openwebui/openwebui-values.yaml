@@ -46,6 +46,29 @@ extraEnvVars:
         name: openwebui-secret-key
         key: WEBUI_SECRET_KEY
 
+# Chart 16 added a Redis deployment for websocket support. It ships with no
+# container limit AND no Redis maxmemory, so it is unbounded in both
+# directions - nothing inside Redis caps it, and nothing outside does either.
+# It only holds ephemeral websocket session state (5 MiB in practice), but an
+# unbounded cache on an 8GB node is the same shape of fault as the Ceph
+# daemons: no ceiling until something dies.
+#
+# maxmemory is set below the container limit so Redis evicts its own keys
+# rather than being OOM-killed - eviction is graceful, the kernel is not.
+websocket:
+  redis:
+    args:
+      - "--maxmemory"
+      - "192mb"
+      - "--maxmemory-policy"
+      - "allkeys-lru"
+    resources:
+      requests:
+        cpu: 10m
+        memory: 32Mi
+      limits:
+        memory: 256Mi
+
 persistence:
   enabled: true
   size: 250Gi

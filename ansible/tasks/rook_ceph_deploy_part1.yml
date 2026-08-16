@@ -174,10 +174,28 @@
 # cache toward 4Gi exactly as told, hits the cgroup ceiling, and is OOMKilled in
 # a loop. Observed: 35 restarts on mds-a, 33 on mds-b over 18 days, each one
 # failing CephFS over to the standby and briefly stalling every client.
-- name: Align MDS cache limit with the container memory limit
+# NOTE: Rook already auto-tunes mds_cache_memory_limit per-daemon from the
+# container limit - with a 1536Mi limit it sets mds.ceph-fs-a/b to 768Mi, and
+# per-daemon config beats this global value in Ceph. So this task is a fallback
+# for the case where Rook has not yet reconciled, not the thing that fixed the
+# MDS OOM loop; raising the container limit was. Kept because the Ceph default
+# of 4Gi is dangerous on these nodes if the per-daemon value is ever absent.
+- name: Set a safe global MDS cache fallback (Rook overrides this per-daemon)
   ansible.builtin.shell: |
     POD="$(kubectl -n rook-ceph get pods -l app=rook-ceph-tools -o jsonpath='{.items[0].metadata.name}')"
     kubectl -n rook-ceph exec "$POD" -- ceph config set mds mds_cache_memory_limit 1073741824
+  environment: "{{ env_vars }}"
+  changed_when: true
+
+# Mons get no such auto-tuning from Rook, so this one genuinely matters.
+# Ceph's default mon_memory_target is 2Gi against a 1.5Gi container limit;
+# pinning it to 1Gi keeps it comfortably inside with room for non-cache RSS.
+# Latent rather than active - the mons run at ~485Mi with no OOM kills - but
+# a mon OOM costs quorum, which is the whole cluster rather than one replica.
+- name: Align mon memory target with the container memory limit
+  ansible.builtin.shell: |
+    POD="$(kubectl -n rook-ceph get pods -l app=rook-ceph-tools -o jsonpath='{.items[0].metadata.name}')"
+    kubectl -n rook-ceph exec "$POD" -- ceph config set mon mon_memory_target 1073741824
   environment: "{{ env_vars }}"
   changed_when: true
 

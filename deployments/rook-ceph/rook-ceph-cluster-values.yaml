@@ -83,9 +83,19 @@ cephClusterSpec:
         cpu: "150m"      # was 500m; measured 56-73m
         memory: "768Mi"
     mon:
+      # Ceph defaults mon_memory_target to 2Gi. Unlike the MDS, Rook does NOT
+      # auto-tune the mons from the container limit, so nothing reconciles the
+      # two - this was a 2Gi target against a 1Gi ceiling.
+      #
+      # It had not fired yet: the mons sit at 481-492Mi with zero OOM kills on
+      # any node. But it is the same fault that was killing the OSDs, and the
+      # mons are the worst place to leave it latent - losing quorum takes the
+      # entire cluster down, not one replica. mon_memory_target is pinned to 1Gi
+      # in rook_ceph_deploy_part1.yml and the limit raised to 1.5Gi to sit above
+      # it, matching the MDS pattern.
       limits:
         cpu: "1"
-        memory: "1Gi"
+        memory: "1536Mi"  # was 1Gi; must exceed mon_memory_target (1Gi) + overhead
       requests:
         cpu: "100m"      # was 500m; measured 26-36m
         memory: "512Mi"  # unchanged -- measured 445-459Mi, correctly sized
