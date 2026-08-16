@@ -10,7 +10,33 @@ cephClusterSpec:
   mon:
     count: 3
     allowMultiplePerNode: false
-    placement:
+
+  # Daemon placement. NOTE: this belongs at cephClusterSpec.placement.<daemon>,
+  # NOT nested inside the mon:/mgr: blocks. The CephCluster CRD silently drops
+  # unknown keys, so a `placement:` under `mon:` is accepted by Helm, written to
+  # the CR, stripped by the API server, and has no effect whatsoever -- which is
+  # how rook-ceph-mon-d ended up on the control plane (yoda) for months while
+  # this file claimed mons were pinned to the workers.
+  #
+  # Verify it actually took with:
+  #   kubectl get cephcluster -n rook-ceph rook-ceph -o jsonpath='{.spec.placement}'
+  # An empty result means the pin is not in effect.
+  #
+  # mons and mgrs are kept off yoda: it is the control-plane node with a 500GB
+  # NVMe and no OSD, so it has neither the storage role nor the spare headroom.
+  placement:
+    mon:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+            - matchExpressions:
+                - key: kubernetes.io/hostname
+                  operator: In
+                  values:
+                    - anakin.local
+                    - obiwan.local
+                    - rey.local
+    mgr:
       nodeAffinity:
         requiredDuringSchedulingIgnoredDuringExecution:
           nodeSelectorTerms:
@@ -43,17 +69,7 @@ cephClusterSpec:
     modules:
       - name: balancer
         enabled: true
-    placement:
-      nodeAffinity:
-        requiredDuringSchedulingIgnoredDuringExecution:
-          nodeSelectorTerms:
-            - matchExpressions:
-                - key: kubernetes.io/hostname
-                  operator: In
-                  values:
-                    - anakin.local
-                    - obiwan.local
-                    - rey.local
+    # placement for mgr lives at cephClusterSpec.placement.mgr (see above)
 
   # Requests right-sized 2026-08-05 against measured steady-state usage.
   # CPU was reserving ~4 cores cluster-wide that were never used: yoda and
