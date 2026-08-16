@@ -81,7 +81,7 @@ cephClusterSpec:
         memory: "1536Mi"
       requests:
         cpu: "150m"      # was 500m; measured 56-73m
-        memory: "768Mi"
+        memory: "512Mi"  # was 768Mi; measured 469-632Mi
     mon:
       # Ceph defaults mon_memory_target to 2Gi. Unlike the MDS, Rook does NOT
       # auto-tune the mons from the container limit, so nothing reconciles the
@@ -98,7 +98,11 @@ cephClusterSpec:
         memory: "1536Mi"  # was 1Gi; must exceed mon_memory_target (1Gi) + overhead
       requests:
         cpu: "100m"      # was 500m; measured 26-36m
-        memory: "512Mi"  # unchanged -- measured 445-459Mi, correctly sized
+        # 512Mi -> 256Mi. The mons measured 445-459Mi when mon_memory_target was
+        # at Ceph's 2Gi default; with the target pinned to 1Gi they settled at
+        # 70-92Mi. 256Mi leaves room to grow into the target without reserving
+        # half a gig per mon that is never touched.
+        memory: "256Mi"
     osd:
       # The limit MUST stay above `osd_memory_target` (set to 2Gi in
       # rook_ceph_deploy_part1.yml), not merely above measured usage.
@@ -136,8 +140,8 @@ cephClusterSpec:
         cpu: "500m"
         memory: "512Mi"
       requests:
-        cpu: "100m"
-        memory: "256Mi"
+        cpu: "50m"
+        memory: "64Mi"   # was 256Mi; the watch-active sidecar is tiny
 
   storage:
     useAllNodes: false

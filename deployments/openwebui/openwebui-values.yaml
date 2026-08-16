@@ -69,6 +69,17 @@ websocket:
       limits:
         memory: 256Mi
 
+# open-webui declared no resources at all, so it was invisible to the scheduler
+# (counted as zero when placing) while actually using ~712Mi, and sat in the
+# BestEffort eviction tier. Request tracks observed steady state; the limit
+# leaves room for large model responses without letting it starve a node.
+resources:
+  requests:
+    cpu: 100m
+    memory: 768Mi
+  limits:
+    memory: 2Gi
+
 persistence:
   enabled: true
   size: 250Gi
