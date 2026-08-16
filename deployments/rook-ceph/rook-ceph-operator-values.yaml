@@ -39,21 +39,21 @@ csi:
     - name : driver-registrar
       resource:
         requests:
-          memory: 128Mi
+          memory: 32Mi   # was 128Mi; measured 5-21Mi
           cpu: 25m
         limits:
           memory: 256Mi
     - name : csi-rbdplugin
       resource:
         requests:
-          memory: 512Mi
+          memory: 128Mi   # was 512Mi; measured ~53Mi
           cpu: 100m
         limits:
           memory: 1Gi
     - name : liveness-prometheus
       resource:
         requests:
-          memory: 128Mi
+          memory: 32Mi   # was 128Mi; measured 5-21Mi
           cpu: 25m
         limits:
           memory: 256Mi
@@ -61,42 +61,42 @@ csi:
     - name : csi-provisioner
       resource:
         requests:
-          memory: 128Mi
+          memory: 64Mi   # was 128Mi; measured well under
           cpu: 50m
         limits:
           memory: 256Mi
     - name : csi-resizer
       resource:
         requests:
-          memory: 128Mi
+          memory: 64Mi   # was 128Mi; measured well under
           cpu: 50m
         limits:
           memory: 256Mi
     - name : csi-attacher
       resource:
         requests:
-          memory: 128Mi
+          memory: 64Mi   # was 128Mi; measured well under
           cpu: 50m
         limits:
           memory: 256Mi
     - name : csi-snapshotter
       resource:
         requests:
-          memory: 128Mi
+          memory: 64Mi   # was 128Mi; measured well under
           cpu: 50m
         limits:
           memory: 256Mi
     - name : csi-rbdplugin
       resource:
         requests:
-          memory: 512Mi
+          memory: 128Mi   # was 512Mi; measured ~53Mi
           cpu: 100m
         limits:
           memory: 1Gi
     - name : liveness-prometheus
       resource:
         requests:
-          memory: 128Mi
+          memory: 32Mi   # was 128Mi; measured 5-21Mi
           cpu: 25m
         limits:
           memory: 256Mi
@@ -104,21 +104,21 @@ csi:
     - name : driver-registrar
       resource:
         requests:
-          memory: 128Mi
+          memory: 32Mi   # was 128Mi; measured 5-21Mi
           cpu: 25m
         limits:
           memory: 256Mi
     - name : csi-cephfsplugin
       resource:
         requests:
-          memory: 512Mi
+          memory: 128Mi   # was 512Mi; measured ~53Mi
           cpu: 100m
         limits:
           memory: 1Gi
     - name : liveness-prometheus
       resource:
         requests:
-          memory: 128Mi
+          memory: 32Mi   # was 128Mi; measured 5-21Mi
           cpu: 25m
         limits:
           memory: 256Mi
@@ -126,42 +126,42 @@ csi:
     - name : csi-provisioner
       resource:
         requests:
-          memory: 128Mi
+          memory: 64Mi   # was 128Mi; measured well under
           cpu: 50m
         limits:
           memory: 256Mi
     - name : csi-resizer
       resource:
         requests:
-          memory: 128Mi
+          memory: 64Mi   # was 128Mi; measured well under
           cpu: 50m
         limits:
           memory: 256Mi
     - name : csi-attacher
       resource:
         requests:
-          memory: 128Mi
+          memory: 64Mi   # was 128Mi; measured well under
           cpu: 50m
         limits:
           memory: 256Mi
     - name : csi-snapshotter
       resource:
         requests:
-          memory: 128Mi
+          memory: 64Mi   # was 128Mi; measured well under
           cpu: 50m
         limits:
           memory: 256Mi
     - name : csi-cephfsplugin
       resource:
         requests:
-          memory: 512Mi
+          memory: 128Mi   # was 512Mi; measured ~53Mi
           cpu: 100m
         limits:
           memory: 1Gi
     - name : liveness-prometheus
       resource:
         requests:
-          memory: 128Mi
+          memory: 32Mi   # was 128Mi; measured 5-21Mi
           cpu: 25m
         limits:
           memory: 256Mi
