@@ -686,7 +686,36 @@ nodeSelector: {}
 
 tolerations: []
 
-affinity: {}
+# Keep Nextcloud off the control plane.
+#
+# This is a BACKUP PERFORMANCE fix, not a capacity one. Velero's fs-backup runs
+# its Kopia data mover on whichever node hosts the pod, and Kopia is CPU-bound
+# hashing file content. With this pod on yoda the mover was pinned to the
+# busiest node in the cluster -- yoda ran at 88% CPU (k3s apiserver, etcd, plus
+# a mon and a mgr) while anakin/obiwan/rey sat at ~19% with ~3.2 free cores each.
+#
+# Measured on 2026-08-16: the 3.3TB weekly run took 13h31m at ~4.2 GiB/min, with
+# the mover getting ~2.1 of yoda's 4 cores. Ceph was serving only 128 MiB/s and
+# the MDS just 23 reqs/s, so neither storage nor metadata was the constraint --
+# it was purely CPU contention on the control plane.
+#
+# The pod requests only 10m CPU, so nothing stopped the scheduler putting it on
+# yoda; the request is too small to express where it actually belongs.
+#
+# nodeAffinity rather than nodeSelector because any of the three workers will
+# do, and requiredDuringScheduling...IgnoredDuringExecution means an already
+# running pod is not evicted -- it moves on its next restart.
+affinity:
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values:
+                - anakin.local
+                - obiwan.local
+                - rey.local
 
 dnsConfig: {}
 # Custom dns config for Nextcloud containers.
