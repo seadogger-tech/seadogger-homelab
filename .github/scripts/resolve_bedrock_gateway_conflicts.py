@@ -86,6 +86,35 @@ def resolve_198():
     _write_and_verify(content, "198")
 
 
+def resolve_255():
+    """PR #255 (response_format) vs upstream: #255's commit carried the
+    pre-refactor inline image-fetch body of _parse_image, but upstream since
+    extracted that logic into parse_image_url() in api/image_url.py (which also
+    adds SSRF validation on the remote fetch). Keep upstream's version — the
+    response_format feature itself does not touch image parsing, it just shared
+    the surrounding hunk. Dropping #255's side preserves the SSRF hardening."""
+    with open(BEDROCK_PY) as f:
+        content = f.read()
+
+    pattern = re.compile(
+        r"<<<<<<< HEAD\n"
+        r"(        return parse_image_url\(image_url\)\n)"
+        r"=======\n"
+        r".*?"
+        r">>>>>>> [0-9a-f]+ \(feat: add response_format support\)\n",
+        re.DOTALL,
+    )
+    if not pattern.search(content):
+        raise SystemExit(
+            "resolve_255: expected conflict pattern not found in "
+            f"{BEDROCK_PY} — upstream may have changed the image-parsing "
+            "refactor (parse_image_url). Manual rebase needed."
+        )
+
+    content = pattern.sub(r"\1", content)
+    _write_and_verify(content, "255")
+
+
 def _write_and_verify(content, pr):
     # Only check the actual git conflict markers (<<<<<<< / >>>>>>>), not a
     # bare "=======" - that 7-char run is common in code/docstrings as a
@@ -100,7 +129,7 @@ def _write_and_verify(content, pr):
     print(f"Resolved PR #{pr}'s conflict in {BEDROCK_PY}")
 
 
-RESOLVERS = {"239": resolve_239, "198": resolve_198}
+RESOLVERS = {"239": resolve_239, "198": resolve_198, "255": resolve_255}
 
 if __name__ == "__main__":
     if len(sys.argv) != 2 or sys.argv[1] not in RESOLVERS:

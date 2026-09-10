@@ -1,8 +1,16 @@
 name: Rebuild Mealie with unmerged AI-import PRs
 
 on:
-  schedule:
-    - cron: "0 */6 * * *"   # every 6 hours
+  # Scheduled rebuild disabled 2026-09-10. Both adopted PRs were CLOSED
+  # (not merged) upstream on 2026-08-10: mealie-recipes/mealie#7618
+  # (Force OpenAI Scraper) and #7825 (plain-text import). Their fork branches
+  # have since diverged from the pinned UPSTREAM_TAG (v3.21.0), so the
+  # cherry-picks no longer apply and every scheduled run failed (email spam).
+  # The last good image (ghcr.io/seadogger-tech/mealie:v3.21.0-ai-import) stays
+  # deployed. Run manually via workflow_dispatch after re-pinning/re-resolving
+  # the cherry-picks (see core/docs/wiki/09-Apps.md) or retiring the features.
+  # schedule:
+  #   - cron: "0 */6 * * *"   # every 6 hours
   workflow_dispatch:        # allow manual run
 
 permissions:

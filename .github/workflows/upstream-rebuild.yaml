@@ -105,8 +105,21 @@ jobs:
             fi
           }
 
+          # #255 - response_format. Was a clean pick until upstream refactored
+          # _parse_image's body into api/image_url.py (parse_image_url, which
+          # also adds SSRF validation); #255 still carries the old inline
+          # version, so it now conflicts. Resolved by keeping upstream's version
+          # via resolve_bedrock_gateway_conflicts.py. Must run before #246/#247.
+          git remote add pr255 https://github.com/nijave/bedrock-access-gateway.git 2>/dev/null || true
+          git fetch pr255 nv-response-format
+          PR255_SHA="$(git rev-parse pr255/nv-response-format)"
+          if ! git cherry-pick "$PR255_SHA"; then
+            python3 ../.github/scripts/resolve_bedrock_gateway_conflicts.py 255
+            git add src/api/models/bedrock.py
+            git -c core.editor=true cherry-pick --continue
+          fi
+
           # PRs with clean, conflict-free cherry-picks
-          pick https://github.com/nijave/bedrock-access-gateway.git nv-response-format 255
           pick https://github.com/marcoruizrueda/bedrock-access-gateway.git fix/sanitize-orphan-tool-pairs 246
           pick https://github.com/bokmann/bedrock-access-gateway.git fix/stream-tool-call-index 247
 
