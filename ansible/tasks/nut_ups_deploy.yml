@@ -90,6 +90,33 @@
       MODE=netserver
   register: nut_mode_conf
 
+# Boot-race guard: upsd binds "LISTEN {{ ansible_host }} 3493", which fails if
+# nut-server starts before that interface has its address. Observed after a
+# reboot -- "no listening interface available", upsd exits status=1/FAILURE,
+# and the UPS goes dark for days while the driver keeps holding the USB open.
+# Ordering the unit after network-online.target makes the address present
+# before upsd binds.
+- name: Ensure nut-server systemd drop-in directory
+  ansible.builtin.file:
+    path: /etc/systemd/system/nut-server.service.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Order nut-server after network-online (boot-race guard)
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/nut-server.service.d/10-network-online.conf
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      # Managed by Ansible - tasks/nut_ups_deploy.yml
+      [Unit]
+      After=network-online.target
+      Wants=network-online.target
+  register: nut_server_override
+
 # Monitor-only posture. nut-monitor is what would execute SHUTDOWNCMD on a
 # low-battery event; masking it makes an accidental cluster poweroff
 # impossible rather than merely unconfigured.
@@ -121,6 +148,7 @@
   when: >
     nut_ups_conf.changed or nut_upsd_conf.changed
     or nut_upsd_users.changed or nut_mode_conf.changed
+    or nut_server_override.changed
 
 - name: Wait for the driver to attach
   ansible.builtin.pause:
@@ -128,6 +156,7 @@
   when: >
     nut_ups_conf.changed or nut_upsd_conf.changed
     or nut_upsd_users.changed or nut_mode_conf.changed
+    or nut_server_override.changed
 
 # Fail loudly rather than leaving a UPS that reports nothing. A silent NUT is
 # indistinguishable from a healthy one until the power actually goes out.
