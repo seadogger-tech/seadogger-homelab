@@ -17,88 +17,79 @@ not a real logic disagreement: resolve by keeping the newer repos-aware
 constructor/function calls while applying the PR's actual behavioral
 change (build a conditional `scrapers` list based on `use_openai`).
 
+The `>>>>>>>` marker's commit hash is matched as [0-9a-f]+ rather than a
+fixed 8-char abbreviation: git auto-scales the abbreviation length by the
+repo's object count, so a full CI checkout emits e.g. `b9e120bce` (10)
+while a shallow local clone emits `b9e120bc` (8). Hardcoding the length
+made this step fail only in CI.
+
 If a future upstream change touches the same call sites again, the
 patterns below may stop matching; this raises SystemExit with a clear
 message rather than silently doing nothing, so the workflow step fails
 loudly.
 """
 
+import re
+
 SCRAPER_PY = "mealie/services/scraper/scraper.py"
 BULK_SCRAPER_PY = "mealie/services/scraper/recipe_bulk_scraper.py"
 CRUD_ROUTES_PY = "mealie/routes/recipe/recipe_crud_routes.py"
 
+# Trailing conflict marker, abbreviation-length agnostic.
+END = r">>>>>>> [0-9a-f]+ \(feat: add Force OpenAI Scraper option to URL and bulk import\)"
+
+
+def _resolve(path, pattern, new, label):
+    with open(path) as f:
+        content = f.read()
+    if not pattern.search(content):
+        raise SystemExit(
+            f"{label}: expected conflict pattern not found in {path} - upstream "
+            "code may have changed around this call site, or the conflict marker "
+            "shape changed. Manual rebase needed."
+        )
+    content = pattern.sub(lambda _m: new, content)
+    _write_and_verify(content, path)
+
 
 def resolve_scraper_py():
-    with open(SCRAPER_PY) as f:
-        content = f.read()
-
-    old = (
-        "<<<<<<< HEAD\n"
-        "    scraper = RecipeScraper(repos, translator)\n"
-        "=======\n"
-        "    scrapers = [RecipeScraperOpenAITranscription, RecipeScraperOpenAI] if use_openai else None\n"
-        "    scraper = RecipeScraper(translator, scrapers=scrapers)\n"
-        ">>>>>>> b9e120bc (feat: add Force OpenAI Scraper option to URL and bulk import)"
+    pattern = re.compile(
+        r"<<<<<<< HEAD\n"
+        r"    scraper = RecipeScraper\(repos, translator\)\n"
+        r"=======\n"
+        r"    scrapers = \[RecipeScraperOpenAITranscription, RecipeScraperOpenAI\] if use_openai else None\n"
+        r"    scraper = RecipeScraper\(translator, scrapers=scrapers\)\n"
+        + END
     )
-    if old not in content:
-        raise SystemExit(
-            f"resolve_scraper_py: expected conflict pattern not found in {SCRAPER_PY} "
-            "- upstream code may have changed around RecipeScraper's constructor call. "
-            "Manual rebase needed."
-        )
-
     new = (
         "    scrapers = [RecipeScraperOpenAITranscription, RecipeScraperOpenAI] if use_openai else None\n"
         "    scraper = RecipeScraper(repos, translator, scrapers=scrapers)"
     )
-    content = content.replace(old, new)
-    _write_and_verify(content, SCRAPER_PY)
+    _resolve(SCRAPER_PY, pattern, new, "resolve_scraper_py")
 
 
 def resolve_bulk_scraper_py():
-    with open(BULK_SCRAPER_PY) as f:
-        content = f.read()
-
-    old = (
-        "<<<<<<< HEAD\n"
-        "                    recipe, _ = await create_from_html(url, self.repos, self.translator)\n"
-        "=======\n"
-        "                    recipe, _ = await create_from_html(url, self.translator, use_openai=urls.use_openai)\n"
-        ">>>>>>> b9e120bc (feat: add Force OpenAI Scraper option to URL and bulk import)"
+    pattern = re.compile(
+        r"<<<<<<< HEAD\n"
+        r"                    recipe, _ = await create_from_html\(url, self\.repos, self\.translator\)\n"
+        r"=======\n"
+        r"                    recipe, _ = await create_from_html\(url, self\.translator, use_openai=urls\.use_openai\)\n"
+        + END
     )
-    if old not in content:
-        raise SystemExit(
-            f"resolve_bulk_scraper_py: expected conflict pattern not found in {BULK_SCRAPER_PY} "
-            "- upstream code may have changed around the bulk-scrape create_from_html call. "
-            "Manual rebase needed."
-        )
-
     new = "                    recipe, _ = await create_from_html(url, self.repos, self.translator, use_openai=urls.use_openai)"
-    content = content.replace(old, new)
-    _write_and_verify(content, BULK_SCRAPER_PY)
+    _resolve(BULK_SCRAPER_PY, pattern, new, "resolve_bulk_scraper_py")
 
 
 def resolve_crud_routes_py():
-    with open(CRUD_ROUTES_PY) as f:
-        content = f.read()
-
-    old = (
-        "<<<<<<< HEAD\n"
-        "                recipe, extras = await create_from_html(url, self.repos, self.translator, html, on_progress=on_progress)\n"
-        "=======\n"
-        "                recipe, extras = await create_from_html(url, self.translator, html, on_progress=on_progress, use_openai=use_openai)\n"
-        ">>>>>>> b9e120bc (feat: add Force OpenAI Scraper option to URL and bulk import)"
+    pattern = re.compile(
+        r"<<<<<<< HEAD\n"
+        r"                recipe, extras = await create_from_html\(url, self\.repos, self\.translator, html, on_progress=on_progress\)\n"
+        r"=======\n"
+        r"                recipe, extras = await create_from_html\(url, self\.translator, html, on_progress=on_progress, use_openai=use_openai\)\n"
+        + END
     )
-    if old not in content:
-        raise SystemExit(
-            f"resolve_crud_routes_py: expected conflict pattern not found in {CRUD_ROUTES_PY} "
-            "- upstream code may have changed around _create_recipe_from_web's create_from_html call. "
-            "Manual rebase needed."
-        )
-
     new = "                recipe, extras = await create_from_html(url, self.repos, self.translator, html, on_progress=on_progress, use_openai=use_openai)"
-    content = content.replace(old, new)
-    _write_and_verify(content, CRUD_ROUTES_PY)
+    _resolve(CRUD_ROUTES_PY, pattern, new, "resolve_crud_routes_py")
 
 
 def _write_and_verify(content, path):

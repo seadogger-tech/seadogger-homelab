@@ -91,6 +91,9 @@ jobs:
           cd upstream
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # Force classic 2-way conflict markers so the resolvers' patterns are
+          # deterministic regardless of the runner's git conflictStyle default.
+          git config merge.conflictStyle merge
 
           pick() {
             local remote_url="$1" branch="$2" pr="$3"

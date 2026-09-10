@@ -1,16 +1,8 @@
 name: Rebuild Mealie with unmerged AI-import PRs
 
 on:
-  # Scheduled rebuild disabled 2026-09-10. Both adopted PRs were CLOSED
-  # (not merged) upstream on 2026-08-10: mealie-recipes/mealie#7618
-  # (Force OpenAI Scraper) and #7825 (plain-text import). Their fork branches
-  # have since diverged from the pinned UPSTREAM_TAG (v3.21.0), so the
-  # cherry-picks no longer apply and every scheduled run failed (email spam).
-  # The last good image (ghcr.io/seadogger-tech/mealie:v3.21.0-ai-import) stays
-  # deployed. Run manually via workflow_dispatch after re-pinning/re-resolving
-  # the cherry-picks (see core/docs/wiki/09-Apps.md) or retiring the features.
-  # schedule:
-  #   - cron: "0 */6 * * *"   # every 6 hours
+  schedule:
+    - cron: "0 */6 * * *"   # every 6 hours
   workflow_dispatch:        # allow manual run
 
 permissions:
@@ -108,8 +100,13 @@ jobs:
           cd upstream
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git remote add pr7618 https://github.com/zdenek-stursa/mealie.git
-          git fetch pr7618 feat/force-openai-scraper
+          # Force classic 2-way conflict markers so the resolver's patterns are
+          # deterministic regardless of the runner's git conflictStyle default.
+          git config merge.conflictStyle merge
+          # Fetch the PR's commits from upstream's retained refs/pull/<n>/head
+          # rather than the contributor's fork branch: closed-PR fork branches
+          # get deleted (as #7825's already was), but the PR ref lives forever.
+          git fetch https://github.com/mealie-recipes/mealie.git refs/pull/7618/head
 
           if ! git cherry-pick b9e120bc; then
             if ! grep -q "^<<<<<<<" mealie/services/scraper/scraper.py 2>/dev/null; then
@@ -156,8 +153,9 @@ jobs:
       - name: Cherry-pick Create-from-Text page (upstream PR #7825, unmerged)
         run: |
           cd upstream
-          git remote add pr7825 https://github.com/bferd/mealie.git
-          git fetch pr7825 feat/create-recipe-from-text
+          # bferd's fork branch feat/create-recipe-from-text was deleted after
+          # the PR closed; fetch the commits from upstream's retained PR ref.
+          git fetch https://github.com/mealie-recipes/mealie.git refs/pull/7825/head
           for PATCH_SHA in fd8ab18e 9fea1830; do
             if ! git cherry-pick "$PATCH_SHA"; then
               echo "::error::Cherry-pick of #7825 commit $PATCH_SHA failed — likely conflicts with #7618, diverged from ${{ env.UPSTREAM_TAG }}, or the PR branch was rebased (SHA no longer exists). Check 'git log pr7825/feat/create-recipe-from-text' for the current feature commits."
