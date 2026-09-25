@@ -34,7 +34,7 @@ This is a **live production cluster** with real users and ~4TB of data
 |------|----|------|
 | `yoda.local` | 192.168.1.95 | K3s control plane (500GB NVMe) |
 | `obiwan.local` | 192.168.1.96 | Worker + Ceph OSD (4TB NVMe) |
-| `anakin.local` (a.k.a. "vader") | 192.168.1.97 | Worker + Ceph OSD (4TB NVMe) |
+| `anakin.local` | 192.168.1.97 | Worker + Ceph OSD (4TB NVMe) |
 | `rey.local` | 192.168.1.98 | Worker + Ceph OSD (4TB NVMe) |
 
 - Ansible's SSH user is `pi` (`[cluster:vars]` in `hosts.ini`).
