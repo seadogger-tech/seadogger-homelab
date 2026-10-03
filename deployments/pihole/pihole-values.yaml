@@ -197,6 +197,16 @@ whitelist:
     - api.alpaca.markets
     - fc.yahoo.com
     - query1.finance.yahoo.com
+    # Hugging Face model downloads (huggingface.co redirects to these *.hf.co hosts,
+    # which the blocklists catch because hf.co is also a URL shortener) — added 2026-10-03
+    - cdn.hf.co
+    - us.aws.cdn.hf.co
+    - eu.aws.cdn.hf.co
+    - cdn-lfs.hf.co
+    - cdn-lfs-us-1.hf.co
+    - cas-bridge.xethub.hf.co
+    - cas-server.xethub.hf.co
+    - transfer.xethub.hf.co
 
 
 dnsmasq:
