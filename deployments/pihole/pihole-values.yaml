@@ -163,6 +163,15 @@ adlists:
     - https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/nrd21-15.txt
     - https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/nrd28-22.txt
     - https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/nrd35-29.txt
+    # Also live, but NOT declarable here: an ALLOW-type subscribed list (added
+    # 2026-03-08 in the UI). The chart mounts this key as adlists.list, which
+    # Pi-hole imports as BLOCK lists, so listing it here would turn it into a
+    # blocklist on a rebuild. After a fresh install, re-add it as an allowlist:
+    #   pihole-FTL sqlite3 /etc/pihole/gravity.db "INSERT INTO adlist (address,type) VALUES ('https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/whitelist-referral-native.txt',1)" && pihole -g
+# NOTE: adlists and whitelist are imported ONLY on a fresh install (empty
+# gravity.db on the PVC). Editing them here restarts the pod but does not
+# change the live lists; also apply each change live, e.g.
+#   kubectl -n pihole exec deploy/pihole -c pihole -- pihole allow <domain> --comment "<why>"
 whitelist:
     - graph.facebook.com
     - web.facebook.com
@@ -197,6 +206,11 @@ whitelist:
     - api.alpaca.markets
     - fc.yahoo.com
     - query1.finance.yahoo.com
+    - activity.windows.com              # added from Query Log 2026-08-01
+    - arc.msn.com                       # added from Query Log 2026-08-01
+    - settings-win.data.microsoft.com   # added from Query Log 2026-08-01
+    - dynupdate.no-ip.com               # added 2026-08-15
+    - mrsdershimer.weebly.com           # added from Query Log 2026-08-17
     # Hugging Face model downloads (huggingface.co redirects to these *.hf.co hosts,
     # which the blocklists catch because hf.co is also a URL shortener) — added 2026-10-03
     - cdn.hf.co
@@ -224,6 +238,12 @@ dnsmasq:
     - address=/velero.seadogger-homelab/192.168.1.241
     - address=/cameras.seadogger-homelab/192.168.1.241
     - address=/traefik.seadogger-homelab/192.168.1.241
+    - address=/terminal.seadogger-homelab/192.168.1.241
+    - address=/ember-trail.seadogger-homelab/192.168.1.241
+    # No ingress route serves this name (2026-10-04); kept because it is live.
+    - address=/jason.seadogger-homelab/192.168.1.241
+    # hermes-<user>.seadogger-homelab names are NOT declared here: they live in
+    # Pi-hole's dns.hosts, managed by ansible/tasks/hermes_deploy.yml (Pro repo).
     - address=/octoprint.seadogger-homelab/192.168.1.77
     - address=/hdhomerun.seadogger-homelab/192.168.1.70
     - address=/gateway.seadogger-homelab/192.168.1.1
