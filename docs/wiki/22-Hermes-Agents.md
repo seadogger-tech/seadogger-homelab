@@ -167,12 +167,12 @@ values.
 - name: kim
 
 # 2. Create the kustomize overlay
-cd /Users/jason/Desktop/Development/seadogger-homelab-pro/deployments/hermes/overlays
+cd /Users/jason/dev/seadogger-homelab-pro/deployments/hermes/overlays
 cp -r jason kim
 sed -i '' 's/jason/kim/g' kim/kustomization.yaml kim/argocd-application.yaml
 
 # 3. Commit & push (Pro repo)
-cd /Users/jason/Desktop/Development/seadogger-homelab-pro
+cd /Users/jason/dev/seadogger-homelab-pro
 git add deployments/hermes/overlays/kim
 git commit -m "feat(pro): add hermes-kim overlay"
 git push

@@ -456,7 +456,7 @@ git push
 
 ### Force deploy without ArgoCD wait
 ```bash
-kubectl apply -k /Users/jason/Desktop/Development/seadogger-homelab-pro/deployments/hermes/overlays/<user>/
+kubectl apply -k /Users/jason/dev/seadogger-homelab-pro/deployments/hermes/overlays/<user>/
 kubectl -n hermes-<user> rollout restart deploy/hermes
 kubectl -n hermes-<user> rollout status deploy/hermes --timeout=300s
 # dev pod continues running throughout
