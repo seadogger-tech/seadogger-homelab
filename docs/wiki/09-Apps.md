@@ -11,7 +11,16 @@ User facing applications that are applied thru ArgoCD on top of the k3s tech sta
 - All `*.seadogger-homelab` hostnames are static `dnsmasq` records defined in
   `core/deployments/pihole/pihole-values.yaml` (`dnsmasq.customDnsEntries`) —
   add a new app's hostname there, not through the Pi-hole UI, so it survives
-  a redeploy.
+  a redeploy. The one exception is `hermes-<user>.seadogger-homelab`, which
+  `ansible/tasks/hermes_deploy.yml` (Pro repo) writes to Pi-hole's `dns.hosts`.
+- **Allowlist and adlists in `pihole-values.yaml` are imported only on a
+  fresh install** (empty `gravity.db` on the PVC). Changing them restarts the
+  pod but leaves the live lists untouched, so apply every change in both
+  places: edit the values file, then
+  `kubectl -n pihole exec deploy/pihole -c pihole -- pihole allow <domain> --comment "<why>"`.
+  Allow-type subscribed lists can't be declared there at all (the chart
+  imports `adlists` as block lists); the values file records the one in use
+  and the command to restore it.
 - **30-Minute Pause button** on the portal calls a small backend
   (`deployments/pihole-toggle`, Pro repo) that holds the Pi-hole admin
   password server-side and calls Pi-hole's v6 API
