@@ -5,6 +5,12 @@
 This page provides step-by-step operational procedures for common tasks.
 
 ![accent-divider](images/accent-divider.svg)
+## Diagnose before recovery
+
+For a failed or unhealthy pod, first inspect its events, current/previous logs, owning Deployment/StatefulSet, ArgoCD reconciliation and related PVCs. Check node conditions and Ceph health when symptoms involve storage or scheduling. Record the observed cause and the smallest recovery action that addresses it.
+
+Review that concrete action and its data impact with the operator before changing the live cluster. Namespace deletion, application reset, PVC removal and cold-start cleanup are explicit recovery procedures; a bad pod state alone does not authorize them. For Nextcloud migration failures, follow the [migration recovery boundaries](26-Nextcloud-PostgreSQL-Migration#failure-boundaries-and-recovery) and preserve the current database, writer barrier and private evidence.
+
 ## Cold Start Cycle
 1) Stage 1 — Wipe (destructive):
 - Set in `ansible/config.yml`: `cold_start_stage_1_wipe_cluster: true` and optionally `perform_physical_disk_wipe: true`.
@@ -20,6 +26,9 @@ This page provides step-by-step operational procedures for common tasks.
 
 ![accent-divider](images/accent-divider.svg)
 ## Reset an Application (keep or delete data)
+
+Use only after diagnosis and explicit approval of the selected application and PVC/data handling. Review every enabled cleanup switch before invoking the cleanup playbook.
+
 1) In `ansible/config.yml` set `run_pod_cleanup: true`.
 2) In `pod_cleanup_list`, keep only the target app and choose `delete_pvc: true|false`.
 3) Run: `ansible-playbook cleanup.yml`.

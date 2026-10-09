@@ -10,6 +10,7 @@ import unittest
 from unittest.mock import patch
 
 SCRIPTS = Path(__file__).resolve().parents[1]
+CONVERTER_CONTRACT = json.loads((SCRIPTS / 'tests/fixtures/converter-contract.json').read_text())
 spec = importlib.util.spec_from_file_location('cli_migration', SCRIPTS / 'migrate.py')
 m = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(m)
@@ -72,7 +73,7 @@ class WorkflowTests(unittest.TestCase):
             elif command[0] == 'ps':
                 reply = b'sleep\n'
             elif 'dbhost' in command:
-                reply = b'nextcloud-db.nextcloud.svc.cluster.local:5432'
+                reply = CONVERTER_CONTRACT['saved_dbhost'].encode()
             elif 'app:list' in command:
                 reply = {'enabled': {'files': '2.4.0'}}
             elif 'dbtype' in command:

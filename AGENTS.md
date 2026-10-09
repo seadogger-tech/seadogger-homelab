@@ -42,12 +42,18 @@ This is a **live production cluster** with real users and ~4TB of data
 - App hostnames are `*.seadogger-homelab` and resolve through Pi-hole.
 - Deeper references: `docs/wiki/03-Hardware-and-Network.md`, `07-Networking-and-Ingress.md`, `12-Troubleshooting.md`, `17-Runbooks.md`.
 
+## Deployment and checks
+
+For deployment changes, read [Deployment and Validation](docs/wiki/27-Deployment-and-Validation.md) for application ownership, Ansible switches/order and the local/CI check command. For Nextcloud migration or reruns, also read its [runbook](docs/wiki/26-Nextcloud-PostgreSQL-Migration.md).
+
 ## Working rules
 
 - **Read before you act on the cluster.** `kubectl get`/`describe`/`logs`, `ceph status`,
   and `systemctl status` are fine. Anything that mutates state needs explicit confirmation
   from the user first. That includes `apply`, `delete`, `rollout restart`, drain/cordon,
-  reboots, Ansible runs, and Ceph changes.
+  reboots, production Ansible runs, and Ceph changes. Diagnose bad pod states using
+  the [recovery runbook](docs/wiki/17-Runbooks.md#diagnose-before-recovery).
+  Credential-free local tests and syntax/render checks are development checks, not cluster actions.
 - **Never run `cleanup.yml`** or any wipe or disk task unless the user asks for it
   in this session. It destroys the cluster and can wipe the NVMe drives.
 - **Ceph is fragile.** Every pool needs its OSDs up. Taking down more than one worker

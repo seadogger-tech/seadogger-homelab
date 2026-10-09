@@ -142,10 +142,10 @@ These are preparation checks. The homelab AWS MCP confirmed the backup identity,
 
 New database startup, Secret readability under the intended UID, actual target writes/conversion, protected WebDAV access, scoped S3 uploads, loaded rule evaluation and client operation must succeed in the separately authorized staging/cutover. No production migration or restore was executed to produce the local evidence.
 
-Run the local tests without cluster or AWS access:
+Run the complete reproducible checks without cluster or AWS access (see [prerequisites and offline use](27-Deployment-and-Validation#local-and-ci-validation)):
 
 ```bash
-python3 -m unittest discover -s /Users/jason/dev/seadogger-homelab-pro/core/useful_scripts/nextcloud-migration/tests -v
+python3 /Users/jason/dev/seadogger-homelab-pro/core/useful_scripts/nextcloud-migration/check.py
 ```
 
 Primary references: [Nextcloud conversion and omitted tables](https://docs.nextcloud.com/server/32/admin_manual/configuration_database/db_conversion.html), [pinned converter source](https://github.com/nextcloud/server/blob/v32.0.6/core/Command/Db/ConvertType.php), [PostgreSQL dump](https://www.postgresql.org/docs/17/app-pgdump.html), [archive parsing versus restore](https://www.postgresql.org/docs/17/app-pgrestore.html), [Docker Official PostgreSQL image](https://github.com/docker-library/postgres), [supported AWS CLI container interface](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-docker.html), [Argo automated sync](https://argo-cd.readthedocs.io/en/stable/user-guide/auto_sync/), [Argo resource prune protection](https://argo-cd.readthedocs.io/en/stable/user-guide/sync-options/#no-prune-resources).

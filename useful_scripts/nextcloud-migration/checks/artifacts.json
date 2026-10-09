@@ -1,0 +1,7 @@
+{
+  "nextcloud-8.9.1.tgz": {
+    "url": "https://github.com/nextcloud/helm/releases/download/nextcloud-8.9.1/nextcloud-8.9.1.tgz",
+    "sha256": "72338b35e8b2900d5331ab7343ba21cae891fbcc758a0d215a4c24fdff14a93d",
+    "provenance": "https://nextcloud.github.io/helm/index.yaml"
+  }
+}

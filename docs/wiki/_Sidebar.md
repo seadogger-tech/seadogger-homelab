@@ -38,6 +38,7 @@
 - [[17-Runbooks]]
 - [[23-Disaster-Recovery-Restore]]
 - [[26-Nextcloud-PostgreSQL-Migration]]
+- [[27-Deployment-and-Validation]]
 
 ## 🧠 Knowledge
 - [[13-ADR-Index]]

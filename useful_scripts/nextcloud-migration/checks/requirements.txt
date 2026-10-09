@@ -1,0 +1,13 @@
+# Local/CI validation toolchain, including transitive Python dependencies.
+ansible==14.4.0
+ansible-core==2.21.4
+cffi==2.1.1
+cryptography==50.0.2
+Jinja2==3.1.6
+MarkupSafe==3.0.4
+packaging==26.3
+pathspec==1.1.1
+pycparser==3.1
+PyYAML==6.0.3
+resolvelib==1.2.1
+yamllint==1.38.0

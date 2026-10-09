@@ -6,6 +6,8 @@
 - [#49 - Convert Prometheus to Ingress](https://github.com/seadogger-tech/seadogger-homelab/issues/49)
 - [#50 - Move all infrastructure to ArgoCD + Kustomize](https://github.com/seadogger-tech/seadogger-homelab/issues/50)
 
+For the maintained operator entry points and validation command, read [Deployment and Validation](27-Deployment-and-Validation). The analysis below includes historical dependency proposals; inspect the linked playbooks for current ordering.
+
 This document analyzes the "spider web" of deployment dependencies in the Seadogger Homelab and proposes solutions to untangle them.
 
 ![accent-divider.svg](images/accent-divider.svg)

@@ -1,0 +1,13 @@
+{
+  "version": "32.0.6",
+  "source_url": "https://raw.githubusercontent.com/nextcloud/server/v32.0.6/core/Command/Db/ConvertType.php",
+  "source_sha256": "cb4643788cde0914e8a3194b70ce950648695570343ba1b23b6782914eed2b2d",
+  "arguments": {
+    "type": "pgsql",
+    "username": "nextcloud",
+    "hostname": "nextcloud-db.nextcloud.svc.cluster.local",
+    "database": "nextcloud"
+  },
+  "options": {"port": "5432", "password": "fixture-only-not-a-credential"},
+  "saved_dbhost": "nextcloud-db.nextcloud.svc.cluster.local:5432"
+}

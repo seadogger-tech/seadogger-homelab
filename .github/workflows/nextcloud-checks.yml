@@ -1,0 +1,42 @@
+---
+name: Nextcloud migration checks
+on:
+  pull_request:
+  push:
+    branches: [master]
+  workflow_call:
+    inputs:
+      core_path:
+        type: string
+        default: '.'
+        required: false
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: nextcloud-checks-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: recursive
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install local PHP test dependencies
+        run: sudo apt-get update && sudo apt-get install -y php-cli php-sqlite3
+      - uses: azure/setup-helm@v4.3.0
+        with:
+          version: v3.19.0
+      - uses: azure/setup-kubectl@v4
+        with:
+          version: v1.34.1
+      - name: Run credential-free checks
+        env:
+          CORE_CHECK_PATH: ${{ inputs.core_path || '.' }}
+        run: python3 "$CORE_CHECK_PATH/useful_scripts/nextcloud-migration/check.py"

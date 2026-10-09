@@ -9,3 +9,6 @@ config-*
 
 # Local database selection written by the Nextcloud migration runner
 ansible/nextcloud-database.local.json
+
+# Reproducible local validation environment and verified artifact cache
+.cache/nextcloud-check/
