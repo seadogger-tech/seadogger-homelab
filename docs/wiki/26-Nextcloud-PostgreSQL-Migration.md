@@ -138,14 +138,39 @@ Local preparation validation on 2026-10-08:
 - Kustomize renders seven namespaced resources, a suspended CronJob and explicit retained PVC. Repository YAML lint and Ansible syntax checks pass for the main, staging and phase entry points.
 - Independent standards/spec review found and corrected bundled-chart precedence, empty Argo automation configuration, lost failure transcripts, image pinning and insufficient post-start health verification.
 
-These are preparation checks. The homelab AWS MCP confirmed the backup identity, but its IAM policy-listing requests returned AccessDenied. Scoped destination writes remain unproven until the real uploads succeed; the FPA connection was unchanged.
+These are preparation checks. At that point, the homelab AWS MCP confirmed the backup identity, but its IAM policy-listing requests returned AccessDenied. The later staging evidence below establishes the native-dump upload path; it does not establish checkpoint-prefix writes or migration success. The FPA connection was unchanged.
 
-New database startup, Secret readability under the intended UID, actual target writes/conversion, protected WebDAV access, scoped S3 uploads, loaded rule evaluation and client operation must succeed in the separately authorized staging/cutover. No production migration or restore was executed to produce the local evidence.
+No production migration or restore was executed to produce the local evidence. Database conversion, private application validation, concurrent uploads and production-database backups remain cutover acceptance.
 
 Run the complete reproducible checks without cluster or AWS access (see [prerequisites and offline use](27-Deployment-and-Validation#local-and-ci-validation)):
 
 ```bash
 python3 /Users/jason/dev/seadogger-homelab-pro/core/useful_scripts/nextcloud-migration/check.py
 ```
+
+## Staging evidence: 2026-10-09 UTC
+
+The operator authorized database-only staging and its persistence/backup checks for Pro ticket 27. The dedicated Ansible entry point deployed Core revision `3678b682e3b62c683858b81fa52e6c42d9325649` through the separate `nextcloud-db` ArgoCD Application. Nextcloud remains on SQLite, online, at version 32.0.6; the database conversion has not run.
+
+| Check | Observed result |
+| --- | --- |
+| Preconditions | Four Ready nodes, no node memory/disk/PID pressure, Ceph `HEALTH_OK`, about 4 TiB raw free. Rey had about 1.8 GiB measured memory headroom and 69% reserved before adding the 512Mi database request and transient 128Mi backup request. The API initially returned 503 during a K3s restart, then passed readiness checks without intervention. Recheck health before any later phase. |
+| Placement and storage | Official PostgreSQL 17.11 ran on ARM64 worker rey with the pinned image, declared probes/resources and a new Bound 10Gi RWO `ceph-block-data` PVC. The class is expandable with `Retain`; the original Nextcloud PVC and legacy database remain in place. |
+| Identity and permissions | UID/GID 999 could read the mounted database Secret. TCP authentication used SCRAM. The application role owns its dedicated database and has no superuser, createdb, createrole, replication or bypass-RLS attributes. A create/insert/read transaction succeeded and rolled back, leaving zero public tables. |
+| Persistence | One authorized replacement of only `nextcloud-db-0` changed the Pod UID while retaining the PostgreSQL system identifier, PVC/PV identity and database roles. Authenticated transaction checks passed again. |
+| Repeat deployment | The same Ansible staging entry point succeeded again, preserving the Secret UID/resourceVersion, PVC, database identity, revision and suspended backup state. Ansible reported the Application task changed; this is evidence of preserved settings, not a claim of a zero-change playbook recap. |
+| Native backup | The manually created `nextcloud-db-backup-stage-20261009` Job completed in 15 seconds. Both dump and upload containers ran as UID/GID 999, exited zero and had no restarts. Full archive decoding succeeded before upload. |
+| S3 receipt | Listing and individual object HEAD checks found `nextcloud.dump` (1,098 bytes), `SHA256SUMS` (81 bytes) and `metadata.txt` (221 bytes) in the unique attempt directory whose suffix matches the backup Pod UID. All three reported AES256 server-side encryption. Private evidence retains the exact keys and version IDs. |
+| Monitoring | Both database-backup rules were loaded, health `ok`, and evaluated successfully. The staging Job's succeeded metric was 1 and failed metric 0; CronJob suspension was 1. No external notification receiver was configured, so delivery is unconfigured and untested. |
+| Resource observations | Initial Pod creation to Ready took about 57 seconds; sampled database working set peaked near 51 MiB. The empty-target dump container ran about two seconds and upload about one second. The short Job yielded no Prometheus memory sample; these measurements do not size the future production dump. |
+| Application validation | A protected local app-password file was supplied, but authenticated depth-0 WebDAV reads returned HTTP 401 through both loopback forwarding and the normal CA-verified HTTPS route. Corrected credentials and a successful authenticated read remain required to finish ticket 27. No account password was reset. |
+
+The dump is **pre-cutover evidence from an empty target**, not a backup of the production Nextcloud database. Object sizes and archive decoding do not prove a restore. The nightly 03:15 America/New_York database schedule remains suspended. The existing native-file mirror remains unsuspended; no bucket lifecycle, IAM policy or FPA configuration changed. Policy/encryption-configuration introspection remained denied, while the actual workload upload and object HEAD requests succeeded.
+
+The current Kubernetes inventory identifies the normal Nextcloud Deployment as a source-volume writer, the file mirror as a read-only source mount, and Jellyfin's alias of the same CephFS volume as read-only. No active mirror or Velero Backup was observed. The new database mounts only its dedicated PVC. Preserve the staging Job/artifacts, legacy workload and all original data. Before the cutover window, repeat this inventory and inspect host timers, administrative imports, external clients and backup operations; this staging snapshot does not establish the writer barrier.
+
+For an authorized persistence check, record the original Pod UID, database system identifier, Secret identity and PVC/PV identity first. After requesting one Pod replacement, wait for a **different UID** to become Ready and compare database/storage identity. Ansible's name-based `state: absent, wait: true` waiter timed out after the StatefulSet had already recreated the same Pod name; do not repeat the deletion in response to that timeout. The replacement's UID and successful database checks established the outcome.
+
+For the manual staging backup, derive a uniquely named Job from the deployed `nextcloud-db-backup` CronJob using client-side rendering, then submit that definition through Ansible's `kubernetes.core.k8s` task. This preserves the suspended schedule and the deployed image, identity, resource and credential settings. Inspect both container exit codes and the dump log, then match the three nonempty S3 objects to the backup Pod UID. Retain the receipts privately and identify their pre-cutover purpose.
 
 Primary references: [Nextcloud conversion and omitted tables](https://docs.nextcloud.com/server/32/admin_manual/configuration_database/db_conversion.html), [pinned converter source](https://github.com/nextcloud/server/blob/v32.0.6/core/Command/Db/ConvertType.php), [PostgreSQL dump](https://www.postgresql.org/docs/17/app-pgdump.html), [archive parsing versus restore](https://www.postgresql.org/docs/17/app-pgrestore.html), [Docker Official PostgreSQL image](https://github.com/docker-library/postgres), [supported AWS CLI container interface](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-docker.html), [Argo automated sync](https://argo-cd.readthedocs.io/en/stable/user-guide/auto_sync/), [Argo resource prune protection](https://argo-cd.readthedocs.io/en/stable/user-guide/sync-options/#no-prune-resources).
