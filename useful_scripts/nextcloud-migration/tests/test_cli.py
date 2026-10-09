@@ -182,6 +182,8 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(self.run_phase('convert'), 1)
         self.assertTrue(self.state['conversion_started'])
         self.assertTrue(self.state['rolled_back'])
+        conversion = next(args for args in self.calls if '/migration/convert.php' in args)
+        self.assertEqual(conversion[-1], 'test-run')
         self.assertEqual(self.database_actions(), ['target', 'rollback'])
         self.assertIn('oc_unknown', (self.root / 'conversion-output.txt').read_text())
         self.assertEqual((self.root / 'conversion-output.txt').stat().st_mode & 0o777, 0o600)

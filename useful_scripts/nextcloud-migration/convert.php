@@ -12,6 +12,8 @@ if (hash_file('sha256', '/var/www/html/core/Command/Db/ConvertType.php') !==
 require_once '/var/www/html/lib/base.php';
 require_once __DIR__ . '/preserving-converter.php';
 try {
+    $run = $argv[1] ?? '';
+    if (!preg_match('/^[a-z0-9][a-z0-9-]{5,39}$/D', $run)) { throw new RuntimeException('Invalid checkpoint run'); }
     if (posix_getuid() !== 33 || fileowner('/var/www/html/config/config.php') !== 33) {
         throw new RuntimeException('Wrong service identity');
     }
@@ -31,6 +33,7 @@ try {
         'type' => 'pgsql', 'username' => 'nextcloud', 'hostname' => 'nextcloud-db.nextcloud.svc.cluster.local',
         'database' => 'nextcloud', '--port' => '5432', '--all-apps' => true,
         '--password' => file_get_contents('/migration-secrets/db-password'),
+        '--checkpoint' => $config->getSystemValue('datadirectory') . '/.postgresql-migration/' . $run,
     ]);
     $input->setInteractive(true);
     $output = new \Symfony\Component\Console\Output\ConsoleOutput();

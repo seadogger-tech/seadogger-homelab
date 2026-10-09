@@ -339,7 +339,7 @@ class Migration:
         self.db('target')
         self.record('conversion_started')
         try:
-            transcript = self.exec('php', '/migration/convert.php', timeout=7200, sensitive=True)
+            transcript = self.exec('php', '/migration/convert.php', self.state['run'], timeout=7200, sensitive=True)
         except Stopped:
             for name in ('output', 'error'):
                 path = self.directory / ('last-command-' + name + '.txt')

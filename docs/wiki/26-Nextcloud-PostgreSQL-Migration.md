@@ -75,6 +75,16 @@ validate it transactionally before the window. The ordinary table-count and
 sequence checks still apply to every preserved table; no omission prompt is
 accepted and no source table is removed.
 
+Native schema migrations can also change application configuration and invalidate
+mount caches on the live SQLite connection. The wrapper therefore uses the
+verified checkpoint as the source for the upstream data-copy implementation.
+It opens SQLite with immutable/read-only flags, checks integrity and the saved
+digest, requires matching source/target column sets, and rechecks the digest
+after copying. Historical migration records absent from current migration files
+are inserted only when missing from the generated target history; retired
+migrations are not executed. Strict table/reference/sequence validation remains
+required. A mismatch still stops conversion and retains the target.
+
 Before asserting writer review, inspect application and Argo ownership, all PVC mounts (including aliases of the same Ceph volume), CronJobs/active Jobs, node timers, shell imports, external clients and administrative automation. Jellyfin may continue only with verified read-only mounts. Do not overlap weekly backup activity. Stop external maintenance/deployment automation for the window: neither a human nor another controller may redeploy Nextcloud while the phase runner holds the barrier. Record the inventory and fresh cluster/storage health in private notes.
 
 The standard Ansible phase invocation is:
