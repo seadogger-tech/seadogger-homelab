@@ -1,0 +1,25 @@
+---
+# Operator workstation entry point. Read the runbook before using --execute.
+- name: Run a bounded Nextcloud migration phase
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Require a known action and private absolute state directory
+      ansible.builtin.assert:
+        that:
+          - >-
+            nextcloud_migration_action | default('status') in
+            ['prepare', 'status', 'fence', 'checkpoint', 'refresh', 'convert', 'validate', 'canary', 'backup', 'reopen', 'rollback']
+          - nextcloud_migration_state | default('') is match('^/')
+
+    - name: Execute the selected phase without logging secret input
+      ansible.builtin.command:
+        argv: >-
+          {{ [ansible_playbook_python, playbook_dir ~ '/../useful_scripts/nextcloud-migration/migrate.py',
+              nextcloud_migration_action | default('status'), '--state-dir', nextcloud_migration_state,
+              '--execute' if nextcloud_migration_execute | default(false) | bool else '--plan']
+             + (['--writers-reviewed'] if nextcloud_migration_writers_reviewed | default(false) | bool else [])
+             + (['--health-reviewed'] if nextcloud_migration_health_reviewed | default(false) | bool else []) }}
+      changed_when: nextcloud_migration_execute | default(false) | bool
+      when: not ansible_check_mode

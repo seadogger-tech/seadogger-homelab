@@ -1,0 +1,140 @@
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: nextcloud-db
+spec:
+  serviceName: nextcloud-db-headless
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: nextcloud-db
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: nextcloud-db
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 120
+      securityContext:
+        runAsUser: 999
+        runAsGroup: 999
+        runAsNonRoot: true
+        fsGroup: 999
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/arch
+                    operator: In
+                    values: [arm64]
+                  - key: kubernetes.io/hostname
+                    operator: In
+                    values: [anakin.local, obiwan.local, rey.local]
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: In
+                    values: [rey.local]
+      containers:
+        - name: postgres
+          image: docker.io/library/postgres:17.11-bookworm@sha256:3645570cccdfa447589da9f57dd740faa29b30938e861289a5574b6ca6b03826
+          args:
+            - postgres
+            - -c
+            - shared_buffers=64MB
+            - -c
+            - work_mem=2MB
+            - -c
+            - maintenance_work_mem=32MB
+            - -c
+            - autovacuum_work_mem=16MB
+            - -c
+            - max_connections=30
+            - -c
+            - password_encryption=scram-sha-256
+          env:
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+            - name: POSTGRES_PASSWORD_FILE
+              value: /secrets/postgres-password
+            - name: POSTGRES_INITDB_ARGS
+              value: --auth-host=scram-sha-256
+            - name: POSTGRES_HOST_AUTH_METHOD
+              value: scram-sha-256
+          ports:
+            - name: postgres
+              containerPort: 5432
+          startupProbe:
+            exec:
+              command: [pg_isready, -h, 127.0.0.1, -U, postgres]
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 120
+          readinessProbe:
+            exec:
+              command: [pg_isready, -h, 127.0.0.1, -U, postgres]
+            periodSeconds: 10
+            timeoutSeconds: 3
+          livenessProbe:
+            exec:
+              command: [pg_isready, -h, 127.0.0.1, -U, postgres]
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 6
+          resources:
+            requests:
+              cpu: 100m
+              memory: 512Mi
+            limits:
+              cpu: '1'
+              memory: 1Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+            - name: secrets
+              mountPath: /secrets
+              readOnly: true
+            - name: scripts
+              mountPath: /docker-entrypoint-initdb.d/10-nextcloud.sh
+              subPath: init.sh
+              readOnly: true
+            - name: runtime
+              mountPath: /var/run/postgresql
+            - name: temporary
+              mountPath: /tmp
+            - name: shm
+              mountPath: /dev/shm
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: nextcloud-db-data
+        - name: secrets
+          secret:
+            secretName: nextcloud-db-auth
+            defaultMode: 0440
+        - name: scripts
+          configMap:
+            name: nextcloud-db-scripts
+            defaultMode: 0555
+        - name: runtime
+          emptyDir:
+            sizeLimit: 16Mi
+        - name: temporary
+          emptyDir:
+            sizeLimit: 128Mi
+        - name: shm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 64Mi

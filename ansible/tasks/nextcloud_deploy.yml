@@ -1,10 +1,28 @@
 ---
-# Step 1: Set KUBECONFIG globally  
+# Step 1: Set KUBECONFIG globally
 - name: Set KUBECONFIG global
   ansible.builtin.set_fact:
     KUBECONFIG: /etc/rancher/k3s/k3s.yaml
 
 # Step 8: Create ArgoCD Nextcloud Application
+- name: Check for the local migration deployment marker
+  ansible.builtin.stat:
+    path: '{{ playbook_dir }}/nextcloud-database.local.json'
+  delegate_to: localhost
+  become: false
+  register: nc_database_marker
+
+- name: Load the database selection preserved by the migration
+  ansible.builtin.include_vars:
+    file: '{{ playbook_dir }}/nextcloud-database.local.json'
+  when: nc_database_marker.stat.exists
+
+- name: Require the reviewed PostgreSQL overlay revision when active
+  ansible.builtin.assert:
+    that:
+      - nextcloud_postgresql_revision | default('') is match('^[0-9a-f]{40}$')
+  when: nextcloud_postgresql_active | default(false) | bool
+
 - name: Create Nextcloud ArgoCD Application
   kubernetes.core.k8s:
     kubeconfig: "{{ KUBECONFIG }}"
@@ -22,8 +40,12 @@
           chart: nextcloud
           targetRevision: "8.9.1"
           helm:
-            valueFiles:
-              - https://raw.githubusercontent.com/seadogger-tech/seadogger-homelab/master/deployments/nextcloud/nextcloud-values.yaml
+            valuesObject: '{{ nextcloud_migration_helm_values | default(omit) }}'
+            valueFiles: >-
+              {{ ['https://raw.githubusercontent.com/seadogger-tech/seadogger-homelab/master/deployments/nextcloud/nextcloud-values.yaml']
+                 + (['https://raw.githubusercontent.com/seadogger-tech/seadogger-homelab/'
+                     ~ nextcloud_postgresql_revision ~ '/deployments/nextcloud/nextcloud-postgresql-values.yaml']
+                    if nextcloud_postgresql_active | default(false) | bool else []) }}
         destination:
           server: https://kubernetes.default.svc
           namespace: nextcloud

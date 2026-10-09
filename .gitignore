@@ -6,3 +6,6 @@ config-*
 
 
 /wiki/
+
+# Local database selection written by the Nextcloud migration runner
+ansible/nextcloud-database.local.json

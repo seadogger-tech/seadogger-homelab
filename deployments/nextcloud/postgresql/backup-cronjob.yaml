@@ -1,0 +1,133 @@
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: nextcloud-db-backup
+spec:
+  schedule: '15 3 * * *'
+  timeZone: America/New_York
+  # The staging deployment cannot back up an empty migration target as production.
+  # Activate through the Ansible playbook after the recorded reopening boundary.
+  suspend: true
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  startingDeadlineSeconds: 3600
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: 1800
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: nextcloud-db-backup
+        spec:
+          restartPolicy: Never
+          automountServiceAccountToken: false
+          nodeSelector:
+            kubernetes.io/arch: arm64
+          affinity:
+            nodeAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                nodeSelectorTerms:
+                  - matchExpressions:
+                      - key: kubernetes.io/hostname
+                        operator: In
+                        values: [anakin.local, obiwan.local, rey.local]
+          securityContext:
+            runAsUser: 999
+            runAsGroup: 999
+            runAsNonRoot: true
+            fsGroup: 999
+            seccompProfile:
+              type: RuntimeDefault
+          initContainers:
+            - name: dump
+              image: docker.io/library/postgres:17.11-bookworm@sha256:3645570cccdfa447589da9f57dd740faa29b30938e861289a5574b6ca6b03826
+              command: [bash, /scripts/backup.sh]
+              env:
+                - name: POD_UID
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.uid
+                - name: POSTGRES_IMAGE
+                  value: postgres:17.11-bookworm@sha256:3645570cccdfa447589da9f57dd740faa29b30938e861289a5574b6ca6b03826
+                - name: PGHOST
+                  value: nextcloud-db.nextcloud.svc.cluster.local
+                - name: PGDATABASE
+                  value: nextcloud
+                - name: PGUSER
+                  valueFrom:
+                    secretKeyRef:
+                      name: nextcloud-db-auth
+                      key: db-username
+                - name: PGPASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: nextcloud-db-auth
+                      key: db-password
+              resources:
+                requests: {cpu: 100m, memory: 128Mi}
+                limits: {cpu: '1', memory: 512Mi}
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: [ALL]
+              volumeMounts:
+                - name: work
+                  mountPath: /work
+                - name: scripts
+                  mountPath: /scripts
+                  readOnly: true
+                - name: tmp
+                  mountPath: /tmp
+          containers:
+            - name: upload
+              image: docker.io/amazon/aws-cli:2.37.10@sha256:3dacc5db57c923c4223e949795f538ecf1f2212b2b7d5a028b47b97f91564c0d
+              args:
+                - s3
+                - cp
+                - /work/
+                - s3://seadogger-homelab-backup/nextcloud-postgresql/
+                - --recursive
+                - --no-progress
+                - --only-show-errors
+              env:
+                - name: HOME
+                  value: /tmp
+                - name: AWS_DEFAULT_REGION
+                  value: us-east-1
+                - name: AWS_SHARED_CREDENTIALS_FILE
+                  value: /aws/aws-credentials
+              resources:
+                requests: {cpu: 100m, memory: 128Mi}
+                limits: {cpu: '1', memory: 512Mi}
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: [ALL]
+              volumeMounts:
+                - name: work
+                  mountPath: /work
+                  readOnly: true
+                - name: credentials
+                  mountPath: /aws
+                  readOnly: true
+                - name: tmp
+                  mountPath: /tmp
+          volumes:
+            - name: work
+              emptyDir:
+                sizeLimit: 1Gi
+            - name: tmp
+              emptyDir:
+                sizeLimit: 64Mi
+            - name: scripts
+              configMap:
+                name: nextcloud-db-scripts
+            - name: credentials
+              secret:
+                secretName: nextcloud-s3-backup-credentials
+                defaultMode: 0440

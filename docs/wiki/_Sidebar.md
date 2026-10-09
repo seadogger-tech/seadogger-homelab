@@ -37,6 +37,7 @@
 - [[15-CI-CD-and-GitHub-Actions]]
 - [[17-Runbooks]]
 - [[23-Disaster-Recovery-Restore]]
+- [[26-Nextcloud-PostgreSQL-Migration]]
 
 ## 🧠 Knowledge
 - [[13-ADR-Index]]

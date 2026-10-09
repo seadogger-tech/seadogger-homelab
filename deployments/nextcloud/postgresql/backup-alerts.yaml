@@ -1,0 +1,35 @@
+---
+# The staging playbook verifies the existing Prometheus integration first.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: nextcloud-db-backups
+  namespace: nextcloud
+spec:
+  groups:
+    - name: nextcloud-db-backups
+      rules:
+        - alert: NextcloudDatabaseBackupStale
+          expr: |
+            (
+              (time() - kube_cronjob_status_last_successful_time{namespace="nextcloud",cronjob="nextcloud-db-backup"} > 129600)
+              or
+              ((time() - kube_cronjob_created{namespace="nextcloud",cronjob="nextcloud-db-backup"} > 129600)
+                unless on(namespace, cronjob)
+                kube_cronjob_status_last_successful_time{namespace="nextcloud",cronjob="nextcloud-db-backup"})
+            )
+            and on(namespace, cronjob)
+            (kube_cronjob_spec_suspend{namespace="nextcloud",cronjob="nextcloud-db-backup"} == 0)
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: Nextcloud database backup has not succeeded in 36 hours
+        - alert: NextcloudDatabaseBackupFailed
+          expr: |
+            kube_job_status_failed{namespace="nextcloud",job_name=~"nextcloud-db-backup-.*"} > 0
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: Nextcloud database backup Job failed

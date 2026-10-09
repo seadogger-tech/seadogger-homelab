@@ -1,0 +1,20 @@
+---
+# Opt-in overlay only. Do not add it to the live Application before conversion.
+internalDatabase:
+  enabled: false
+mariadb:
+  enabled: false
+externalDatabase:
+  enabled: true
+  type: postgresql
+  host: nextcloud-db.nextcloud.svc.cluster.local
+  database: nextcloud
+  existingSecret:
+    enabled: true
+    secretName: nextcloud-db-auth
+    usernameKey: db-username
+    passwordKey: db-password
+# The phase runner protects legacy resources from pruning before this is used.
+# The bundled chart otherwise takes precedence over externalDatabase.
+postgresql:
+  enabled: false
