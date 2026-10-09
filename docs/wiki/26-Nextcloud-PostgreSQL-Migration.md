@@ -122,6 +122,16 @@ After reopening, confirm ordinary client login/files/shares and app operation, A
 
 ## Failure boundaries and recovery
 
+The isolated Apache listener must include the pinned image's
+`/etc/apache2/conf-enabled/docker-php.conf`. Loading the PHP module alone does
+not install its request handler. Before conversion, verify the loopback-only
+status response is JSON with maintenance enabled, then stop the listener.
+Plain PHP source in the response means the handler is missing; keep normal
+access fenced and correct the listener configuration before proceeding.
+Recovery checks process state as well as name: exited zombies under the
+maintenance pod's minimal PID1 cannot write or hold database descriptors. Any
+live PHP, Apache or cron process still blocks checkpoint replacement.
+
 If an inventory receipt is invalid JSON, inspect Job logs and node container-log
 rotation before assuming an S3 mismatch. Listings request only `Key` and `Size`
 as a compact JSON string to keep receipts small, including container-log

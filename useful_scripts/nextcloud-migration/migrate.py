@@ -381,6 +381,7 @@ DefaultRuntimeDir /tmp
 Listen 127.0.0.1:8081
 IncludeOptional /etc/apache2/mods-enabled/*.load
 IncludeOptional /etc/apache2/mods-enabled/*.conf
+Include /etc/apache2/conf-enabled/docker-php.conf
 ServerName nextcloud.seadogger-homelab
 User www-data
 Group www-data
@@ -670,8 +671,12 @@ Options FollowSymLinks
                 self.clean_canary(port, self.credentials())
         # The CLI-only pod must have no lingering PHP/Apache processes. Do not
         # replace a SQLite file while a process might still hold its WAL open.
-        processes = self.exec('ps', '-eo', 'comm=').decode().split()
-        require(not any(p.startswith(('php', 'apache', 'cron')) for p in processes), 'Application process still active')
+        processes = [line.split() for line in self.exec('ps', '-eo', 'stat=,comm=').decode().splitlines() if line.strip()]
+        require(all(len(row) == 2 for row in processes), 'Cannot establish application process state')
+        # A stopped daemon may remain as a zombie under the sleep-only PID1;
+        # zombies have exited and cannot retain file descriptors or write data.
+        require(not any(not state.startswith('Z') and name.startswith(('php', 'apache', 'cron'))
+                        for state, name in processes), 'Application process still active')
         self.db('rollback')
         checkpoint = '/var/www/html/data/.postgresql-migration/' + self.state['run']
         self.exec('tar', '-xpf', checkpoint + '/config.tar', '-C', '/var/www/html/config', '--no-same-owner')

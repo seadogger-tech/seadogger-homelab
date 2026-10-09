@@ -40,6 +40,7 @@ class WorkflowTests(unittest.TestCase):
         self.objects.append({'Key': 'nextcloud-data/remote-only', 'Size': 99})
         self.rollback_failure = False
         self.inventory_truncated = False
+        self.processes = b'S sleep\n'
 
     def command(self, args, **kwargs):
         self.calls.append(args)
@@ -72,7 +73,7 @@ class WorkflowTests(unittest.TestCase):
             elif '/migration/manifest.php' in command:
                 reply = self.source
             elif command[0] == 'ps':
-                reply = b'sleep\n'
+                reply = self.processes
             elif 'dbhost' in command:
                 reply = CONVERTER_CONTRACT['saved_dbhost'].encode()
             elif 'app:list' in command:
@@ -208,6 +209,17 @@ class WorkflowTests(unittest.TestCase):
                 self.assertEqual(self.run_phase('convert'), 1)
                 self.assertFalse(any('/migration/convert.php' in args for args in self.calls))
                 self.assertEqual(self.database_actions(), ['rollback'] if started else ['target', 'rollback'])
+
+    def test_rollback_distinguishes_exited_zombies_from_live_writers(self):
+        self.processes = b'S sleep\nZ apache2\n'
+        self.assertEqual(self.run_phase('convert'), 1)
+        self.assertTrue(self.state['rolled_back'])
+
+    def test_live_application_process_blocks_database_rollback(self):
+        self.processes = b'S sleep\nS apache2\n'
+        self.assertEqual(self.run_phase('convert'), 1)
+        self.assertNotIn('rolled_back', self.state)
+        self.assertEqual(self.database_actions(), ['target'])
 
     def test_either_reopening_boundary_pauses_without_touching_database(self):
         for flag in ('reopening_started', 'rollback_reopening_started'):
