@@ -117,6 +117,44 @@ class WorkflowTests(unittest.TestCase):
     def database_actions(self):
         return [args[-2] for args in self.calls if '/migration/database.php' in args]
 
+    def test_fence_mounts_source_claim_once_and_exposes_its_root(self):
+        self.state.update(prepared=True, writers_reviewed=True, image='nextcloud@sha256:' + 'b' * 64,
+                          deployment={'spec': {'template': {'spec': {
+                              'containers': [{'name': 'nextcloud', 'volumeMounts': [
+                                  {'name': 'app-data', 'mountPath': '/var/www/html/data', 'subPath': 'data'}]}],
+                              'volumes': [{'name': 'app-data', 'persistentVolumeClaim': {
+                                  'claimName': 'nextcloud-nextcloud'}}]}}}})
+        self.replicas = 1
+        original = self.command
+        pods = []
+
+        def boundary(args, **kwargs):
+            if args == ['kubectl', 'config', 'current-context']:
+                return subprocess.CompletedProcess(args, 0, b'isolated-test', b'')
+            verb, *rest = args[6:]
+            if verb == 'get' and rest[0] == 'pods' and '-l' in rest and self.replicas:
+                return subprocess.CompletedProcess(args, 0, b'{"items":[{"metadata":{"name":"web"}}]}', b'')
+            if verb == 'patch' and rest[0] == 'deployment':
+                self.replicas = json.loads(args[-1])['spec']['replicas']
+            if verb == 'apply':
+                resource = json.loads(kwargs['input'])
+                if resource['kind'] == 'Pod':
+                    pods.append(resource)
+                return subprocess.CompletedProcess(args, 0, b'', b'')
+            return original(args, **kwargs)
+
+        self.command = boundary
+        self.assertEqual(self.run_phase('fence'), 0, self.stderr.getvalue())
+        self.assertTrue(self.state['maintenance_pod_ready'])
+        self.assertEqual(len(pods), 1)
+        spec = pods[0]['spec']
+        claims = [v for v in spec['volumes'] if v.get('persistentVolumeClaim', {}).get('claimName') == 'nextcloud-nextcloud']
+        self.assertEqual(len(claims), 1, 'Duplicate PVC volume names leave kubelet waiting for an unmounted alias')
+        mounts = spec['containers'][0]['volumeMounts']
+        self.assertIn({'name': 'app-data', 'mountPath': '/source'}, mounts)
+        self.assertIn({'name': 'app-data', 'mountPath': '/var/www/html/data', 'subPath': 'data'}, mounts)
+        self.assertNotIn('fsGroup', spec['securityContext'])
+
     def test_validation_accepts_host_and_port_saved_by_pinned_converter(self):
         self.state['converted'] = True
         self.state['apps_before'] = {'enabled': {'files': '2.4.0'}}

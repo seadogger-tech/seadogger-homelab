@@ -92,6 +92,22 @@ After reopening, confirm ordinary client login/files/shares and app operation, A
 
 ## Failure boundaries and recovery
 
+If the maintenance pod stays in `ContainerCreating`, inspect its events and the
+node's kubelet logs before retrying the fence. A PVC declared under two volume
+names can leave kubelet waiting for an unmounted alias even when the CephFS
+mount exists. The maintenance pod must reuse the original PVC volume name for
+its `/source` mount, without a `subPath`; keep the original application mounts
+and their subpaths intact. Do not add a second volume for the same claim or
+introduce `fsGroup` traversal as a workaround.
+
+For an interrupted fence, preserve the original pod definition and private
+state. Verify the normal writer barrier and whether the temporary container
+ever started before considering replacement of only that temporary pod. After
+an authorized repair, independently verify readiness, the barrier and the
+empty-target transactional write check before recording maintenance readiness
+and continuing to checkpoint. Do not clear phase flags or rerun the entire
+fence blindly; no PVC or application-data deletion is needed for this repair.
+
 Before normal reopening, a failure in refresh/conversion/validation/canary/backup/reopening preparation attempts the accepted safe SQLite rollback. The rollback first proves the barrier still holds, checks the checkpoint, accounts for canary artifacts, and verifies there are no PHP/Apache/cron processes. It preserves the current SQLite/WAL/SHM and complete configuration under `preserved-before-rollback`, installs the validated checkpoint/configuration pair and restores matching deployment settings. Failed PostgreSQL contents are retained. An uncertain canary write, unexpected file, running process, failed checkpoint check or uncertain barrier stops rollback and leaves access paused for investigation.
 
 After `reopening_started` is persisted, **never automatically restore SQLite**. A failed check disables Argo automation, suspends the mirror and scales normal writers to zero while retaining PostgreSQL and current files. The same boundary applies to `rollback_reopening_started`: after reopening SQLite, preserve its current state and never install the earlier checkpoint again. Once access might have resumed, an earlier database copy is stale. Investigate and repair/recover forward with a separately reviewed procedure.

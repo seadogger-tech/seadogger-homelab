@@ -231,6 +231,9 @@ class Migration:
                    'data': {p.name: p.read_text() for p in HERE.glob('*.php')}}
         self.apply(scripts)
         pod_spec = copy.deepcopy(self.state['deployment']['spec']['template']['spec'])
+        source_volumes = [v['name'] for v in pod_spec['volumes']
+                          if v.get('persistentVolumeClaim', {}).get('claimName') == 'nextcloud-nextcloud']
+        require(len(source_volumes) == 1, 'Expected one source PVC volume in the original deployment')
         source = next(c for c in pod_spec['containers'] if c['name'] == 'nextcloud')
         container = {k: copy.deepcopy(v) for k, v in source.items()
                      if k in ('env', 'envFrom', 'volumeMounts', 'resources', 'workingDir')}
@@ -241,7 +244,7 @@ class Migration:
                                               'allowPrivilegeEscalation': False, 'capabilities': {'drop': ['ALL']}}})
         container['volumeMounts'] += [{'name': 'migration-tools', 'mountPath': '/migration', 'readOnly': True},
                                       {'name': 'migration-secrets', 'mountPath': '/migration-secrets', 'readOnly': True},
-                                      {'name': 'migration-source', 'mountPath': '/source'}]
+                                      {'name': source_volumes[0], 'mountPath': '/source'}]
         pod_spec['containers'] = [container]
         for key in ['initContainers', 'serviceAccount', 'serviceAccountName', 'nodeName']:
             pod_spec.pop(key, None)
@@ -252,8 +255,7 @@ class Migration:
                                        'seccompProfile': {'type': 'RuntimeDefault'}}
         pod_spec['volumes'] += [{'name': 'migration-tools', 'configMap': {'name': self.state['pod']}},
                                {'name': 'migration-secrets', 'secret': {'secretName': 'nextcloud-db-auth', 'defaultMode': 0o444,
-                                 'items': [{'key': 'db-password', 'path': 'db-password'}]}},
-                               {'name': 'migration-source', 'persistentVolumeClaim': {'claimName': 'nextcloud-nextcloud'}}]
+                                 'items': [{'key': 'db-password', 'path': 'db-password'}]}}]
         self.apply({'apiVersion': 'v1', 'kind': 'Pod', 'metadata': {'name': self.state['pod'], 'namespace': NAMESPACE,
                     'labels': {'app.kubernetes.io/name': 'nextcloud-migration', 'migration-run': self.state['run']}}, 'spec': pod_spec})
         self.kube('wait', '--for=condition=Ready', 'pod/' + self.state['pod'], '--timeout=180s', timeout=210)
