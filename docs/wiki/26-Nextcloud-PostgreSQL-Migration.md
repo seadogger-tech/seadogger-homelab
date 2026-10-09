@@ -122,6 +122,15 @@ After reopening, confirm ordinary client login/files/shares and app operation, A
 
 ## Failure boundaries and recovery
 
+If an inventory receipt is invalid JSON, inspect Job logs and node container-log
+rotation before assuming an S3 mismatch. Listings request only `Key` and `Size`
+as a compact JSON string to keep receipts small, including container-log
+per-line overhead, with AWS CLI JSON pagination enabled. The collector decodes
+the string and then the inventory array. A truncated receipt
+cannot satisfy verification: retain it and stop; never compare only the remaining
+objects or suppress the parse failure. If even the compact receipt exceeds the
+node log capacity, arrange durable receipt collection before a new attempt.
+
 If the maintenance pod stays in `ContainerCreating`, inspect its events and the
 node's kubelet logs before retrying the fence. A PVC declared under two volume
 names can leave kubelet waiting for an unmounted alias even when the CephFS

@@ -39,6 +39,7 @@ class WorkflowTests(unittest.TestCase):
         self.objects = [{'Key': row['key'], 'Size': row['size']} for row in self.source]
         self.objects.append({'Key': 'nextcloud-data/remote-only', 'Size': 99})
         self.rollback_failure = False
+        self.inventory_truncated = False
 
     def command(self, args, **kwargs):
         self.calls.append(args)
@@ -86,11 +87,15 @@ class WorkflowTests(unittest.TestCase):
         elif verb == 'logs':
             job_args = self.jobs[rest[0].removeprefix('job/')]
             if 'list-objects-v2' in job_args:
+                self.assertEqual(job_args[job_args.index('--query') + 1], 'to_string(Contents[].{Key:Key,Size:Size})')
                 prefix = job_args[job_args.index('--prefix') + 1]
                 reply = self.objects if prefix == 'nextcloud-data/' else [
                     {'Key': prefix + name, 'Size': size} for name, size in
                     [('nextcloud.db', 4096), ('config.tar', 512), ('baseline.json', 2),
                      ('references.json', 2), ('database.sha256', 64), ('complete', 1)]]
+                reply = json.dumps(reply, separators=(',', ':'))
+                if self.inventory_truncated and prefix == 'nextcloud-data/':
+                    reply = json.dumps(reply).encode()[12:]
         elif verb == 'rollout' and self.rollback_failure:
             code, reply = 1, b'Simulated startup failure after reopening SQLite'
         elif verb not in ('patch', 'wait', 'delete', 'rollout'):
@@ -243,6 +248,14 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(comparison['missing'], ['nextcloud-data/space and\nnewline'])
         self.assertEqual(comparison['size_mismatch'], ['nextcloud-data/second'])
         self.assertFalse(self.state.get('refreshed'))
+        self.assertTrue(self.state['rolled_back'])
+        self.assertFalse(any('/migration/convert.php' in args for args in self.calls))
+
+    def test_truncated_inventory_stops_before_conversion(self):
+        self.inventory_truncated = True
+        self.state.pop('refreshed')
+        self.assertEqual(self.run_phase('refresh'), 1)
+        self.assertNotIn('refreshed', self.state)
         self.assertTrue(self.state['rolled_back'])
         self.assertFalse(any('/migration/convert.php' in args for args in self.calls))
 

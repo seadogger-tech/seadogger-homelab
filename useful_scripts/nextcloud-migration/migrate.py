@@ -302,6 +302,15 @@ class Migration:
         private_write(self.directory / (purpose + '.log'), result)
         return result
 
+    def s3_inventory(self, purpose, bucket, prefix):
+        # JSON output applies the query after complete auto-pagination. Encode
+        # the compact array as one JSON string to avoid per-line CRI log overhead.
+        receipt = self.aws_job(purpose, ['s3api', 'list-objects-v2', '--bucket', bucket,
+            '--prefix', prefix, '--query', 'to_string(Contents[].{Key:Key,Size:Size})', '--output', 'json'])
+        listing = json.loads(json.loads(receipt)) or []
+        require(isinstance(listing, list), 'Expected a complete S3 inventory list')
+        return listing
+
     def refresh(self):
         self.assert_fenced()
         self.require_stage('checkpoint')
@@ -316,15 +325,13 @@ class Migration:
         self.aws_job('refresh', args, True)  # Deliberately NO --delete.
         require(source == json.loads(self.exec('php', '/migration/manifest.php')), 'Source changed during S3 refresh')
         # AWS CLI auto-pagination; no --max-items or --no-paginate truncation.
-        listing = json.loads(self.aws_job('inventory', ['s3api', 'list-objects-v2', '--bucket', MIRROR_BUCKET,
-            '--prefix', 'nextcloud-data/', '--query', 'Contents', '--output', 'json'])) or []
+        listing = self.s3_inventory('inventory', MIRROR_BUCKET, 'nextcloud-data/')
         private_write(self.directory / 'source-manifest.json', source)
         private_write(self.directory / 's3-manifest.json', listing)
         comparison = compare_manifest(source, listing)
         private_write(self.directory / 'comparison.json', comparison)
         require(not comparison['missing'] and not comparison['size_mismatch'], 'S3 metadata comparison failed')
-        checkpoint = json.loads(self.aws_job('checkpoint-list', ['s3api', 'list-objects-v2', '--bucket', BACKUP_BUCKET,
-            '--prefix', f'nextcloud-migration/{self.state["run"]}/', '--query', 'Contents', '--output', 'json'])) or []
+        checkpoint = self.s3_inventory('checkpoint-list', BACKUP_BUCKET, f'nextcloud-migration/{self.state["run"]}/')
         names = {o['Key'].split('/')[-1]: o['Size'] for o in checkpoint}
         require(names.get('nextcloud.db') == self.state['checkpoint']['bytes']
                 and names.get('config.tar') == self.state['checkpoint']['config_bytes']
@@ -500,8 +507,7 @@ Options FollowSymLinks
         pods = json.loads(self.kube('get', 'pods', '-l', 'job-name=' + name, '-o', 'json'))['items']
         require(len(pods) == 1, 'Unexpected backup attempt count')
         uid = pods[0]['metadata']['uid']
-        items = json.loads(self.aws_job('dump-list', ['s3api', 'list-objects-v2', '--bucket', BACKUP_BUCKET,
-            '--prefix', 'nextcloud-postgresql/', '--query', 'Contents', '--output', 'json'])) or []
+        items = self.s3_inventory('dump-list', BACKUP_BUCKET, 'nextcloud-postgresql/')
         backup = [o for o in items if '/' + uid + '/' in o['Key'] or ('-' + uid + '/') in o['Key']]
         require({o['Key'].split('/')[-1] for o in backup} == {'nextcloud.dump', 'SHA256SUMS', 'metadata.txt'}
                 and all(o['Size'] > 0 for o in backup), 'Native backup S3 objects are incomplete')
