@@ -1,60 +1,119 @@
 ---
-# Step 1: Set KUBECONFIG globally
-- name: Set KUBECONFIG global
-  ansible.builtin.set_fact:
-    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+- name: Manage Nextcloud configuration without crossing migration boundaries
+  tags: [nextcloud_configuration]
+  block:
+    - name: Set KUBECONFIG global
+      ansible.builtin.set_fact:
+        KUBECONFIG: /etc/rancher/k3s/k3s.yaml
 
-# Step 8: Create ArgoCD Nextcloud Application
-- name: Check for the local migration deployment marker
-  ansible.builtin.stat:
-    path: '{{ playbook_dir }}/nextcloud-database.local.json'
-  delegate_to: localhost
-  become: false
-  register: nc_database_marker
+    - name: Check for the local migration deployment marker
+      ansible.builtin.stat:
+        path: '{{ playbook_dir }}/nextcloud-database.local.json'
+      delegate_to: localhost
+      become: false
+      register: nc_database_marker
 
-- name: Load the database selection preserved by the migration
-  ansible.builtin.include_vars:
-    file: '{{ playbook_dir }}/nextcloud-database.local.json'
-  when: nc_database_marker.stat.exists
-
-- name: Require the reviewed PostgreSQL overlay revision when active
-  ansible.builtin.assert:
-    that:
-      - nextcloud_postgresql_revision | default('') is match('^[0-9a-f]{40}$')
-  when: nextcloud_postgresql_active | default(false) | bool
-
-- name: Create Nextcloud ArgoCD Application
-  kubernetes.core.k8s:
-    kubeconfig: "{{ KUBECONFIG }}"
-    state: present
-    definition:
-      apiVersion: argoproj.io/v1alpha1
-      kind: Application
-      metadata:
+    - name: Read the live Nextcloud deployment selection before changing it
+      kubernetes.core.k8s_info:
+        kubeconfig: '{{ KUBECONFIG }}'
+        api_version: argoproj.io/v1alpha1
+        kind: Application
         name: nextcloud
         namespace: argocd
-      spec:
-        project: default
-        source:
-          repoURL: https://nextcloud.github.io/helm/
-          chart: nextcloud
-          targetRevision: "8.9.1"
-          helm:
-            valuesObject: '{{ nextcloud_migration_helm_values | default(omit) }}'
-            valueFiles: >-
-              {{ ['https://raw.githubusercontent.com/seadogger-tech/seadogger-homelab/master/deployments/nextcloud/nextcloud-values.yaml']
-                 + (['https://raw.githubusercontent.com/seadogger-tech/seadogger-homelab/'
-                     ~ nextcloud_postgresql_revision ~ '/deployments/nextcloud/nextcloud-postgresql-values.yaml']
-                    if nextcloud_postgresql_active | default(false) | bool else []) }}
-        destination:
-          server: https://kubernetes.default.svc
-          namespace: nextcloud
-        syncPolicy:
-          automated:
-            prune: true
-            selfHeal: true
-          syncOptions:
-            - CreateNamespace=true
+      register: nc_live_application
+
+    - name: Capture the live Helm selection
+      ansible.builtin.set_fact:
+        nc_live_spec: '{{ nc_live_application.resources[0].spec if nc_live_application.resources | length > 0 else {} }}'
+
+    - name: Refuse to redeploy while reconciliation is paused or running
+      ansible.builtin.assert:
+        that:
+          - nc_live_spec.syncPolicy.automated | default(none) is not none
+          - nc_live_spec.syncPolicy.automated.enabled | default(true) | bool
+          - not nc_live_application.resources[0].operation | default({})
+          - nc_live_application.resources[0].status.operationState.phase | default('') != 'Running'
+        fail_msg: Nextcloud is paused or syncing. Preserve the migration barrier and inspect the private run state.
+      when: nc_live_application.resources | length > 0
+
+    - name: Require private migration state for an existing database or image pin
+      ansible.builtin.assert:
+        that:
+          - nc_database_marker.stat.exists
+        fail_msg: Restore the private migration marker from the completed run before redeploying Nextcloud.
+      when: >-
+        nc_live_spec.source.helm.valuesObject.externalDatabase.type | default('') == 'postgresql' or
+        nc_live_spec.source.helm.valueFiles | default([]) | select('search', 'nextcloud-postgresql-values.yaml') | list | length > 0 or
+        '@sha256:' in (nc_live_spec.source.helm.valuesObject.image.tag | default(''))
+
+    - name: Load the database selection preserved by the migration
+      ansible.builtin.include_vars:
+        file: '{{ playbook_dir }}/nextcloud-database.local.json'
+        name: nc_migration_selection
+      when: nc_database_marker.stat.exists
+
+    - name: Validate the protected marker and immutable application image
+      ansible.builtin.assert:
+        that:
+          - nc_database_marker.stat.mode == '0600'
+          - nc_migration_selection.nextcloud_migration_run | length > 0
+          - nc_migration_selection.nextcloud_postgresql_revision is match('^[0-9a-f]{40}$')
+          - nc_migration_selection.nextcloud_migration_helm_values.image.tag is match('^32\\.0\\.6-apache@sha256:[0-9a-f]{64}$')
+          - nc_migration_selection.nextcloud_migration_helm_values.image.repository == 'library/nextcloud'
+        fail_msg: Restore a complete, protected private migration marker with the captured application digest.
+      when: nc_database_marker.stat.exists
+
+    - name: Refuse a stale marker that disagrees with the live selection
+      ansible.builtin.assert:
+        that:
+          - >-
+            (nc_migration_selection.nextcloud_postgresql_active | bool) ==
+            (nc_live_spec.source.helm.valuesObject.externalDatabase.type | default('') == 'postgresql')
+          - nc_migration_selection.nextcloud_migration_helm_values == nc_live_spec.source.helm.valuesObject | default({})
+        fail_msg: The private migration marker disagrees with the live Application. Inspect the completed run; do not overwrite either.
+      when:
+        - nc_database_marker.stat.exists
+        - nc_live_application.resources | length > 0
+
+    - name: Preserve the migration selection for ordinary deployment
+      ansible.builtin.set_fact:
+        nextcloud_postgresql_active: '{{ nc_migration_selection.nextcloud_postgresql_active | default(false) }}'
+        nextcloud_postgresql_revision: '{{ nc_migration_selection.nextcloud_postgresql_revision | default("") }}'
+        nextcloud_migration_helm_values: '{{ nc_migration_selection.nextcloud_migration_helm_values | default({}) }}'
+
+    - name: Create Nextcloud ArgoCD Application
+      kubernetes.core.k8s:
+        kubeconfig: "{{ KUBECONFIG }}"
+        state: present
+        definition:
+          apiVersion: argoproj.io/v1alpha1
+          kind: Application
+          metadata:
+            name: nextcloud
+            namespace: argocd
+          spec:
+            project: default
+            source:
+              repoURL: https://nextcloud.github.io/helm/
+              chart: nextcloud
+              targetRevision: "8.9.1"
+              helm:
+                valuesObject: '{{ nextcloud_migration_helm_values | default(omit) }}'
+                valueFiles: >-
+                  {{ ['https://raw.githubusercontent.com/seadogger-tech/seadogger-homelab/'
+                      ~ 'master/deployments/nextcloud/nextcloud-values.yaml']
+                     + (['https://raw.githubusercontent.com/seadogger-tech/seadogger-homelab/'
+                         ~ nextcloud_postgresql_revision ~ '/deployments/nextcloud/nextcloud-postgresql-values.yaml']
+                        if nextcloud_postgresql_active | default(false) | bool else []) }}
+            destination:
+              server: https://kubernetes.default.svc
+              namespace: nextcloud
+            syncPolicy:
+              automated:
+                prune: true
+                selfHeal: true
+              syncOptions:
+                - CreateNamespace=true
 
 - name: Wait for Nextcloud pods to be ready
   kubernetes.core.k8s_info:

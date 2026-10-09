@@ -118,6 +118,11 @@
       import_tasks: tasks/openwebui_deploy.yml
       when: enable_openwebui | default(true)
 
+    - name: Deploy dedicated Nextcloud PostgreSQL
+      ansible.builtin.import_tasks: tasks/nextcloud_postgresql_deploy.yml
+      when: enable_nextcloud_postgresql | default(false) | bool
+      tags: [nextcloud_postgresql]
+
     - name: Deploy Nextcloud
       import_tasks: tasks/nextcloud_deploy.yml
       when: enable_nextcloud | default(true)
@@ -157,4 +162,3 @@
     - name: Deploy Mealie
       import_tasks: tasks/mealie_deploy.yml
       when: enable_mealie | default(true)
-

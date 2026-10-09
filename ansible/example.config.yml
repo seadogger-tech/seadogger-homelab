@@ -27,6 +27,12 @@ manual_install_pihole: true
 manual_install_prometheus: true
 manual_install_openwebui: true
 manual_install_nextcloud: true
+# Opt-in dedicated target; staging does not convert or switch Nextcloud.
+manual_install_nextcloud_postgresql: false
+nextcloud_postgresql_revision: ""  # Reviewed, published 40-character Core commit.
+# Set distinct >=24-character passwords in private config.yml, never in Git.
+nextcloud_postgresql_admin_password: ""
+nextcloud_postgresql_password: ""
 manual_install_jellyfin: true
 manual_install_traefik_dashboard: true
 manual_install_nextcloud_s3_backup: true
@@ -133,11 +139,11 @@ hdhomerun_device_ids: "YOUR_DEVICE_ID_HERE"
 # --- POD / APPLICATION CLEANUP ---
 run_pod_cleanup: true
 pod_cleanup_list:
-  - { name: "bedrock-access-gateway", namespace: "bedrock-gateway", selector: "app=bedrock-access-gateway", delete_pvc: true }
-  - { name: "pihole", namespace: "pihole", selector: "app.kubernetes.io/name=pihole", delete_pvc: true }
-  - { name: "openwebui", namespace: "openwebui", selector: "app.kubernetes.io/instance=openwebui", delete_pvc: true }
-  - { name: "nextcloud", namespace: "nextcloud", selector: "app=nextcloud", delete_pvc: true }
-  - { name: "jellyfin", namespace: "jellyfin", selector: "app=jellyfin", delete_pvc: true }
+  - {name: "bedrock-access-gateway", namespace: "bedrock-gateway", selector: "app=bedrock-access-gateway", delete_pvc: true}
+  - {name: "pihole", namespace: "pihole", selector: "app.kubernetes.io/name=pihole", delete_pvc: true}
+  - {name: "openwebui", namespace: "openwebui", selector: "app.kubernetes.io/instance=openwebui", delete_pvc: true}
+  - {name: "nextcloud", namespace: "nextcloud", selector: "app=nextcloud", delete_pvc: true}
+  - {name: "jellyfin", namespace: "jellyfin", selector: "app=jellyfin", delete_pvc: true}
 
 # --- INFRASTRUCTURE CLEANUP ---
 run_infrastructure_cleanup: false
@@ -145,18 +151,18 @@ infrastructure_cleanup_list:
   - "prometheus"
   - "argocd"
   - "metallb"
-  - "rook-ceph" # Note: This does NOT wipe physical disks.
+  - "rook-ceph"  # Note: This does NOT wipe physical disks.
 
 # --- Namespace Pre-cooking Configuration ---
 precook_namespaces:
-  - { name: "openwebui" }
-  - { name: "monitoring" }
-  - { name: "argocd" }
-  - { name: "rook-ceph" }
-  - { name: "pihole" }
-  - { name: "bedrock-gateway" }
-  - { name: "nextcloud" }
-  - { name: "jellyfin" }
+  - {name: "openwebui"}
+  - {name: "monitoring"}
+  - {name: "argocd"}
+  - {name: "rook-ceph"}
+  - {name: "pihole"}
+  - {name: "bedrock-gateway"}
+  - {name: "nextcloud"}
+  - {name: "jellyfin"}
 
 
 # ===================================================================================
@@ -182,6 +188,7 @@ enable_internal_pki: "{{ cold_start_stage_2_install_infrastructure | bool }}"
 enable_prometheus: "{{ cold_start_stage_2_install_applications | bool and manual_install_prometheus | bool }}"
 
 # --- Stage 3: Application Deployment Variables ---
+enable_nextcloud_postgresql: "{{ cold_start_stage_3_install_applications | bool and manual_install_nextcloud_postgresql | bool }}"
 # An application is enabled if the STAGE 3 master switch is ON, AND if its individual MANUAL switch is ON.
 enable_bedrock: "{{ cold_start_stage_3_install_applications | bool and manual_install_bedrock | bool }}"
 enable_pihole: "{{ cold_start_stage_3_install_applications | bool and manual_install_pihole | bool }}"

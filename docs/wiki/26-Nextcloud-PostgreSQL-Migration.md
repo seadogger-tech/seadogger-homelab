@@ -7,10 +7,11 @@ The conversion uses the existing production file volume. It creates no isolated 
 ## Deployment and backup layout
 
 - `deployments/nextcloud/postgresql/`: a separate `nextcloud-db` StatefulSet, two Services, retained 10Gi RWO `ceph-block-data` PVC, initialization/backup scripts, suspended native-backup CronJob and failed/stale backup alerts.
-- `ansible/nextcloud_postgresql.yml`: explicit staging, with credentials from gitignored `ansible/config.yml`; not imported by `main.yml`.
+- `ansible/main.yml`: the normal application-stage entry point imports `tasks/nextcloud_postgresql_deploy.yml` before Nextcloud when `enable_nextcloud_postgresql` is selected. Ansible provisions the Secret and ArgoCD Application; ArgoCD renders Kustomize and owns the database, PVC, backups and alerts.
+- `ansible/nextcloud_postgresql.yml`: explicit database-only staging, with the same shared tasks and gitignored `ansible/config.yml`; it neither enables other applications nor converts Nextcloud.
 - `deployments/nextcloud/nextcloud-postgresql-values.yaml`: opt-in external-database overlay. The bundled PostgreSQL must be disabled because chart 8.9.1 gives it precedence over `externalDatabase`.
 - `ansible/nextcloud_migration.yml` and `useful_scripts/nextcloud-migration/migrate.py`: bounded phases, private state, no cluster mutation without `--execute`.
-- `ansible/nextcloud-database.local.json`: gitignored database/image selection written by the runner and loaded by ordinary Nextcloud deployment tasks. Preserve this file with the private configuration. It prevents later Ansible runs from selecting the old database. Reconstruct it from the successful run evidence when moving operator workstations.
+- `ansible/nextcloud-database.local.json`: gitignored database/image selection written by the runner and loaded by ordinary Nextcloud deployment tasks. Preserve this file with the private configuration. Deployment rejects a missing marker when live PostgreSQL settings or a migrated image pin exist, a stale marker that disagrees with the live Helm values, and paused/running Nextcloud reconciliation. This protects both PostgreSQL and rollback-to-SQLite selections.
 
 The application gets a separate, non-superuser `nextcloud` role and database. PostgreSQL requests 100m CPU/512Mi memory, with 1 CPU/1Gi limits; native backup requests 100m/128Mi, with 1 CPU/512Mi limits. The maintenance pod requests 100m/256Mi and uses the captured application image digest. No recursive ownership change is performed on the source PVC.
 
@@ -36,7 +37,11 @@ The existing native-file mirror is `s3://homelab-nextcloud-backup-708765384784-u
 5. Using the homelab AWS MCP identity, inspect the existing workload identity/policy and destination lifecycle. Confirm `ListBucket` for the two prefixes, read access needed for verification, and `PutObject` (plus applicable multipart/KMS rights) for the mirror, `nextcloud-postgresql/` and `nextcloud-migration/`. Do not infer write access from a successful listing. The execution checkpoint/dump uploads must succeed before reopening; no speculative IAM changes are part of staging.
 6. Add two distinct passwords of at least 24 characters to gitignored `ansible/config.yml`: `nextcloud_postgresql_admin_password` and `nextcloud_postgresql_password`. Do not put credentials in command arguments, Git, chat, or public logs. The playbook masks Secret handling and refuses implicit rotation of an existing database Secret.
 
-After the staging workload has been reviewed and authorized, run from the operator workstation (replace the commit placeholder):
+The example configuration leaves `manual_install_nextcloud_postgresql: false`. For the normal application stage, set it to true together with `cold_start_stage_3_install_applications: true`, and set `nextcloud_postgresql_revision` to the reviewed commit. Their conjunction selects `enable_nextcloud_postgresql`; either switch false leaves the database untouched. Existing private configurations without this new enable variable also leave it disabled. As with other applications, an explicit `enable_nextcloud_postgresql: true` override selects it independently. No staging path changes Nextcloud's selected database.
+
+For a database-only run of the normal entry point, use `main.yml --tags nextcloud_postgresql` with that selection enabled. This tag excludes unrelated application, namespace and infrastructure tasks; the Nextcloud namespace and ArgoCD must already exist. For a normal multi-application run, PostgreSQL is ordered before Nextcloud. This change does not alter any existing infrastructure or cold-start switches; `cleanup.yml` is never called by these tasks.
+
+Alternatively, after staging has been reviewed and authorized, invoke the dedicated entry point below. It requires `nextcloud_postgresql_apply=true` and imports the identical database tasks, independently of the stage/manual switches. Replace the commit placeholder:
 
 ```bash
 ansible-playbook -i /Users/jason/dev/seadogger-homelab-pro/core/ansible/hosts.ini /Users/jason/dev/seadogger-homelab-pro/core/ansible/nextcloud_postgresql.yml -e nextcloud_postgresql_apply=true -e nextcloud_postgresql_revision=REVIEWED_CORE_COMMIT
@@ -93,17 +98,44 @@ After `reopening_started` is persisted, **never automatically restore SQLite**. 
 
 Failures during `fence` or `checkpoint` may leave maintenance enabled or reconciliation suspended. Those phases intentionally refuse blind retries. Preserve their state, inspect active operations/processes and checkpoint completeness, then prepare a concrete recovery action from the captured original settings. Do not delete flags to trick the runner into continuing. If the maintenance pod was already stopped during reopening preparation, automatic rollback cannot establish its checks; keep normal replicas zero and recreate/review the maintenance barrier before any manual recovery.
 
-A finished or rolled-back run cannot be repeated. Keep its directory and marker. A new migration attempt requires inspecting the retained target, marker and recovery artifacts first; never automatically clear the target. Do not rerun `main.yml` from a different checkout missing the database marker during or after the cutover.
+A finished or rolled-back run cannot be repeated. Keep its directory and marker. A new migration attempt requires inspecting the retained target, marker and recovery artifacts first; never automatically clear the target. Normal Nextcloud deployment refuses paused reconciliation, including a migration in progress or a post-reopening failure. Do not restore automation merely to bypass this guard.
 
 For a later pre-change dump, an operator can create a uniquely named Job from `nextcloud-db-backup`, wait for completion, and verify its three S3 artifacts and Pod UID. Do this before the authorized change. Do not equate a CronJob definition or an old successful Job with a fresh backup.
+
+## Private configuration on a new workstation
+
+Back up the protected `ansible/config.yml`, `ansible/hosts.ini`, `ansible/nextcloud-database.local.json` and complete private run directory together through the operator's existing secure storage. The marker is required after **either** successful PostgreSQL reopening or SQLite rollback reopening. It retains the captured image, database selection and reviewed overlay revision; none of these files belong in Git or issue attachments.
+
+On a new checkout, recover these exact files from that secure copy into the same relative locations, set the marker and credential files to mode 0600, and retain the private run directory at mode 0700. Review the finished run (`schedules_restored` or `rolled_back`) and the current read-only ArgoCD Application before any deployment. The Ansible guard compares the restored selection and Helm values to the live Application before writing it. Do not manufacture an empty marker, clear its run ID or set an active flag to bypass a mismatch. If the marker or completed evidence cannot be recovered, stop and reconstruct the selection through a separately reviewed recovery action; an unverified checkout is not allowed to redeploy.
+
+Recover original database passwords from protected configuration/secret backup. Reruns compare both credentials with the existing Secret and refuse implicit rotation. If retained database storage exists but its Secret is missing, staging stops before creating replacement credentials. Restore the original Secret through a reviewed recovery action; do not initialize another password against the retained volume. Existing database Application Kustomize patches, including nightly backup activation, survive ordinary staging reruns.
+
+## Spec coverage and execution evidence
+
+The following maps the approved migration requirements to preparation and later acceptance. Local simulations exercise the real CLI/Ansible entry points at the Kubernetes/AWS boundary; they do not establish live service or S3 behavior.
+
+| Spec stories / requirement | Implemented behavior and local evidence | Remaining runtime acceptance |
+| --- | --- | --- |
+| 1–8: maintained ARM64 PostgreSQL, dedicated persistence, resources, credentials, separate staging | Official digest pins; retained expandable 10Gi explicit Ceph PVC; bounded workloads; separate non-admin role; shared Ansible → ArgoCD → Kustomize tasks. Entry-point tests cover stage/manual switches, staging equivalence, check mode, credentials and retained storage. | Ticket 27: current capacity, target startup and transactional writes, Secret readability, role permissions. |
+| 9–12: preserve application/files and maintain independent writer barrier | Captured 32.0.6 digest; maintenance pod; repeated replicas/pods/endpoints/controller checks. CLI fault tests refuse an open barrier. Ansible refuses paused reconciliation. | Ticket 22: approved window, fresh external/host writer inventory, actual barrier and image verification. |
+| 13–16: complete checkpoint and accepted S3 comparison | Real temporary SQLite WAL backup/integrity/preservation tests; full config tar and completion evidence; separate S3 checkpoint; upload-only refresh. CLI tests cover every simulated key, missing/sized/remote-only objects and pagination/deletion arguments. | Tickets 27/22: exact destination rights and real complete uploads/metadata comparison. No checksum or restore claim. |
+| 17–18: omissions and partial targets | Pinned converter refuses every question; CLI tests simulate its nonzero omission result, retain private transcript, and refuse nonempty/retried targets without clearing them. | Ticket 22: actual pinned Nextcloud command and table inventory; local simulation does not run the upstream converter. |
+| 19–20: data/reference/database consistency | Table/migration/sequence checks, canonical reference fingerprints and enabled-app comparison; real collation-independence test. | Ticket 22: actual PostgreSQL comparisons and users/shares/files behavior. |
+| 21–23: private HTTP and bounded concurrent canaries | Loopback-only Apache/port-forward, four tiny parallel uploads/readbacks, recognized-artifact cleanup and uncertain-write refusal. Existing cleanup-limit tests retained. | Ticket 22: authenticated live HTTP, socket exposure, concurrent uploads and cleanup. |
+| 24–26: initial/nightly/pre-change native backups and alerts | Custom dump/full archive parse, unique S3 artifacts, suspended 03:15 schedule, failed/stale rules; render checks and rerun preservation of activation. | Tickets 22/28: real initial/nightly receipt, loaded rule evaluation and receiver verification. |
+| 27–28: recovery boundaries | Real SQLite preservation tests plus CLI faults before reopening, after either reopening, and failure while automatic rollback reopens SQLite. Verify one restore at most, then pause without touching the current database. | Ticket 22: actual controlled phase outcomes; no isolated recovery environment. |
+| 29–30: repeat deployment and public/private evidence | Ansible tests cover active PostgreSQL and rollback SQLite image preservation, missing/stale marker refusal, deploy ordering and shared staging. Recovery instructions above; private logs retained. | Tickets 27/28: secure configuration custody and operational handoff. |
+| 31–32: preserve FPA, lifecycle and legacy artifacts | No FPA or bucket-policy changes; upload commands omit deletion; legacy prune protection and retained target/checkpoints. | Tickets 22/28: confirm preserved resources. Retirement and retention remain separate decisions. |
+
+Integration gaps corrected in ticket 26: PostgreSQL was absent from the normal Ansible flow; a missing marker could remove migrated settings; reruns could undo paused reconciliation; a missing Secret could install replacement credentials over retained database storage; and validation incorrectly rejected the `host:5432` saved by the pinned upstream converter. All now stop or behave as described above. No production action is required to establish this preparation evidence.
 
 ## Validation evidence and remaining runtime checks
 
 Local preparation validation on 2026-10-08:
 
-- PHP syntax, Python compilation and 16 local integration/failure tests pass. These include a real WAL checkpoint, corrupt-checkpoint rejection, preserved rollback state, traversal failures, writer-barrier failures, partial-target refusal, canary cleanup limits and pre/post-reopening failure dispatch.
+- PHP syntax, Python compilation and 33 local integration/failure tests pass. These include a real WAL checkpoint, corrupt-checkpoint rejection, preserved rollback state, traversal failures, writer-barrier failures, partial-target refusal, canary cleanup limits and pre/post-reopening failure dispatch.
 - Helm 3.19.0 renders the actual Nextcloud chart 8.9.1 with replicas zero, external PostgreSQL Secret references, immutable image, and no bundled PostgreSQL/wait container.
-- Kustomize renders seven namespaced resources, a suspended CronJob and explicit retained PVC. Repository YAML lint and both Ansible syntax checks pass.
+- Kustomize renders seven namespaced resources, a suspended CronJob and explicit retained PVC. Repository YAML lint and Ansible syntax checks pass for the main, staging and phase entry points.
 - Independent standards/spec review found and corrected bundled-chart precedence, empty Argo automation configuration, lost failure transcripts, image pinning and insufficient post-start health verification.
 
 These are preparation checks. The homelab AWS MCP confirmed the backup identity, but its IAM policy-listing requests returned AccessDenied. Scoped destination writes remain unproven until the real uploads succeed; the FPA connection was unchanged.

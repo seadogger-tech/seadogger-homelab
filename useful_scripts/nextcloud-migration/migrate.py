@@ -350,7 +350,9 @@ class Migration:
         require(status['installed'] and not status.get('needsDbUpgrade'), 'Nextcloud is not ready')
         apps = json.loads(self.occ('app:list', '--output=json'))
         require(apps.get('enabled') == self.state['apps_before'].get('enabled'), 'Enabled apps changed')
-        require(self.occ('config:system:get', 'dbhost') == 'nextcloud-db.nextcloud.svc.cluster.local', 'Wrong effective database host')
+        # ConvertType::saveDBInfo appends the explicitly supplied --port.
+        require(self.occ('config:system:get', 'dbhost') == 'nextcloud-db.nextcloud.svc.cluster.local:5432',
+                'Wrong effective database host')
         self.record('validated')
 
     @contextlib.contextmanager
