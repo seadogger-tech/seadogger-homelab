@@ -175,6 +175,10 @@ class Migration:
         require(not self.state, 'State already exists; use a new private run directory')
         require(not DEPLOYMENT_STATE.exists(), 'Deployment marker already exists; inspect prior migration before preparing')
         self.credentials()
+        review = self.directory / 'reviewed-empty-tables.json'
+        require(not review.is_symlink(), 'Refusing symlinked legacy-table review')
+        reviewed_empty_tables = json.loads(review.read_text()) if review.exists() else []
+        require(isinstance(reviewed_empty_tables, list), 'Legacy-table review must be a list')
         deployment = self.get('deployment', 'nextcloud')
         pods = json.loads(self.kube('get', 'pods', '-l', SERVICE_LABELS, '-o', 'json'))['items']
         require(len(pods) == 1 and pods[0]['status']['phase'] == 'Running', 'Expected one running Nextcloud pod')
@@ -187,7 +191,8 @@ class Migration:
                       'context': self.cmd(['kubectl', 'config', 'current-context']).decode().strip(),
                       'deployment': deployment,
                       'application': self.get('applications.argoproj.io', 'nextcloud', 'argocd'),
-                      'mirror': self.get('cronjob', 'nextcloud-s3-backup'), 'prepared': True}
+                      'mirror': self.get('cronjob', 'nextcloud-s3-backup'), 'prepared': True,
+                      'reviewed_empty_tables': reviewed_empty_tables}
         source_spec = self.state['application']['spec']['source']
         require(not self.state['application']['metadata'].get('ownerReferences'), 'Review parent-owned Argo Application first')
         require(not source_spec.get('helm', {}).get('parameters'), 'Review existing Helm parameters before migration')
@@ -229,6 +234,7 @@ class Migration:
         self.assert_fenced()
         scripts = {'apiVersion': 'v1', 'kind': 'ConfigMap', 'metadata': {'name': self.state['pod'], 'namespace': NAMESPACE},
                    'data': {p.name: p.read_text() for p in HERE.glob('*.php')}}
+        scripts['data']['reviewed-empty-tables.json'] = json.dumps(self.state.get('reviewed_empty_tables', []))
         self.apply(scripts)
         pod_spec = copy.deepcopy(self.state['deployment']['spec']['template']['spec'])
         source_volumes = [v['name'] for v in pod_spec['volumes']

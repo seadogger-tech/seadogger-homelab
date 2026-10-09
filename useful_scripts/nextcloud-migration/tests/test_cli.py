@@ -127,6 +127,8 @@ class WorkflowTests(unittest.TestCase):
         self.replicas = 1
         original = self.command
         pods = []
+        maps = []
+        self.state['reviewed_empty_tables'] = [{'name': 'oc_legacy', 'schema_sha256': 'c' * 64}]
 
         def boundary(args, **kwargs):
             if args == ['kubectl', 'config', 'current-context']:
@@ -140,6 +142,8 @@ class WorkflowTests(unittest.TestCase):
                 resource = json.loads(kwargs['input'])
                 if resource['kind'] == 'Pod':
                     pods.append(resource)
+                elif resource['kind'] == 'ConfigMap':
+                    maps.append(resource)
                 return subprocess.CompletedProcess(args, 0, b'', b'')
             return original(args, **kwargs)
 
@@ -154,6 +158,7 @@ class WorkflowTests(unittest.TestCase):
         self.assertIn({'name': 'app-data', 'mountPath': '/source'}, mounts)
         self.assertIn({'name': 'app-data', 'mountPath': '/var/www/html/data', 'subPath': 'data'}, mounts)
         self.assertNotIn('fsGroup', spec['securityContext'])
+        self.assertEqual(json.loads(maps[0]['data']['reviewed-empty-tables.json']), self.state['reviewed_empty_tables'])
 
     def test_validation_accepts_host_and_port_saved_by_pinned_converter(self):
         self.state['converted'] = True

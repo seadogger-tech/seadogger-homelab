@@ -55,6 +55,26 @@ Use one new absolute state directory on durable private workstation storage; mod
 
 Create `webdav-credentials.json` inside it with mode 0600, containing JSON keys `username` and `password`. Use an existing account's protected app password with permission to create the four validation files. Enter it through a local password manager/editor, not shell history. `prepare` requires this file; the authenticated validation proves its actual access later.
 
+If a previous conversion identified omitted empty tables, review their complete
+SQLite table/index definitions before another attempt. To preserve those schemas,
+place a private `reviewed-empty-tables.json` list in the new run directory before
+`prepare`. Each entry contains `name` and `schema_sha256`: SHA-256 of all
+`sqlite_master.sql` values for that table, ordered by `type,name`, joined with a
+newline (null SQL becomes an empty string). An absent file means an empty list.
+The read-only `reviewed-empty-tables.php REVIEW.json SOURCE.db` command checks
+the review against a SQLite database. Triggers, changed definitions and nonempty
+tables are refused. Keep actual names, fingerprints and review evidence private.
+
+Preparation captures this list in the run state. The converter verifies it before
+and after native schema creation, requires the exact omitted-table set, then
+creates those empty schemas through the pinned application's Doctrine library.
+It preserves columns, indexes and defaults; SQLite BINARY collation maps to
+PostgreSQL C on character columns and is removed from noncharacter columns.
+Other explicit collations stop conversion. Review generated PostgreSQL DDL and
+validate it transactionally before the window. The ordinary table-count and
+sequence checks still apply to every preserved table; no omission prompt is
+accepted and no source table is removed.
+
 Before asserting writer review, inspect application and Argo ownership, all PVC mounts (including aliases of the same Ceph volume), CronJobs/active Jobs, node timers, shell imports, external clients and administrative automation. Jellyfin may continue only with verified read-only mounts. Do not overlap weekly backup activity. Stop external maintenance/deployment automation for the window: neither a human nor another controller may redeploy Nextcloud while the phase runner holds the barrier. Record the inventory and fresh cluster/storage health in private notes.
 
 The standard Ansible phase invocation is:
@@ -115,6 +135,16 @@ After `reopening_started` is persisted, **never automatically restore SQLite**. 
 Failures during `fence` or `checkpoint` may leave maintenance enabled or reconciliation suspended. Those phases intentionally refuse blind retries. Preserve their state, inspect active operations/processes and checkpoint completeness, then prepare a concrete recovery action from the captured original settings. Do not delete flags to trick the runner into continuing. If the maintenance pod was already stopped during reopening preparation, automatic rollback cannot establish its checks; keep normal replicas zero and recreate/review the maintenance barrier before any manual recovery.
 
 A finished or rolled-back run cannot be repeated. Keep its directory and marker. A new migration attempt requires inspecting the retained target, marker and recovery artifacts first; never automatically clear the target. Normal Nextcloud deployment refuses paused reconciliation, including a migration in progress or a post-reopening failure. Do not restore automation merely to bypass this guard.
+
+For an authorized new attempt after completed SQLite rollback, first verify the
+live SQLite selection, restored schedules and original marker against the old
+run. Retain the partial PostgreSQL database under a separately reviewed name and
+create a fresh empty target with the original owner and database settings; never
+drop or truncate the partial target. Archive the inactive deployment marker with
+the completed private run only after checking that it matches live settings.
+Keep external deployment automation held while the new run has no marker. Use a
+new state directory, repeat writer/health checks and take a new checkpoint.
+Never clear old phase flags or install the earlier checkpoint over resumed writes.
 
 For a later pre-change dump, an operator can create a uniquely named Job from `nextcloud-db-backup`, wait for completion, and verify its three S3 artifacts and Pod UID. Do this before the authorized change. Do not equate a CronJob definition or an old successful Job with a fresh backup.
 

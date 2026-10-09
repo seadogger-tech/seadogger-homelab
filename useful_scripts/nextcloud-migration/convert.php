@@ -10,13 +10,14 @@ if (hash_file('sha256', '/var/www/html/core/Command/Db/ConvertType.php') !==
     exit(1);
 }
 require_once '/var/www/html/lib/base.php';
+require_once __DIR__ . '/preserving-converter.php';
 try {
     if (posix_getuid() !== 33 || fileowner('/var/www/html/config/config.php') !== 33) {
         throw new RuntimeException('Wrong service identity');
     }
     $config = \OCP\Server::get(\OCP\IConfig::class);
     if ($config->getSystemValue('dbtype') !== 'sqlite3') { throw new RuntimeException('Source is not SQLite'); }
-    $command = new \OC\Core\Command\Db\ConvertType(
+    $command = new PreservingConvertType(
         $config, \OCP\Server::get(\OC\DB\ConnectionFactory::class), \OCP\Server::get(\OCP\App\IAppManager::class));
     $helper = new class extends \Symfony\Component\Console\Helper\QuestionHelper {
         public function ask(\Symfony\Component\Console\Input\InputInterface $input,
