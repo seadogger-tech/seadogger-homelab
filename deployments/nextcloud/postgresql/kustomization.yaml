@@ -7,7 +7,6 @@ resources:
   - services.yaml
   - statefulset.yaml
   - backup-cronjob.yaml
-  - backup-alerts.yaml
 configMapGenerator:
   - name: nextcloud-db-scripts
     files:

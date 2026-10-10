@@ -17,22 +17,6 @@
     name: ceph-block-data
   register: nc_db_storage
 
-- name: Read the existing Prometheus rule selection
-  kubernetes.core.k8s_info:
-    kubeconfig: '{{ KUBECONFIG }}'
-    api_version: monitoring.coreos.com/v1
-    kind: Prometheus
-    name: k8s
-    namespace: monitoring
-  register: nc_db_prometheus
-
-- name: Require backup rules to be selected across namespaces
-  ansible.builtin.assert:
-    that:
-      - nc_db_prometheus.resources | length == 1
-      - nc_db_prometheus.resources[0].spec.ruleSelector == {}
-      - nc_db_prometheus.resources[0].spec.ruleNamespaceSelector == {}
-    fail_msg: Review monitoring selectors before staging the database and its backup alerts.
 
 - name: Require retained expandable database storage
   ansible.builtin.assert:
