@@ -24,7 +24,7 @@ cold_start_stage_3_install_applications: true
 # Use these flags to deploy services individually when the Stage 3 master switch is false.
 manual_install_bedrock: true
 manual_install_pihole: true
-manual_install_prometheus: true
+manual_install_prometheus: false
 manual_install_openwebui: true
 manual_install_nextcloud: true
 # Opt-in dedicated target; staging does not convert or switch Nextcloud.

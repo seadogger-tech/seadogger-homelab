@@ -20,7 +20,7 @@
 
 ## 🚀 Overview
 
-**Seadogger Homelab** is a fully automated, production-ready Kubernetes cluster running on Raspberry Pi 5 hardware. Deploy a complete self-hosted cloud platform in 30 minutes with enterprise-grade features: distributed storage, AI capabilities, media streaming, workflow automation, and comprehensive monitoring.
+**Seadogger Homelab** is a fully automated, production-ready Kubernetes cluster running on Raspberry Pi 5 hardware. Deploy a complete self-hosted cloud platform in 30 minutes with enterprise-grade features: distributed storage, AI capabilities, media streaming, workflow automation.
 
 **Perfect for:**
 - 🏠 **Homelab enthusiasts** seeking production-quality infrastructure
@@ -48,7 +48,6 @@
 - **🎬 Jellyfin** - Media server with live TV (HDHomeRun)
 - **⚙️ N8N** - Workflow automation and integrations
 - **🛡️ PiHole** - Network-wide DNS and ad-blocking
-- **📊 Prometheus + Grafana** - Comprehensive monitoring
 
 ### 🔐 **Security & Reliability**
 - Internal PKI with cert-manager
@@ -123,10 +122,6 @@ Comprehensive guides available in the **[GitHub Wiki](https://github.com/seadogg
 </td>
 <td width="50%">
 
-**Monitoring**
-- Prometheus metrics
-- Grafana dashboards
-- Alertmanager
 
 **Applications**
 - Nextcloud • Jellyfin
@@ -151,7 +146,6 @@ Comprehensive guides available in the **[GitHub Wiki](https://github.com/seadogg
 - ArgoCD GitOps deployment pipeline
 - All applications deployed and operational
 - Internal PKI with automatic TLS certificates
-- Prometheus/Grafana monitoring stack
 - WireGuard VPN remote access
 
 ### 🚧 Roadmap
