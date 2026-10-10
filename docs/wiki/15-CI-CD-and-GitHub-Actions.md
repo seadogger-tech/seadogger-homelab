@@ -31,7 +31,7 @@ graph TB
         Checkout1[Checkout Source Repo]
         BuildCheck{Autogen Mode?}
         BuildScript[Run build_all.py]
-        CloneWiki[Clone Wiki Repo<br/>using WIKI_TOKEN]
+        CloneWiki[Clone Wiki Repo<br/>using GITHUB_TOKEN]
         Rsync[rsync: Copy MD + Images]
         CommitWiki[Commit & Push to Wiki]
     end
@@ -131,7 +131,7 @@ sequenceDiagram
         Note over GH: Generate additional wiki pages
     end
 
-    GH->>Wiki: Clone wiki repo (WIKI_TOKEN)
+    GH->>Wiki: Clone wiki repo (GITHUB_TOKEN)
     GH->>GH: rsync docs/wiki/ → wiki repo
     Note over GH: Copy *.md, images/, memory_bank/
 
@@ -151,15 +151,15 @@ sequenceDiagram
 - **Manual:** `workflow_dispatch` with optional `autogen=true` flag
 
 **Requirements:**
-- Repository secret: `WIKI_TOKEN` (fine-grained PAT with wiki write permissions)
+- Workflow `contents: write` permission for the automatic `GITHUB_TOKEN`
 - Safety guard: Only runs on `seadogger-tech/seadogger-homelab` repository
 
 **Steps:**
 1. **Checkout source** (without default credentials to prevent recursion)
 2. **Optional: Generate pages** - Run `build_all.py` if `autogen=true`
-3. **Clone wiki repo** - Use PAT to authenticate
+3. **Clone wiki repo** - Configure Git with `gh auth setup-git`, then clone the wiki
 4. **Sync content** - `rsync` markdown files, images, and memory_bank
-5. **Commit & push** - Only if changes detected
+5. **Commit & push to `master`** - Only if changes detected
 
 **Key Files Synced:**
 - `docs/wiki/**/*.md` → Wiki root
@@ -391,11 +391,11 @@ graph LR
 ## Key Secrets and Permissions
 
 ### Wiki Publisher
-- **Secret:** `WIKI_TOKEN` (repository secret)
-  - Type: Fine-grained Personal Access Token (PAT)
-  - Permissions: `wiki:write` on `seadogger-tech/seadogger-homelab`
-  - Why: GitHub Actions default token cannot write to wiki repos
-  - Setup: GitHub Settings → Developer Settings → Personal Access Tokens → Fine-grained tokens
+- **Token:** `GITHUB_TOKEN` (automatic)
+  - Type: Workflow-scoped token (provided by GitHub Actions)
+  - Permission: `contents: write` (declared in workflow)
+  - Target: The wiki's default `master` branch
+  - Setup: No repository PAT is required
 
 ### Bedrock Gateway Rebuild
 - **Token:** `GITHUB_TOKEN` (automatic)
@@ -420,8 +420,8 @@ graph LR
    ```yaml
    if: github.repository == 'your-org/your-repo'
    ```
-3. Create a fine-grained PAT with wiki write access
-4. Add PAT as repository secret named `WIKI_TOKEN`
+3. Grant the workflow `contents: write` and configure Git with `gh auth setup-git`
+4. Push to the wiki's default branch
 5. Ensure your wiki content is in `docs/wiki/`
 
 ### Customize Bedrock Gateway Rebuild
@@ -479,8 +479,8 @@ gh api repos/seadogger-tech/seadogger-homelab/actions/jobs/<job-id> \
 
 **Wiki Publish Fails:**
 - **Symptom:** "Authentication failed" error
-- **Fix:** Check `WIKI_TOKEN` secret is valid and has wiki write permissions
-- **Verify:** Token hasn't expired (fine-grained tokens expire)
+- **Fix:** Check the workflow's `contents: write` permission and `gh auth setup-git` step
+- **Verify:** Inspect the run log and confirm the wiki's default branch advanced
 
 **Bedrock/Mealie Rebuild Fails on Docker build:**
 - **Symptom:** "buildx failed with: ERROR: failed to solve"

@@ -14,7 +14,7 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: read  # we push to a separate wiki repo via PAT
+  contents: write
 
 jobs:
   publish-wiki:
@@ -25,6 +25,7 @@ jobs:
     env:
       # Prevent interactive git prompts in CI
       GIT_TERMINAL_PROMPT: '0'
+      GH_TOKEN: ${{ github.token }}
 
     steps:
       - name: Checkout repository (no default creds)
@@ -43,9 +44,10 @@ jobs:
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.autogen == 'true' }}
         run: python docs/wiki/tools/build_all.py
 
-      - name: Clone wiki (via fine-grained PAT)
+      - name: Clone wiki
         run: |
-          git clone "https://oauth2:${{ secrets.WIKI_TOKEN }}@github.com/seadogger-tech/seadogger-homelab.wiki.git" wiki
+          gh auth setup-git
+          git clone https://github.com/seadogger-tech/seadogger-homelab.wiki.git wiki
 
       - name: Sync wiki (markdown + memory_bank + images)
         run: |
@@ -56,11 +58,10 @@ jobs:
         run: |
           git config user.name "SeaDogger Wiki Bot"
           git config user.email "wiki-bot@users.noreply.github.com"
-          git remote -v
           if [ -n "$(git status --porcelain)" ]; then
             git add -A
             git commit -m "Publish wiki (autogen=${{ github.event_name == 'workflow_dispatch' && inputs.autogen == 'true' }})"
-            git push origin HEAD:main || git push origin HEAD:master
+            git push origin HEAD:master
           else
             echo "No changes to publish."
           fi

@@ -15,7 +15,7 @@ The conversion uses the existing production file volume. It creates no isolated 
 
 The application gets a separate, non-superuser `nextcloud` role and database. PostgreSQL requests 100m CPU/512Mi memory, with 1 CPU/1Gi limits; native backup requests 100m/128Mi, with 1 CPU/512Mi limits. The maintenance pod requests 100m/256Mi and uses the captured application image digest. No recursive ownership change is performed on the source PVC.
 
-Pinned images, rechecked against registry manifests on 2026-10-08:
+The manifests pin these images. Verify their ARM64 index digests before changing a pin:
 
 | Publisher/image | Tag | Index digest |
 | --- | --- | --- |
@@ -24,16 +24,16 @@ Pinned images, rechecked against registry manifests on 2026-10-08:
 
 Both indexes contain `linux/arm64`. Review maintenance status, release notes and ARM64 manifests when updating pins; do not float a major version. The old `bitnamilegacy` workload is not the new database. Cutover protects its tracked resources with `Prune=false,Delete=false` before disabling its subchart. Its retirement requires a separate inspection of data and consumers; this procedure never deletes it.
 
-Native dumps run nightly at **03:15 America/New_York** after activation, and before subsequent database/application changes. Each attempt writes a unique timestamp/Pod-UID directory to `s3://seadogger-homelab-backup/nextcloud-postgresql/`. The dump container uses `pg_dump -Fc`, parses the complete archive with `pg_restore --file=/dev/null`, and writes `SHA256SUMS` and metadata. The separate AWS CLI container uploads it. No database restore is executed. Keep every dump initially; no retention deletion is configured. Kubernetes Job-history limits delete Job records, not S3 objects.
+Native dumps run nightly at **03:15 America/New_York** after activation, and before subsequent database/application changes. Each attempt writes a unique timestamp/Pod-UID directory under the configured `nextcloud-postgresql/` backup prefix. The dump container uses `pg_dump -Fc`, parses the complete archive with `pg_restore --file=/dev/null`, and writes `SHA256SUMS` and metadata. The separate AWS CLI container uploads it. No database restore is executed. Keep every dump initially; no retention deletion is configured. Kubernetes Job-history limits delete Job records, not S3 objects.
 
-The existing native-file mirror is `s3://homelab-nextcloud-backup-708765384784-us-east-1-an/nextcloud-data/`. It covers the entire PVC, with its existing cache/tmp/appdata/trash/version/log exclusions. The other bucket holds K3s/Velero backups and the separately named native database artifacts. Do not change either bucket lifecycle or the existing FPA AWS profile. The homelab AWS MCP connection uses the separately configured backup identity.
+The native-file mirror uses its configured `nextcloud-data/` prefix and covers the entire PVC, with its existing cache/tmp/appdata/trash/version/log exclusions. The database backup uses a separate configured destination. Verify both destinations and their protected credentials from the deployed configuration. Do not change either bucket lifecycle or the existing FPA AWS profile.
 
 ## Before staging
 
 1. Review the diff and choose an immutable, published 40-character Core commit. Confirm the original `nextcloud-values.yaml` is unchanged.
-2. Recheck four Ready nodes, Ceph `HEALTH_OK`, scheduler reservations, actual memory, and no unexpected eviction/OOM/crash loop. The October 8 preflight found about 4TiB raw Ceph free; rey reserved 5612Mi of 8052Mi before these workloads. These are snapshots, not a capacity guarantee.
+2. Recheck node readiness, Ceph `HEALTH_OK`, scheduler reservations, actual memory, and no unexpected eviction/OOM/crash loop. Record current capacity and headroom privately; an earlier snapshot is not a capacity guarantee.
 3. Verify `ceph-block-data` is expandable with reclaim policy `Retain`; the staging playbook enforces both. The cluster advertises two default classes, so the explicit class is essential.
-4. Using the homelab AWS MCP identity, inspect the existing workload identity/policy and destination lifecycle. Confirm `ListBucket` for the two prefixes, read access needed for verification, and `PutObject` (plus applicable multipart/KMS rights) for the mirror, `nextcloud-postgresql/` and `nextcloud-migration/`. Do not infer write access from a successful listing. The execution checkpoint/dump uploads must succeed before reopening; no speculative IAM changes are part of staging.
+4. Inspect the existing workload identity/policy and destination lifecycle with the authorized backup identity. Confirm `ListBucket` for the configured prefixes, read access needed for verification, and `PutObject` (plus applicable multipart/KMS rights) for the mirror, `nextcloud-postgresql/` and `nextcloud-migration/`. Do not infer write access from a successful listing. The execution checkpoint/dump uploads must succeed before reopening; no speculative IAM changes are part of staging.
 5. Add two distinct passwords of at least 24 characters to gitignored `ansible/config.yml`: `nextcloud_postgresql_admin_password` and `nextcloud_postgresql_password`. Do not put credentials in command arguments, Git, chat, or public logs. The playbook masks Secret handling and refuses implicit rotation of an existing database Secret.
 
 The example configuration leaves `manual_install_nextcloud_postgresql: false`. For the normal application stage, set it to true together with `cold_start_stage_3_install_applications: true`, and set `nextcloud_postgresql_revision` to the reviewed commit. Their conjunction selects `enable_nextcloud_postgresql`; either switch false leaves the database untouched. Existing private configurations without this new enable variable also leave it disabled. As with other applications, an explicit `enable_nextcloud_postgresql: true` override selects it independently. No staging path changes Nextcloud's selected database.
@@ -43,7 +43,7 @@ For a database-only run of the normal entry point, use `main.yml --tags nextclou
 Alternatively, after staging has been reviewed and authorized, invoke the dedicated entry point below. It requires `nextcloud_postgresql_apply=true` and imports the identical database tasks, independently of the stage/manual switches. Replace the commit placeholder:
 
 ```bash
-ansible-playbook -i /Users/jason/dev/seadogger-homelab-pro/core/ansible/hosts.ini /Users/jason/dev/seadogger-homelab-pro/core/ansible/nextcloud_postgresql.yml -e nextcloud_postgresql_apply=true -e nextcloud_postgresql_revision=REVIEWED_CORE_COMMIT
+ansible-playbook -i /ABSOLUTE/CORE/ansible/hosts.ini /ABSOLUTE/CORE/ansible/nextcloud_postgresql.yml -e nextcloud_postgresql_apply=true -e nextcloud_postgresql_revision=REVIEWED_CORE_COMMIT
 ```
 
 Inspect the new PVC, database logs, rollout, resource use, empty target and suspended backup CronJob. Alert rules are not deployed; record that gap for issue #28. Do not connect Nextcloud yet. A partially initialized PVC/target is retained for inspection, never automatically wiped or reinitialized.
@@ -89,13 +89,13 @@ Before asserting writer review, inspect application and Argo ownership, all PVC 
 The standard Ansible phase invocation is:
 
 ```bash
-ansible-playbook /Users/jason/dev/seadogger-homelab-pro/core/ansible/nextcloud_migration.yml -e nextcloud_migration_action=prepare -e nextcloud_migration_state=/ABSOLUTE/PRIVATE/RUN -e nextcloud_migration_execute=true -e nextcloud_migration_writers_reviewed=true
+ansible-playbook /ABSOLUTE/CORE/ansible/nextcloud_migration.yml -e nextcloud_migration_action=prepare -e nextcloud_migration_state=/ABSOLUTE/PRIVATE/RUN -e nextcloud_migration_execute=true -e nextcloud_migration_writers_reviewed=true
 ```
 
 Without `nextcloud_migration_execute=true`, it only prints a plan. `prepare` reads the live state and records it privately; it requires the staged database Application to reference an immutable commit. The direct equivalent is:
 
 ```bash
-python3 /Users/jason/dev/seadogger-homelab-pro/core/useful_scripts/nextcloud-migration/migrate.py prepare --state-dir /ABSOLUTE/PRIVATE/RUN --execute --writers-reviewed
+python3 /ABSOLUTE/CORE/useful_scripts/nextcloud-migration/migrate.py prepare --state-dir /ABSOLUTE/PRIVATE/RUN --execute --writers-reviewed
 ```
 
 Run `status` against that same directory to inspect phase flags. Each subsequent invocation uses the same directory. The kube context is captured and later calls explicitly select it. A local lock prevents concurrent phases in one run; it does not coordinate a second workstation or a second run directory.
@@ -203,49 +203,20 @@ The following maps the approved migration requirements to preparation and later 
 
 Integration gaps corrected in ticket 26: PostgreSQL was absent from the normal Ansible flow; a missing marker could remove migrated settings; reruns could undo paused reconciliation; a missing Secret could install replacement credentials over retained database storage; and validation incorrectly rejected the `host:5432` saved by the pinned upstream converter. All now stop or behave as described above. No production action is required to establish this preparation evidence.
 
-## Validation evidence and remaining runtime checks
+## Reproducible validation and staging checks
 
-Local preparation validation on 2026-10-08:
-
-- PHP syntax, Python compilation and 33 local integration/failure tests pass. These include a real WAL checkpoint, corrupt-checkpoint rejection, preserved rollback state, traversal failures, writer-barrier failures, partial-target refusal, canary cleanup limits and pre/post-reopening failure dispatch.
-- Helm 3.19.0 renders the actual Nextcloud chart 8.9.1 with replicas zero, external PostgreSQL Secret references, immutable image, and no bundled PostgreSQL/wait container.
-- The original preparation render contained seven namespaced resources. The current Kustomize source renders six, including a suspended CronJob and explicit retained PVC, with no alert rule manifest. Repository YAML lint and Ansible syntax checks passed for the main, staging and phase entry points.
-- Independent standards/spec review found and corrected bundled-chart precedence, empty Argo automation configuration, lost failure transcripts, image pinning and insufficient post-start health verification.
-
-These are preparation checks. At that point, the homelab AWS MCP confirmed the backup identity, but its IAM policy-listing requests returned AccessDenied. The later staging evidence below establishes the native-dump upload path; it does not establish checkpoint-prefix writes or migration success. The FPA connection was unchanged.
-
-No production migration or restore was executed to produce the local evidence. Database conversion, private application validation, concurrent uploads and production-database backups remain cutover acceptance.
-
-Run the complete reproducible checks without cluster or AWS access (see [prerequisites and offline use](27-Deployment-and-Validation#local-and-ci-validation)):
+Run the local checks without cluster or AWS access (see [prerequisites and offline use](27-Deployment-and-Validation#local-and-ci-validation)):
 
 ```bash
-python3 /Users/jason/dev/seadogger-homelab-pro/core/useful_scripts/nextcloud-migration/check.py
+python3 /ABSOLUTE/CORE/useful_scripts/nextcloud-migration/check.py
 ```
 
-## Staging evidence: 2026-10-09 UTC
+Before each database-only staging run, record current cluster and storage health in private state. After staging, inspect the PostgreSQL rollout, PVC binding and retention policy, Secret readability, role permissions, empty target, and suspended backup CronJob. A successful playbook is not proof of database readiness.
 
-The operator authorized database-only staging and its persistence/backup checks for Pro ticket 27. The dedicated Ansible entry point deployed Core revision `3678b682e3b62c683858b81fa52e6c42d9325649` through the separate `nextcloud-db` ArgoCD Application. Nextcloud remains on SQLite, online, at version 32.0.6; the database conversion has not run.
+For an authorized persistence check, record the original Pod UID, database system identifier, Secret identity and PVC/PV identity. After requesting one Pod replacement, wait for a **different UID** to become Ready and compare database/storage identity. A name-based waiter can time out after a StatefulSet recreates a Pod with the same name; inspect UIDs and database checks before deciding whether any retry is needed.
 
-| Check | Observed result |
-| --- | --- |
-| Preconditions | Four Ready nodes, no node memory/disk/PID pressure, Ceph `HEALTH_OK`, about 4 TiB raw free. Rey had about 1.8 GiB measured memory headroom and 69% reserved before adding the 512Mi database request and transient 128Mi backup request. The API initially returned 503 during a K3s restart, then passed readiness checks without intervention. Recheck health before any later phase. |
-| Placement and storage | Official PostgreSQL 17.11 ran on ARM64 worker rey with the pinned image, declared probes/resources and a new Bound 10Gi RWO `ceph-block-data` PVC. The class is expandable with `Retain`; the original Nextcloud PVC and legacy database remain in place. |
-| Identity and permissions | UID/GID 999 could read the mounted database Secret. TCP authentication used SCRAM. The application role owns its dedicated database and has no superuser, createdb, createrole, replication or bypass-RLS attributes. A create/insert/read transaction succeeded and rolled back, leaving zero public tables. |
-| Persistence | One authorized replacement of only `nextcloud-db-0` changed the Pod UID while retaining the PostgreSQL system identifier, PVC/PV identity and database roles. Authenticated transaction checks passed again. |
-| Repeat deployment | The same Ansible staging entry point succeeded again, preserving the Secret UID/resourceVersion, PVC, database identity, revision and suspended backup state. Ansible reported the Application task changed; this is evidence of preserved settings, not a claim of a zero-change playbook recap. |
-| Native backup | The manually created `nextcloud-db-backup-stage-20261009` Job completed in 15 seconds. Both dump and upload containers ran as UID/GID 999, exited zero and had no restarts. Full archive decoding succeeded before upload. |
-| S3 receipt | Listing and individual object HEAD checks found `nextcloud.dump` (1,098 bytes), `SHA256SUMS` (81 bytes) and `metadata.txt` (221 bytes) in the unique attempt directory whose suffix matches the backup Pod UID. All three reported AES256 server-side encryption. Private evidence retains the exact keys and version IDs. |
-| Resource observations | Initial Pod creation to Ready took about 57 seconds; sampled database working set peaked near 51 MiB. The empty-target dump container ran about two seconds and upload about one second. |
-| Application validation | After correcting the protected local app-password file, an authenticated depth-0 WebDAV read returned HTTP 207 through the normal CA-verified HTTPS route. This confirms validation-account access without listing files or reading file contents. The earlier credentials returned HTTP 401; no account password was reset. Ticket 27's authenticated-read requirement is satisfied. |
+For a manual staging backup, derive a uniquely named Job from the deployed `nextcloud-db-backup` CronJob using client-side rendering, then submit that definition through Ansible's `kubernetes.core.k8s` task. This preserves the suspended schedule and the deployed image, identity, resource and credential settings. Inspect both container exit codes and the dump log, then match the three nonempty S3 objects to the backup Pod UID. A pre-cutover dump of an empty target is not a production backup; archive parsing and object checks do not prove a restore. Retain exact keys, version IDs, sizes and outcomes only in private evidence.
 
-The dump is **pre-cutover evidence from an empty target**, not a backup of the production Nextcloud database. Object sizes and archive decoding do not prove a restore. The nightly 03:15 America/New_York database schedule remains suspended. The existing native-file mirror remains unsuspended; no bucket lifecycle, IAM policy or FPA configuration changed. Policy/encryption-configuration introspection remained denied, while the actual workload upload and object HEAD requests succeeded.
-
-At the final authenticated-access check, both Nextcloud Applications remained Healthy/Synced, but Ceph reported `HEALTH_WARN MON_DISK_LOW`: monitor `e` on anakin had 25% space available. This differs from the healthy staging preflight. No disk cleanup or recovery action was performed. Investigate the monitor's backing filesystem and re-establish the cutover health prerequisites before ticket 22; successful staging is not authorization to begin conversion.
-
-The current Kubernetes inventory identifies the normal Nextcloud Deployment as a source-volume writer, the file mirror as a read-only source mount, and Jellyfin's alias of the same CephFS volume as read-only. No active mirror or Velero Backup was observed. The new database mounts only its dedicated PVC. Preserve the staging Job/artifacts, legacy workload and all original data. Before the cutover window, repeat this inventory and inspect host timers, administrative imports, external clients and backup operations; this staging snapshot does not establish the writer barrier.
-
-For an authorized persistence check, record the original Pod UID, database system identifier, Secret identity and PVC/PV identity first. After requesting one Pod replacement, wait for a **different UID** to become Ready and compare database/storage identity. Ansible's name-based `state: absent, wait: true` waiter timed out after the StatefulSet had already recreated the same Pod name; do not repeat the deletion in response to that timeout. The replacement's UID and successful database checks established the outcome.
-
-For the manual staging backup, derive a uniquely named Job from the deployed `nextcloud-db-backup` CronJob using client-side rendering, then submit that definition through Ansible's `kubernetes.core.k8s` task. This preserves the suspended schedule and the deployed image, identity, resource and credential settings. Inspect both container exit codes and the dump log, then match the three nonempty S3 objects to the backup Pod UID. Retain the receipts privately and identify their pre-cutover purpose.
+Repeat the writer inventory, authenticated application checks, backup destination checks and health preconditions before a cutover. A staging observation from an earlier run does not establish the current writer barrier or authorize conversion.
 
 Primary references: [Nextcloud conversion and omitted tables](https://docs.nextcloud.com/server/32/admin_manual/configuration_database/db_conversion.html), [pinned converter source](https://github.com/nextcloud/server/blob/v32.0.6/core/Command/Db/ConvertType.php), [PostgreSQL dump](https://www.postgresql.org/docs/17/app-pgdump.html), [archive parsing versus restore](https://www.postgresql.org/docs/17/app-pgrestore.html), [Docker Official PostgreSQL image](https://github.com/docker-library/postgres), [supported AWS CLI container interface](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-docker.html), [Argo automated sync](https://argo-cd.readthedocs.io/en/stable/user-guide/auto_sync/), [Argo resource prune protection](https://argo-cd.readthedocs.io/en/stable/user-guide/sync-options/#no-prune-resources).

@@ -110,8 +110,7 @@ level, not a prompt trick.
 A follow-up, broader survey (prompted by "are there other PRs we should
 adopt" and specifically "you're only looking at this from Mealie's
 angle — what about OpenWebUI") found the gateway also actively serves
-OpenWebUI (confirmed via its stored connection config pointing at
-`192.168.1.242:6880`), which has different, real needs: tool/function-
+OpenWebUI (configured as a gateway client), which has different, real needs: tool/function-
 calling reliability and newer-model support. Five more open PRs applied
 cleanly and address real (if not yet triggered) failure modes for that
 client. The same pattern surfaced again independently for Mealie itself
