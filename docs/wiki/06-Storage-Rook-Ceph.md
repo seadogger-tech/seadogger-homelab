@@ -48,7 +48,6 @@ graph TB
     end
 
     subgraph AppsLayer["📦 Application Usage"]
-        PrometheusApp[Prometheus<br/>→ ceph-block-data]
         NextcloudApp[Nextcloud<br/>→ ceph-fs-data-ec]
         JellyfinApp[Jellyfin<br/>→ ceph-fs-data-ec]
         N8NApp[N8N<br/>→ ceph-block-data]
@@ -71,7 +70,6 @@ graph TB
     FSRep --> MDS
     MDS --> OSD
 
-    PrometheusApp --> Default
     NextcloudApp --> FSEC
     JellyfinApp --> FSEC
     N8NApp --> Default

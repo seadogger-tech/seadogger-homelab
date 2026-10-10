@@ -462,21 +462,6 @@ Follow this checklist — established as ADR-011 — before adding a new cherry-
 8. **Document it** in the relevant app's wiki section and in the ADR-011 table.
 
 ![accent-divider](images/accent-divider.svg)
-## Monitoring Workflows
-
-### Check Workflow Status
-
-**Via GitHub UI:**
-1. Navigate to repository → **Actions** tab
-2. Select workflow: "Publish Wiki", "Rebuild from aws-samples on change", or "Rebuild Mealie with unmerged AI-import PRs"
-3. View run history, logs, and artifacts
-
-**Via GitHub CLI:**
-```bash
-# List recent workflow runs
-gh run list --workflow=publish-wiki.yml
-gh run list --workflow=upstream-rebuild.yaml
-gh run list --workflow=mealie-rebuild.yaml
 
 # View specific run details
 gh run view <run-id>

@@ -273,7 +273,7 @@ Migrate to GitHub App authentication (tokens auto-refresh, never expire):
   placement. When the node returns, `ceph osd in osd.0` (or Rook's own
   reconciliation) rebalances data back onto it automatically; no data is
   lost by marking it out in the meantime.
-- Stuck `Terminating` pods on the dead node (ArgoCD, Jellyfin, monitoring,
+- Stuck `Terminating` pods on the dead node (ArgoCD, Jellyfin,
   Rook CSI controllers) needed `kubectl delete pod --grace-period=0
   --force` — the API server can't get a graceful-termination
   confirmation from a kubelet that will never respond again.
@@ -676,7 +676,6 @@ consumed most of this incident.
 ## See Also
 
 - **[[04-Bootstrap-and-Cold-Start]]** - Deployment procedures and common issues
-- **[[11-Monitoring]]** - Using Prometheus/Grafana for debugging
 - **[[17-Runbooks]]** - Operational procedures
 - **[[21-Deployment-Dependencies]]** - Understanding deployment failures
 

@@ -88,7 +88,6 @@ graph TB
             Ceph[Rook-Ceph<br/>Distributed Storage]
             CertMgr[cert-manager<br/>TLS Certificates]
             ArgoCD[ArgoCD<br/>GitOps Engine]
-            Prom[Prometheus Stack<br/>Monitoring]
             PiHole[PiHole<br/>DNS & Ad-Blocking]
         end
 
@@ -122,7 +121,6 @@ graph TB
     Traefik --> OpenWebUI
     Traefik --> N8N
     Traefik --> Portal
-    Traefik --> Prom
     Traefik --> Bedrock_GW
 
     ArgoCD -->|Deploys| Apps
@@ -137,12 +135,10 @@ graph TB
 
     Nextcloud --> Ceph
     Jellyfin --> Ceph
-    Prom --> Ceph
 
     Bedrock_GW --> AWS_Secret
     AWS_Secret -.->|Encrypted| Bedrock_GW
 
-    Prom -->|Scrapes| Apps
     OpenWebUI -->|HTTP:6880| Bedrock_GW
     Bedrock_GW -->|HTTPS + TLS 1.3| AWS
     Nextcloud -->|Encrypted| S3

@@ -25,9 +25,6 @@ A two-tier trust chain will be established. The Intermediate CA will sign leaf c
 ```mermaid
 graph TD
     A["Root CA<br>(Offline, Highly Secure)"] --> B{"Intermediate CA<br>(Online, in k8s Secret)"};
-    B --> prometheus["prometheus.seadogger-homelab<br>192.168.1.244"];
-    B --> grafana["grafana.seadogger-homelab<br>192.168.1.245"];
-    B --> alertmanager["alertmanager.seadogger-homelab<br>192.168.1.246"];
     B --> openwebui["openwebui.seadogger-homelab"];
     B --> argocd["argocd.seadogger-homelab"];
     B --> ceph["ceph.seadogger-homelab"];
@@ -120,17 +117,8 @@ sequenceDiagram
     CI-->>CM: Cert for openwebui.seadogger-homelab
     CM->>ING: Store cert in secret 'openwebui-local-tls'
 
-    CM->>CI: Request sign(prometheus.seadogger-homelab)
-    CI-->>CM: Cert for prometheus.seadogger-homelab
-    CM->>ING: Store cert in secret 'prometheus-local-tls'
 
-    CM->>CI: Request sign(grafana.seadogger-homelab)
-    CI-->>CM: Cert for grafana.seadogger-homelab
-    CM->>ING: Store cert in secret 'grafana-local-tls'
 
-    CM->>CI: Request sign(alertmanager.seadogger-homelab)
-    CI-->>CM: Cert for alertmanager.seadogger-homelab
-    CM->>ING: Store cert in secret 'alertmanager-local-tls'
 
     CM->>CI: Request sign(argocd.seadogger-homelab)
     CI-->>CM: Cert for argocd.seadogger-homelab
@@ -199,7 +187,7 @@ Centralize login with Keycloak, enforce it uniformly at the edge with `oauth2-pr
 *   **Keycloak (IdP):** `idp.seadogger-homelab` (will be assigned a new VIP, e.g., 192.168.1.253)
 *   **oauth2-proxy:** `auth.seadogger-homelab` (internal service, no dedicated VIP)
 *   **Traefik (Ingress):** `192.168.1.241` (existing VIP)
-*   **Protected Applications:** `grafana.seadogger-homelab`, `n8n.seadogger-homelab`, `openwebui.seadogger-homelab`, `prometheus.seadogger-homelab`, `alertmanager.seadogger-homelab`, `argocd.seadogger-homelab`, `ceph.seadogger-homelab`.
+*   **Protected Applications:** `n8n.seadogger-homelab`, `openwebui.seadogger-homelab`, `argocd.seadogger-homelab`, `ceph.seadogger-homelab`.
 
 ![accent-divider.svg](images/accent-divider.svg)
 ## Secrets & Credentials
@@ -258,11 +246,8 @@ graph LR
         O[oauth2-proxy]
         K[Keycloak]
         subgraph "SSO-Protected Apps"
-            A1[grafana.seadogger-homelab]
             A2[n8n.seadogger-homelab]
             A3[openwebui.seadogger-homelab]
-            A4[prometheus.seadogger-homelab]
-            A5[alertmanager.seadogger-homelab]
             A6[argocd.seadogger-homelab]
             A7[ceph.seadogger-homelab]
         end
@@ -280,8 +265,6 @@ graph LR
     T -- "Forwards to" --> A1
     T -- "Forwards to" --> A2
     T -- "Forwards to" --> A3
-    T -- "Forwards to" --> A4
-    T -- "Forwards to" --> A5
     T -- "Forwards to" --> A6
     T -- "Forwards to" --> A7
 
@@ -292,7 +275,7 @@ graph LR
 ![accent-divider.svg](images/accent-divider.svg)
 ## SSO Login Flow (First Time Access)
 
-This diagram shows a user accessing a protected application (`grafana.seadogger-homelab`) for the first time.
+This diagram shows a user accessing a protected application (`n8n.seadogger-homelab`) for the first time.
 
 ```mermaid
 sequenceDiagram
@@ -301,9 +284,9 @@ sequenceDiagram
     participant Traefik as Traefik Ingress (192.168.1.241)
     participant OAuth2Proxy as oauth2-proxy (auth.seadogger-homelab)
     participant Keycloak as Keycloak (idp.seadogger-homelab)
-    participant Grafana as Grafana App
+    participant N8N as n8n App
 
-    User->>Traefik: GET https://grafana.seadogger-homelab
+    User->>Traefik: GET https://n8n.seadogger-homelab
     Traefik->>OAuth2Proxy: ForwardAuth: Is user authenticated?
     OAuth2Proxy-->>Traefik: No (401 Unauthorized)
     Traefik-->>User: Redirect to login page
@@ -314,12 +297,12 @@ sequenceDiagram
     User->>OAuth2Proxy: GET /oauth2/callback?code=...
     OAuth2Proxy->>Keycloak: Exchange auth code for tokens
     Keycloak-->>OAuth2Proxy: ID, Access, Refresh Tokens
-    OAuth2Proxy-->>User: Set session cookie, redirect to original URL (grafana.seadogger-homelab)
-    User->>Traefik: GET https://grafana.seadogger-homelab (with session cookie)
+    OAuth2Proxy-->>User: Set session cookie, redirect to original URL (n8n.seadogger-homelab)
+    User->>Traefik: GET https://n8n.seadogger-homelab (with session cookie)
     Traefik->>OAuth2Proxy: ForwardAuth: Is user authenticated?
     OAuth2Proxy-->>Traefik: Yes (200 OK) + sets X-Forwarded-User header
-    Traefik->>Grafana: Forward request with user identity header
-    Grafana-->>Traefik: App content
+    Traefik->>N8N: Forward request with user identity header
+    N8N-->>Traefik: App content
     Traefik-->>User: App content
 ```
 ![accent-divider.svg](images/accent-divider.svg)
@@ -356,7 +339,7 @@ sequenceDiagram
     participant Keycloak as Keycloak (idp.seadogger-homelab)
 
     User->>Traefik: GET https://auth.seadogger-homelab/oauth2/sign_out
-    Note over User, Traefik: (This link would be present in the UI of Grafana, n8n, etc.)
+    Note over User, Traefik: (This link would be present in the UI of n8n, etc.)
     Traefik->>OAuth2Proxy: Forward request to sign_out endpoint
     OAuth2Proxy-->>User: Clear session cookie
     OAuth2Proxy->>Keycloak: RP-Initiated Logout: Invalidate user session

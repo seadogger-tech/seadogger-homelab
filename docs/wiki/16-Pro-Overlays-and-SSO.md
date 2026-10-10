@@ -16,11 +16,8 @@ This page explains how the Pro layer adds Single Sign-On (SSO), middleware, and 
 ## Hostnames and VIPs
 - Traefik VIP: `192.168.1.241`
 - Protected hosts (examples):
-  - `grafana.seadogger-homelab`
   - `n8n.seadogger-homelab`
   - `openwebui.seadogger-homelab`
-  - `prometheus.seadogger-homelab`
-  - `alertmanager.seadogger-homelab`
   - `argocd.seadogger-homelab`
   - `ceph.seadogger-homelab`
   - `jellyfin.seadogger-homelab`

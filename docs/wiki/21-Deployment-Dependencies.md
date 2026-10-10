@@ -3,7 +3,6 @@
 
 **GitHub Issues:**
 - [#48 - Parent Issue (Dependencies Refactor)](https://github.com/seadogger-tech/seadogger-homelab/issues/48)
-- [#49 - Convert Prometheus to Ingress](https://github.com/seadogger-tech/seadogger-homelab/issues/49)
 - [#50 - Move all infrastructure to ArgoCD + Kustomize](https://github.com/seadogger-tech/seadogger-homelab/issues/50)
 
 For the maintained operator entry points and validation command, read [Deployment and Validation](27-Deployment-and-Validation). The analysis below includes historical dependency proposals; inspect the linked playbooks for current ordering.
@@ -22,7 +21,6 @@ This document analyzes the "spider web" of deployment dependencies in the Seadog
 6. ArgoCD (control_plane)         ← GitOps layer
 7. Namespace Pre-cooking          ← Preparation
 8. Internal PKI + Cert-Manager    ← Certificate infrastructure
-9. Prometheus (control_plane)     ← Monitoring
 10. Applications:
     - Bedrock Gateway
     - PiHole
@@ -53,9 +51,7 @@ This document analyzes the "spider web" of deployment dependencies in the Seadog
          │                         │
          │                         │
 Required by:                Required by:
-- Traefik (ingress entry)   - Prometheus PVC
-- PiHole DNS LB             - Grafana PVC
-                            - Alertmanager PVC
+- Traefik (ingress entry)   - PiHole DNS LB
                             - Nextcloud PVC
                             - Jellyfin PVC
                             - All app PVCs
@@ -106,10 +102,6 @@ Required by:
   - `pihole-values.yaml` - `serviceDns.loadBalancerIP: 192.168.1.250`
 
 **What SHOULD NOT use MetalLB (use Ingress instead):**
-- ❌ **Prometheus/Grafana/Alertmanager** - Currently uses LoadBalancer IPs (wasteful)
-  - `prometheus_deploy.yml:90` - `loadBalancerIP: "192.168.1.244"` ← Should use Ingress
-  - `prometheus_deploy.yml:111` - `loadBalancerIP: "192.168.1.245"` ← Should use Ingress
-  - `prometheus_deploy.yml:131` - `loadBalancerIP: "192.168.1.246"` ← Should use Ingress
   - **Recommendation:** Use Traefik IngressRoute + cert-manager certificates instead
   - **Benefit:** Unified access pattern, automatic TLS, fewer IPs consumed
 
@@ -127,8 +119,6 @@ Required by:
 ### 2. **Rook-Ceph Dependencies**
 
 **What depends on Rook-Ceph:**
-- ✅ **Prometheus** - Uses `storageClassName: ceph-block-data`
-  - PVCs for Prometheus, Grafana, Alertmanager data
 
 - ✅ **Nextcloud** - Uses `storageClassName: ceph-filesystem`
   - Stores all user files, photos, documents
@@ -175,15 +165,13 @@ Required by:
 
 **Hybrid Deployment Issue:**
 Some components deployed via:
-1. **Ansible direct Helm** (MetalLB, Rook-Ceph, sometimes Prometheus)
+1. **Ansible direct Helm** (MetalLB, Rook-Ceph)
 2. **ArgoCD** (apps via `kubernetes.core.k8s` creating Application CRDs)
 3. **Ansible kubectl apply** (Ingress manifests downloaded from GitHub)
 
 This creates inconsistency - no single source of truth!
 
 ---
-
-### 4. **Prometheus Dependencies**
 
 **What depends on Prometheus:**
 - ✅ **Backup monitoring** - PrometheusRule for backup alerts

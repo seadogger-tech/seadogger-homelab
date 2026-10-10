@@ -389,7 +389,7 @@ The key decisions were:
 
 3.  **Fix Undefined `env_vars` Variable:** The `rook_ceph_deploy_part2.yml` playbook failed because it referenced an undefined variable `env_vars`. This was corrected by replacing the reference with the proper `environment: { KUBECONFIG: ... }` block for `kubectl` commands.
 
-4.  **Stricter `config.yml` Logic:** The logic for enabling application deployments in `config.yml` was changed from `or` to `and`. This provides more granular control, requiring both the global stage flag (e.g., `cold_start_stage_3_install_applications`) and the individual application's manual flag (e.g., `manual_install_prometheus`) to be `true` for a deployment to run.
+4.  **Stricter `config.yml` Logic:** The logic for enabling application deployments in `config.yml` was changed from `or` to `and`. This provides more granular control, requiring both the global stage flag (e.g., `cold_start_stage_3_install_applications`) and the individual application's manual flag  to be `true` for a deployment to run.
 
 #### Consequences
 
@@ -401,49 +401,6 @@ The key decisions were:
     -   None. The changes corrected clear bugs and improved the automation's reliability.
 
 ![accent-divider](images/accent-divider.svg)
-### ADR-004: Prometheus Stack Network Policy Configuration
-
-- **Status:** Implemented & Verified
-- **Date:** 2025-08-15
-
-#### Context
-The Prometheus monitoring stack deployment initially faced accessibility issues due to restrictive network policies. The default policies from kube-prometheus only allowed internal cluster communication, preventing external access to the Prometheus, Grafana, and Alertmanager UIs through their LoadBalancer services.
-
-#### Decision
-We implemented custom network policies in the Ansible deployment playbook to allow external access while maintaining security. The solution involved:
-
-1. Creating separate network policies for each component:
-   - Prometheus (port 9090)
-   - Grafana (port 3000)
-   - Alertmanager (port 9093)
-
-2. Using pod label selectors to precisely target each component:
-   ```yaml
-   podSelector:
-     matchLabels:
-       app.kubernetes.io/name: prometheus  # Similar for grafana and alertmanager
-   ```
-
-3. Allowing ingress traffic to specific ports while maintaining existing internal cluster communication rules.
-
-4. Integrating the network policy deployment into our Ansible playbook to ensure consistent application through our GitOps workflow.
-
-#### Consequences
-
-- **Positive:**
-  - All monitoring UIs are now accessible via their LoadBalancer IPs
-  - Security is maintained through specific port and pod targeting
-  - Configuration is version controlled and automated
-  - Solution integrates cleanly with our existing GitOps practices
-
-- **Negative:**
-  - None significant. The implementation follows best practices for network security while enabling required functionality.
-
-- **Next Steps:**
-  - Configure Grafana dashboards
-  - Set up alerting rules
-  - Configure external service monitoring
-
 #### Context
 
 After successfully configuring the Rook-Ceph NFS server and verifying its accessibility from a Linux client (`yoda.local`), all attempts to mount the NFS share from a macOS client failed. The error message on the macOS client was `rpc.gssapi.mechis.mech_gss_log_status: a gss_display_status() failed`, which misleadingly suggested a Kerberos or GSSAPI authentication issue, even though the server was configured for simple `AUTH_SYS`.

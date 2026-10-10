@@ -51,7 +51,7 @@ The project provides a set of Ansible playbooks and Kubernetes and Helm manifest
 *   **Ingress Controller:** Traefik
 *   **PKI:** Cert-Manager w/ Traefik TLS termination
 *   **Load Balancer & IP L2Advertisement:** MetalLB
-*   **Monitoring:** Prometheus, Alertmanager, & Grafana
+
 *   **DNS & Ad-Blocking:** PiHole
 *   **User Apps/Services:** Nextcloud, Jellyfin, OpenwebUI, N8N
 *   **Hardware:** Raspberry Pi 5 nodes. While it may be adaptable to other hardware, the documentation and scripts are tailored to this platform.
@@ -91,7 +91,6 @@ The homelab is fully functional and serving production workloads. Core infrastru
 *   **Storage System:** Rook-Ceph is deployed and providing distributed storage with both erasure-coded and replicated pools.
 *   **Network Configuration:** MetalLB and Traefik are functioning, providing load balancing and ingress for deployed services.
 *   **GitOps:** ArgoCD is successfully managing the deployment of most applications.
-*   **Monitoring Stack:** The Prometheus and Grafana deployments are stable.
 *   **User Apps & Services:** PiHole, OpenWebUI, Bedrock Access Gateway, N8N, JellyFin, and Nextcloud are deployed and operational.
 *   **Portal (Pro):** Single pane of glass to access applications and monitor tech stack.
 

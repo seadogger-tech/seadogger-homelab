@@ -29,9 +29,6 @@ Note: Prefer exposing application UIs via Ingress + TLS (cert-manager) at the Tr
 |----------------|--------------------|
 | `192.168.1.241` | Traefik (ingress)  |
 | `192.168.1.242` | Bedrock Gateway    |
-| `192.168.1.244` | Prometheus         |
-| `192.168.1.245` | Grafana            |
-| `192.168.1.246` | Alertmanager       |
 | `192.168.1.250` | Pi-hole DNS        |
 
 ![accent-divider.svg](images/accent-divider.svg)
@@ -52,7 +49,6 @@ Note: Prefer exposing application UIs via Ingress + TLS (cert-manager) at the Tr
 - **[[21-Deployment-Dependencies]]** - MetalLB dependency analysis
 
 **Related Issues:**
-- [#49 - Convert Prometheus to Ingress](https://github.com/seadogger-tech/seadogger-homelab/issues/49) - Remove unnecessary LoadBalancer IPs
 - [#41 - Centralize subnet config](https://github.com/seadogger-tech/seadogger-homelab/issues/41) - Network configuration management
 - [#4 (Pro) - HTTP to HTTPS redirect](https://github.com/seadogger-tech/seadogger-homelab-pro/issues/4) - Traefik middleware
 
@@ -92,7 +88,6 @@ graph TB
 
     subgraph Apps["📦 Applications"]
         Nextcloud[Nextcloud]
-        Prometheus[Prometheus]
     end
 
     subgraph Encryption["🔐 AWS Encryption"]
@@ -111,7 +106,6 @@ graph TB
     EntryPoint --> Router
     Router --> TLSStore
     Router --> Nextcloud
-    Router --> Prometheus
 
     Note1 -.->|Future: Issue #4| Router
 

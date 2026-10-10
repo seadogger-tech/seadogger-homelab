@@ -60,7 +60,6 @@ ansible-playbook main.yml
 
 Applications (examples):
 - Pi-hole — `pihole_deploy.yml`
-- Prometheus/Grafana/Alertmanager — `prometheus_deploy.yml`
 - OpenWebUI — `openwebui_deploy.yml`
 - n8n — `n8n-deploy.yml`
 - Jellyfin — `jellyfin_deploy.yml`
@@ -79,7 +78,7 @@ ansible-playbook cleanup.yml
 
 What it does (in order):
 - Gracefully removes applications (respects `run_pod_cleanup` and `pod_cleanup_list` with `delete_pvc` options) — `cleanup_pod_item.yml`
-- Removes infrastructure (MetalLB, ArgoCD, Prometheus, Rook‑Ceph) when enabled — `cleanup_infrastructure.yml`
+- Removes infrastructure (MetalLB, ArgoCD, Rook‑Ceph) when enabled — `cleanup_infrastructure.yml`
 - Wipes k3s and cluster artifacts — `wipe_k3s_cluster.yml`
 - Optional physical disk wipe when `perform_physical_disk_wipe: true` (DANGER: data loss)
 
@@ -154,7 +153,7 @@ The `cleanup.yml` playbook is the single entry point for all destructive operati
 
 The `cleanup.yml` playbook is organized into three stages:
 1.  **Application and Service Cleanup:** This stage iterates through the `pod_cleanup_list` in `config.yml` and gracefully removes each application.
-2.  **Core Infrastructure Cleanup:** This stage removes the core infrastructure components (Prometheus, ArgoCD, MetalLB, and Rook-Ceph) in the correct order.
+2.  **Core Infrastructure Cleanup:** This stage removes the core infrastructure components (ArgoCD, MetalLB, and Rook-Ceph) in the correct order.
 3.  **Cluster Wipe:** This stage performs a full, destructive wipe of the k3s cluster.
 
 ### Step 2: Cluster Installation (`main.yml`)
@@ -201,7 +200,6 @@ To handle the unique needs of different components, deployments are classified i
 | Pattern | Components | Characteristics |
 | :--- | :--- | :--- |
 | **Infrastructure** | `rook-ceph`, `metallb` | Core services with complex dependencies, CRDs, and potential for hanging finalizers. Require a careful, ordered teardown. |
-| **Hybrid** | `prometheus` | An application that also installs cluster-wide CRDs. Requires special cleanup handling for these CRDs. |
 | **POD Application**| All others (`plex`, `pihole`, `n8n`, etc.) | Self-contained applications, managed via ArgoCD. Can be cleaned up uniformly, with consideration for PVCs and pre-deployment secrets. |
 
 ## 4. Phase 1: New Multi-Stage Cleanup Playbook
@@ -210,14 +208,13 @@ A new `ansible/cleanup.yml` playbook will be the single entry point for all tear
 
 - **Correct Teardown Order:**
     1.  **Clean POD Applications:** (`tasks/cleanup_pods.yml`) Terminates user-facing apps, releasing dependencies on infrastructure.
-    2.  **Clean Prometheus (Hybrid):** (`tasks/cleanup_prometheus.yml`) A dedicated task to tear down the monitoring stack and its CRDs.
     3.  **Clean Infrastructure:** (`tasks/cleanup_infrastructure.yml`) Safely terminates MetalLB and Rook-Ceph after all dependents are gone.
 
 - **Features (Hybrid Model):**
     - **Discovery-Based Cleanup:** For the POD Application pattern, the cleanup task will use a label selector to automatically discover and delete all associated namespaced resources (Services, Deployments, etc.). This reduces configuration and adapts to changes in Helm charts.
     - **Explicit Control for Critical Resources:**
         - **PVCs:** A `delete_pvc: true/false` flag in the config provides a deliberate safety mechanism to prevent accidental data loss.
-        - **CRDs:** Cleanup of cluster-scoped CRDs (for Prometheus, Rook-Ceph) will be handled explicitly in dedicated, ordered tasks, never via discovery.
+        - **CRDs:** Cleanup of cluster-scoped CRDs (for Rook-Ceph) will be handled explicitly in dedicated, ordered tasks, never via discovery.
     - The infrastructure cleanup for Rook-Ceph remains a surgical, ordered process that **will not** touch physical disks.
 
 ## 5. Phase 2: Refactor All Deployment Playbooks
@@ -234,7 +231,7 @@ Every deployment task file in `ansible/tasks/` will be refactored:
 The cold start playbook will be made safer and more reliable.
 
 1.  **Consolidate Teardown Logic:** The `wipe_k3s_cluster` task will be removed from `main.yml` and integrated as the final stage into the `cleanup.yml` playbook. This creates a clear separation of concerns: `main.yml` builds, `cleanup.yml` destroys.
-2.  **Integrate Graceful Cleanup:** The `wipe_k3s_cluster.yml` task will now begin by executing the new three-stage cleanup process (PODs -> Prometheus -> Infrastructure). This ensures a clean state before attempting to uninstall k3s.
+2.  **Integrate Graceful Cleanup:** The `wipe_k3s_cluster.yml` task will now begin by executing the new three-stage cleanup process (PODs -> Infrastructure). This ensures a clean state before attempting to uninstall k3s.
 3.  **Isolate Destructive Operations:**
     - The `wipe_ceph_disks_on_install` variable will be **removed**.
     - A new, explicit variable, `perform_physical_disk_wipe: false`, will be introduced in `config.yml`.

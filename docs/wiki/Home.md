@@ -68,7 +68,6 @@ Monitor, maintain, and troubleshoot your homelab.
 | Document | Description |
 |----------|-------------|
 | **[[10-Benchmarking]]** | Performance benchmarks and testing |
-| **[[11-Monitoring]]** | Prometheus, Grafana, and Alertmanager setup |
 | **[[12-Troubleshooting]]** | Common problems and debugging procedures |
 | **[[15-CI-CD-and-GitHub-Actions]]** | Continuous integration and deployment |
 | **[[17-Runbooks]]** | Operational runbooks and procedures |
@@ -93,7 +92,6 @@ Deep dives, design decisions, and planning.
 
 ### 🟠 High Priorities
 3. **Deployment Dependencies Refactor** - Pure GitOps with ArgoCD + Kustomize ([#48](https://github.com/seadogger-tech/seadogger-homelab/issues/48))
-   - Convert Prometheus to Ingress ([#49](https://github.com/seadogger-tech/seadogger-homelab/issues/49))
    - Move all infrastructure to ArgoCD ([#50](https://github.com/seadogger-tech/seadogger-homelab/issues/50))
 
 See **[[19-Refactoring-Roadmap]]** for complete roadmap and **[GitHub Issues](https://github.com/seadogger-tech/seadogger-homelab/issues)** for tracking.
@@ -113,7 +111,6 @@ See **[[19-Refactoring-Roadmap]]** for complete roadmap and **[GitHub Issues](ht
 - **Load Balancer:** MetalLB (bare-metal LoadBalancer)
 - **Ingress:** Traefik with automatic TLS
 - **Certificates:** cert-manager with internal PKI
-- **Monitoring:** Prometheus, Grafana, Alertmanager
 
 **Applications:**
 - **File Sharing:** Nextcloud (personal cloud storage)

@@ -56,7 +56,6 @@ Use only after diagnosis and explicit approval of the selected application and P
 ![accent-divider](images/accent-divider.svg)
 ## Observability Quick-Checks
 - Prefer accessing UIs via Ingress + TLS at Traefik VIP.
-- Verify Prometheus, Grafana, Alertmanager UIs load and show healthy targets.
 - Check node-exporter and kube-state-metrics.
 
 ![accent-divider](images/accent-divider.svg)

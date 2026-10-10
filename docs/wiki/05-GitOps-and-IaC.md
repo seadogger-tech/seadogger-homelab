@@ -29,7 +29,7 @@ For CI/CD automation and repo workflows, see [[15-CI-CD-and-GitHub-Actions]].
 
 - ArgoCD manages desired state for apps and some infra components via Git:
   - Sources from `core/deployments/**` (Helm values and manifests)
-  - Reconciles Kubernetes resources for apps like Pi-hole, OpenWebUI, n8n, Jellyfin, Prometheus/Grafana/Alertmanager, Nextcloud
+  - Reconciles Kubernetes resources for apps like Pi-hole, OpenWebUI, n8n, Jellyfin, Nextcloud
 
 - Domains & certificates:
   - Services: `*.seadogger-homelab`
@@ -201,7 +201,6 @@ spec:
 | **ArgoCD** | Ansible | Helm (native) | ArgoCD (self-managed) |
 | **Cert-Manager** | ArgoCD | Application CRD | ArgoCD (GitOps) |
 | **Internal PKI** | Ansible | OpenSSL + kubectl | Manual (CA rotation runbook) |
-| **Prometheus** | ArgoCD | Application CRD | ArgoCD (GitOps) |
 | **Applications** | ArgoCD | Application CRD | ArgoCD (GitOps) |
 
 ### 5. Making Changes: Different Scenarios
@@ -228,25 +227,6 @@ git add core && git commit -m "Update core: Nextcloud storage" && git push
 ```
 
 **Result:** ArgoCD detects change, updates PVC, Nextcloud pod restarts with new storage.
-
-#### Scenario B: Add New Application
-
-```bash
-# 1. Create deployment files
-mkdir core/deployments/grafana
-# Add grafana-values.yaml, grafana-application.yaml
-
-# 2. Commit to Git
-cd core
-git add deployments/grafana && git commit -m "Add Grafana application" && git push
-
-# 3. Deploy Application resource
-kubectl apply -f core/deployments/grafana/grafana-application.yaml
-
-# 4. ArgoCD syncs automatically
-```
-
-**Result:** ArgoCD creates namespace, deploys Grafana from Helm chart, configures ingress.
 
 #### Scenario C: Update Infrastructure (Currently Manual)
 
@@ -390,29 +370,6 @@ Developer → Git Push → GitHub → ArgoCD (polls) → Kubernetes → Running 
    - All application namespaces and resources are gone
 
 ![accent-divider.svg](images/accent-divider.svg)
-### Test Case 4: All Applications + Prometheus
-
-1) Deploy
-   - Same as Case 3, ensure `manual_install_prometheus: true`
-2) Cleanup
-   - Set `run_pod_cleanup: true` and `run_prometheus_cleanup: true`
-   - Run `ansible-playbook cleanup.yml`
-3) Verify
-   - Apps and Prometheus resources (including CRDs) are removed
-
-![accent-divider.svg](images/accent-divider.svg)
-### Test Case 5: All Applications + Prometheus + Infrastructure
-
-1) Deploy
-   - Set `cold_start_stage_2_install_infrastructure: true` and `cold_start_stage_3_install_applications: true`
-   - Run `ansible-playbook main.yml`
-2) Cleanup
-   - Enable `run_pod_cleanup`, `run_prometheus_cleanup`, `run_infrastructure_cleanup`
-   - Run `ansible-playbook cleanup.yml`
-3) Verify
-   - All apps and infra (MetalLB, Rook‑Ceph operators) are gone; bare k3s remains
-
-![accent-divider.svg](images/accent-divider.svg)
 ### Test Case 6: Full Cold Start Cycle
 
 1) Deploy
@@ -459,10 +416,6 @@ graph TD
         PKI[Internal PKI<br/>CA + ClusterIssuer]
     end
 
-    subgraph Wave2["🌊 Wave 2: Monitoring"]
-        Prometheus[Prometheus<br/>Stack]
-    end
-
     subgraph Wave3["🌊 Wave 3+: Applications"]
         Apps[Nextcloud, Jellyfin<br/>OpenWebUI, N8N<br/>PiHole]
     end
@@ -472,13 +425,10 @@ graph TD
     end
 
     Wave0 --> Wave1
-    Wave1 --> Wave2
-    Wave2 --> Wave3
     Wave3 --> WavePro
 
     style Wave0 fill:#1e3a5f,stroke:#4a90e2,stroke-width:3px
     style Wave1 fill:#1e3a5f,stroke:#4a90e2,stroke-width:3px
-    style Wave2 fill:#1e3a5f,stroke:#4a90e2,stroke-width:3px
     style Wave3 fill:#2d5016,stroke:#5a9216,stroke-width:3px
     style WavePro fill:#7b1fa2,stroke:#9c27b0,stroke-width:3px,stroke-dasharray: 5 5
 ```
@@ -486,6 +436,5 @@ graph TD
 **Wave Ordering Rationale:**
 - **Wave 0:** Foundation services (MetalLB for IPs, Rook operator, cert-manager)
 - **Wave 1:** Clusters that depend on operators (Ceph cluster, PKI setup)
-- **Wave 2:** Monitoring (depends on storage for PVCs)
 - **Wave 3:** Applications (depend on all infrastructure)
 - **Wave 4:** Pro features (depend on base applications)

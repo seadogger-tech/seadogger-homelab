@@ -256,9 +256,7 @@ Via ArgoCD:
 - OpenWebUI, N8N, Jellyfin
 
 Via Direct Helm/Shell:
-- MetalLB ([metallb_native_deploy.yml](core/ansible/tasks/metallb_native_deploy.yml))
-- Prometheus
-- Rook-Ceph operator
+- MetalLB ([metallb_native_deploy.yml](core/ansible/tasks/metallb_native_deploy.yml))- Rook-Ceph operator
 
 Via Separate Apply:
 - All Ingress resources downloaded via `get_url` and applied separately
@@ -299,15 +297,6 @@ obiwan.local ansible_host=192.168.1.96 ip_host_octet=96
 - No `group_vars/` or `host_vars/` structure
 - All variables in single `config.yml` file
 - Storage group defined but never used
-
-#### 7. **Monitoring and Observability Gaps**
-
-**Missing Components:**
-- No centralized logging (only metrics via Prometheus)
-- No post-deployment validation suite
-- No smoke tests after cluster provisioning
-- No automated health checks
-- No rollback mechanism on deployment failure
 
 #### 8. **Documentation Structure**
 
@@ -507,58 +496,6 @@ spec:
           readOnly: true
 ```
 
-**Step 3: Add Monitoring & Alerts**
-
-Create `core/deployments/backup/backup-monitoring.yaml`:
-
-```yaml
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: backup-monitor-script
-  namespace: nextcloud
-data:
-  check-backup.sh: |
-    #!/bin/bash
-    # Check if backup completed in last 25 hours
-    LAST_BACKUP=$(aws s3 ls s3://seadogger-homelab-backups/nextcloud/ | tail -1 | awk '{print $1" "$2}')
-    LAST_BACKUP_EPOCH=$(date -d "$LAST_BACKUP" +%s)
-    NOW_EPOCH=$(date +%s)
-    HOURS_AGO=$(( (NOW_EPOCH - LAST_BACKUP_EPOCH) / 3600 ))
-
-    if [ $HOURS_AGO -gt 25 ]; then
-      echo "ERROR: Last backup was ${HOURS_AGO} hours ago!"
-      exit 1
-    fi
-    echo "OK: Last backup was ${HOURS_AGO} hours ago"
-
----
-apiVersion: monitoring.coreos.com/v1
-kind: PrometheusRule
-metadata:
-  name: backup-alerts
-  namespace: monitoring
-spec:
-  groups:
-  - name: backup
-    interval: 30m
-    rules:
-    - alert: NextcloudBackupFailed
-      expr: kube_job_status_failed{namespace="nextcloud",job_name=~"nextcloud-s3-backup.*"} > 0
-      for: 1h
-      annotations:
-        summary: "Nextcloud S3 backup job failed"
-        description: "The automated Nextcloud backup to S3 has failed. Check logs immediately."
-
-    - alert: NextcloudBackupMissing
-      expr: time() - kube_job_status_completion_time{namespace="nextcloud",job_name=~"nextcloud-s3-backup.*"} > 86400
-      for: 2h
-      annotations:
-        summary: "Nextcloud backup has not run in 24+ hours"
-        description: "No successful Nextcloud backup detected in the last 24 hours."
-```
-
 **Step 4: Create Restore Procedure**
 
 Create `docs/wiki/24-Backup-and-Restore.md`:
@@ -646,8 +583,6 @@ aws s3api get-object \
 2. **Jellyfin metadata** (Priority 2 - media libraries config)
 3. **N8N workflows** (Priority 3 - automation data)
 4. **PiHole config** (Priority 4 - DNS config)
-5. **Prometheus metrics** (Priority 5 - historical data)
-
 **Create generic backup CronJob template:**
 
 `core/deployments/backup/generic-pvc-backup-cronjob.yaml`:
@@ -967,7 +902,6 @@ staging_mode=true
 ---
 # Staging environment overrides
 enable_rook_ceph: false  # Use local storage in staging
-enable_prometheus: false  # Skip heavy monitoring
 enable_jellyfin: false    # Skip media server
 
 # Use smaller resource limits
@@ -1118,7 +1052,6 @@ gitleaks detect --source . --verbose
 
 **GitHub Issues:**
 - [#48 - Parent Issue (Dependencies Refactor)](https://github.com/seadogger-tech/seadogger-homelab/issues/48)
-- [#49 - Convert Prometheus to Ingress](https://github.com/seadogger-tech/seadogger-homelab/issues/49)
 - [#50 - Move all infrastructure to ArgoCD + Kustomize](https://github.com/seadogger-tech/seadogger-homelab/issues/50)
 - [#51 - Separate Raspberry Pi 5 from generic ARM64](https://github.com/seadogger-tech/seadogger-homelab/issues/51)
 
@@ -1188,50 +1121,6 @@ deployment:
 
 **Timeline:** Week 2 (parallel with other dependency work)
 
-#### 1.5.1 Convert Prometheus Stack to Ingress (Remove LoadBalancer Dependencies)
-
-**Current Issue:**
-- Prometheus, Grafana, and Alertmanager each use dedicated MetalLB LoadBalancer IPs
-- Wastes 3 IPs (192.168.1.244, 192.168.1.245, 192.168.1.246)
-- Inconsistent access pattern vs other apps
-
-**Solution:**
-```yaml
-# Instead of LoadBalancer services, use Traefik IngressRoutes
----
-apiVersion: traefik.containo.us/v1alpha1
-kind: IngressRoute
-metadata:
-  name: prometheus
-  namespace: monitoring
-spec:
-  entryPoints: [websecure]
-  routes:
-  - match: Host(`prometheus.seadogger.internal`)
-    kind: Rule
-    services:
-    - name: prometheus-k8s
-      port: 9090
-  tls:
-    secretName: prometheus-tls  # ← Cert-manager certificate
----
-# Repeat for Grafana and Alertmanager
-```
-
-**Benefits:**
-- ✅ Reduces MetalLB to only Traefik and PiHole (the only services that truly need LoadBalancer)
-- ✅ Unified access pattern via Traefik
-- ✅ Automatic TLS via cert-manager
-- ✅ Simplified dependency: Prometheus only needs Rook-Ceph (storage), not MetalLB
-
-**Files to modify:**
-- `core/ansible/tasks/prometheus_deploy.yml` (remove LoadBalancer services)
-- `core/deployments/prometheus/prometheus-values.yaml` (set service type to ClusterIP)
-- Create: `core/certificates/prometheus-certificate.yml`
-- Create: `core/certificates/grafana-certificate.yml`
-- Create: `core/certificates/alertmanager-certificate.yml`
-- Update: `core/deployments/prometheus/ingress.yaml` (create IngressRoutes)
-
 #### 1.5.2 Document and Validate All Dependencies
 
 **Problem:** Tasks don't validate prerequisites before execution (see Problem 1 & 5 in dependency analysis)
@@ -1259,7 +1148,6 @@ spec:
 ```
 
 **Apply to:**
-- All Prometheus deployment tasks
 - All application deployment tasks
 - Rook-Ceph cluster (validate operator ready)
 - Internal PKI (validate cert-manager ready)
@@ -1275,7 +1163,6 @@ spec:
 | Rook-Ceph | Ansible + Helm | ❌ Not GitOps |
 | Cert-Manager | ArgoCD Application | ✅ GitOps |
 | Internal PKI | Ansible + OpenSSL | ❌ Not GitOps |
-| Prometheus | ArgoCD Application | ✅ GitOps |
 | Apps | ArgoCD Application | ✅ GitOps |
 
 **Target Structure:**
@@ -1289,7 +1176,6 @@ seadogger-homelab/core/
 │   │   │   ├── rook-ceph-cluster/
 │   │   │   ├── cert-manager/
 │   │   │   ├── internal-pki/
-│   │   │   └── prometheus/
 │   │   └── overlays/
 │   │       ├── production/
 │   │       └── staging/
@@ -1341,8 +1227,6 @@ spec:
         wave: "1"
       - name: internal-pki
         wave: "1"
-      # Wave 2: Monitoring
-      - name: prometheus
         wave: "2"
   template:
     metadata:
@@ -1392,7 +1276,6 @@ enable_metallb_native: true        # Required
 enable_rook_ceph_part1: true       # Required (changed from false)
 enable_rook_ceph_part2: true       # Required
 enable_internal_pki: true          # Required
-enable_prometheus: true            # Optional (monitoring)
 ```
 
 #### 1.5.5 Remove External URL Dependencies
@@ -1403,24 +1286,6 @@ enable_prometheus: true            # Optional (monitoring)
 
 ```bash
 # Create local manifest directory
-mkdir -p core/deployments/{prometheus,argocd}/crds
-
-# Download and commit CRDs
-kubectl apply --dry-run=client -f https://raw.githubusercontent.com/.../crd.yaml -o yaml \
-  > core/deployments/prometheus/crds/servicemonitor.yaml
-
-# Update tasks to use local files
-- name: Apply Prometheus CRDs
-  kubernetes.core.k8s:
-    definition: "{{ lookup('file', '../../deployments/prometheus/crds/' + item) }}"
-  loop:
-    - servicemonitor.yaml
-    - prometheusrule.yaml
-```
-
-#### Success Metrics
-
-- ✅ Prometheus stack accessible via Ingress (no LoadBalancer IPs)
 - ✅ MetalLB only serves Traefik and PiHole
 - ✅ All infrastructure visible in ArgoCD UI
 - ✅ Pre-flight checks prevent deployment failures
@@ -1429,8 +1294,6 @@ kubectl apply --dry-run=client -f https://raw.githubusercontent.com/.../crd.yaml
 - ✅ All config in Git with Kustomize overlays
 
 #### Estimated Timeline
-
-- Week 2 Day 1-2: Convert Prometheus to Ingress
 - Week 2 Day 3-4: Add pre-flight checks
 - Week 3 Day 1-3: Convert MetalLB + Rook-Ceph to Kustomize
 - Week 3 Day 4-5: ApplicationSet with sync waves
@@ -1611,8 +1474,6 @@ kubectl_version: "v1.31.4"
 metallb_chart_version: "0.14.9"
 argocd_chart_version: "7.7.11"
 rook_ceph_operator_version: "v1.15.7"
-prometheus_chart_version: "67.4.0"
-
 # Application versions
 pihole_chart_version: "2.26.4"
 nextcloud_chart_version: "7.0.2"
@@ -1841,7 +1702,7 @@ find $BACKUP_DIR -type f -name "*.zip" -mtime +30 -delete
 
 **Current Hybrid Approach:**
 - ✅ Applications via ArgoCD (Nextcloud, PiHole, etc.)
-- ❌ Infrastructure via Ansible+Helm (MetalLB, Prometheus)
+- ❌ Infrastructure via Ansible+Helm (MetalLB)
 - ❌ Ingress via separate kubectl apply
 
 **Target: Everything via ArgoCD**
@@ -1871,9 +1732,6 @@ spec:
         repoURL: https://charts.rook.io/release
         chart: rook-ceph
         targetRevision: "v1.15.7"
-      - name: prometheus
-        namespace: monitoring
-        path: deployments/prometheus
         repoURL: https://prometheus-community.github.io/helm-charts
         chart: kube-prometheus-stack
         targetRevision: "67.4.0"
@@ -2136,7 +1994,6 @@ core/argocd/apps/
     - metallb-system
     - rook-ceph
     - argocd
-    - monitoring
   register: ns_check
   failed_when: ns_check.resources | length == 0
 
@@ -2258,48 +2115,8 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://grafana.github.io/helm-charts
-    chart: loki-stack
-    targetRevision: "2.10.2"
-    helm:
-      values: |
-        loki:
-          enabled: true
-          persistence:
-            enabled: true
-            size: 50Gi
-            storageClassName: ceph-block-data
-        promtail:
-          enabled: true
-        grafana:
-          enabled: false  # Already deployed with Prometheus
-  destination:
-    server: https://kubernetes.default.svc
-    namespace: monitoring
-  syncPolicy:
-    automated:
-      prune: true
-      selfHeal: true
-    syncOptions:
-    - CreateNamespace=true
-```
-
-**Add Loki datasource to Grafana:**
-```yaml
-# In prometheus-values.yaml, add:
-grafana:
-  additionalDataSources:
-  - name: Loki
-    type: loki
-    url: http://loki-stack:3100
-    access: proxy
-    isDefault: false
-```
-
 **Benefits:**
-- Centralized log aggregation
-- Correlation between metrics and logs in Grafana
-- Troubleshooting with full context
+- Centralized log aggregation- Troubleshooting with full context
 - Log retention and search
 
 #### 5.4 Implement Tagging Strategy
@@ -2426,7 +2243,6 @@ ansible-playbook main.yml --tags k3s
 | Rook-Ceph      | v1.15.7       | K3s 1.29+         | 2025-09-29      |
 | ArgoCD         | 7.7.11        | K3s 1.28+         | 2025-09-29      |
 | Traefik        | v3.2          | K3s 1.28+         | 2025-09-29      |
-| Prometheus     | 67.4.0        | K3s 1.28+         | 2025-09-29      |
 
 **Auto-generate with script:**
 ```bash
@@ -2559,8 +2375,7 @@ instead of a dead link, and remove the standalone app entirely if the
 portal tile was its only reason to exist.
 
 **Not every tile is a candidate** — apps whose UI is the product
-itself (Argo CD, Traefik dashboard, Ceph Dashboard, Grafana) get no
-benefit from an HA card and are expected to stay portal-linked
+itself (Argo CD, Traefik dashboard, Ceph Dashboardbenefit from an HA card and are expected to stay portal-linked
 indefinitely.
 
 ![accent-divider.svg](images/accent-divider.svg)
@@ -2745,14 +2560,12 @@ SSH intervention**.
 - [ ] Configure AWS credentials secret
 - [ ] Test manual backup
 - [ ] Verify automated nightly backup runs
-- [ ] Set up Prometheus alerts for backup failures
 - [ ] Document restore procedures
 - [ ] Test full restore in staging (once staging exists)
 
 **Success Criteria:**
 - Automated nightly backups running successfully
 - Backups visible in S3 console
-- Prometheus alerts configured
 - Restore procedure documented and tested
 
 **Testing:**
@@ -2918,7 +2731,6 @@ ansible-playbook playbooks/rollback.yml
 - [ ] Create infrastructure ApplicationSet
 - [ ] Migrate MetalLB to ArgoCD
 - [ ] Migrate Rook-Ceph to ArgoCD
-- [ ] Migrate Prometheus to ArgoCD
 - [ ] Bundle ingress with each application
 - [ ] Convert applications to Helm charts (if needed)
 - [ ] Implement App-of-Apps pattern
@@ -2958,7 +2770,6 @@ kubectl delete deployment pihole -n pihole
 - [ ] Create smoke test suite
 - [ ] Add post-deployment validation
 - [ ] Deploy Loki + Promtail
-- [ ] Configure Grafana Loki datasource
 - [ ] Add Ansible tags to all roles
 - [ ] Test tag-based execution
 - [ ] Create rollback playbook
@@ -2982,7 +2793,6 @@ ansible-playbook playbooks/validate.yml
 # Test tags
 ansible-playbook main.yml --tags k3s,validate
 
-# Test logs in Grafana
 # Query: {namespace="default"}
 ```
 
@@ -3053,7 +2863,6 @@ ansible-playbook main.yml --tags k3s,validate
 | Post-deploy validation   | ❌          | ❌                 | ✅                 |
 | Centralized logging      | ❌          | ❌                 | ✅                 |
 | Applications included    | ❌          | ✅                 | ✅                 |
-| Monitoring stack         | ❌          | ✅                 | ✅                 |
 
 **Key Differentiators (After Refactoring):**
 1. **Full-stack homelab** - Infrastructure + applications
@@ -3090,10 +2899,6 @@ ansible-playbook main.yml --tags k3s,validate
 - [molecule](https://molecule.readthedocs.io/) - Ansible testing framework
 - [kube-score](https://github.com/zegl/kube-score) - Static analysis for Kubernetes
 
-### Monitoring & Logging
-- [Prometheus Operator](https://github.com/prometheus-operator/prometheus-operator)
-- [Grafana Loki](https://grafana.com/oss/loki/)
-- [Promtail](https://grafana.com/docs/loki/latest/send-data/promtail/)
 
 ---
 

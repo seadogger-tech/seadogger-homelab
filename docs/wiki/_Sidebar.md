@@ -32,7 +32,6 @@
 
 ## 📊 Ops
 - [[10-Benchmarking]]
-- [[11-Monitoring]]
 - [[12-Troubleshooting]]
 - [[15-CI-CD-and-GitHub-Actions]]
 - [[17-Runbooks]]
