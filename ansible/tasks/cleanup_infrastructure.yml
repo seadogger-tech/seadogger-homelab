@@ -1,3 +1,6 @@
+# Config: when-guards driven by `infrastructure_cleanup_list` in
+# core/ansible/config.yml (live) and core/ansible/example.config.yml (template).
+
 ---
 - name: Set KUBECONFIG global
   ansible.builtin.set_fact:

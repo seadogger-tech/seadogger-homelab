@@ -1,3 +1,6 @@
+# Config: namespace list driven by `precook_namespaces` in
+# core/ansible/config.yml (live) and core/ansible/example.config.yml (template).
+
 ---
 - name: Set KUBECONFIG global
   ansible.builtin.set_fact:
