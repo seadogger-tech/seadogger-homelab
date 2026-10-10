@@ -49,6 +49,11 @@ jobs:
           gh auth setup-git
           git clone https://github.com/seadogger-tech/seadogger-homelab.wiki.git wiki
 
+      - name: Check wiki publication delta
+        run: |
+          python3 -B -m unittest discover -s useful_scripts/wiki -p 'test_*.py'
+          python3 -B useful_scripts/wiki/check_publication.py docs/wiki wiki
+
       - name: Sync wiki (markdown + memory_bank + images)
         run: |
           rsync -a --delete --exclude '.git/' docs/wiki/ wiki/
@@ -65,3 +70,9 @@ jobs:
           else
             echo "No changes to publish."
           fi
+
+      - name: Verify published default branch and content
+        run: |
+          git -C wiki fetch --quiet origin master
+          test "$(git -C wiki rev-parse HEAD)" = "$(git -C wiki rev-parse origin/master)"
+          test -z "$(rsync -a --delete --dry-run --itemize-changes --exclude '.git/' docs/wiki/ wiki/)"

@@ -132,16 +132,18 @@ sequenceDiagram
     end
 
     GH->>Wiki: Clone wiki repo (GITHUB_TOKEN)
+    GH->>GH: Check source against published wiki
     GH->>GH: rsync docs/wiki/ → wiki repo
     Note over GH: Copy *.md, images/, memory_bank/
 
     alt Changes Detected
         GH->>Wiki: git commit -m "Sync from source"
         GH->>Wiki: git push
-        Wiki-->>Dev: ✅ Wiki Updated
     else No Changes
         GH-->>Dev: ℹ️ Wiki Already Up-to-Date
     end
+    GH->>Wiki: Verify master and synced content
+    Wiki-->>Dev: ✅ Wiki Verified
 ```
 
 ### Configuration
@@ -158,8 +160,31 @@ sequenceDiagram
 1. **Checkout source** (without default credentials to prevent recursion)
 2. **Optional: Generate pages** - Run `build_all.py` if `autogen=true`
 3. **Clone wiki repo** - Configure Git with `gh auth setup-git`, then clone the wiki
-4. **Sync content** - `rsync` markdown files, images, and memory_bank
-5. **Commit & push to `master`** - Only if changes detected
+4. **Check the publication delta** - Test the checker, then compare new Markdown content with the live wiki before copying it
+5. **Sync content** - `rsync` markdown files, images, and memory_bank
+6. **Commit & push to `master`** - Only if changes detected
+7. **Verify publication** - Confirm remote `master` and the local wiki copy match the reviewed source
+
+The preflight blocks unclosed fences, large page reductions, personal
+checkout paths, account-bearing S3 bucket names, dated evidence headings and
+operational result tables.
+An intentional large reduction needs a reason and exact old/new content hashes
+in `useful_scripts/wiki/publication-exceptions.json`. The automated patterns
+catch common mistakes; review other operational details for the public audience
+before publishing.
+
+Use the wiki-relative page name as the key. Hash the exact old and new UTF-8
+file contents with SHA-256; use `null` for the new hash when deleting a page:
+
+```json
+{
+  "Page.md": {
+    "published_sha256": "OLD_SHA256",
+    "source_sha256": "NEW_SHA256_OR_NULL",
+    "reason": "Reviewed reason for replacing this page"
+  }
+}
+```
 
 **Key Files Synced:**
 - `docs/wiki/**/*.md` → Wiki root
@@ -463,6 +488,7 @@ Follow this checklist — established as ADR-011 — before adding a new cherry-
 
 ![accent-divider](images/accent-divider.svg)
 
+```bash
 # View specific run details
 gh run view <run-id>
 
@@ -481,6 +507,11 @@ gh api repos/seadogger-tech/seadogger-homelab/actions/jobs/<job-id> \
 - **Symptom:** "Authentication failed" error
 - **Fix:** Check the workflow's `contents: write` permission and `gh auth setup-git` step
 - **Verify:** Inspect the run log and confirm the wiki's default branch advanced
+
+**Wiki Preflight Fails:**
+- **Symptom:** The publication-delta check reports a page and line or a large reduction
+- **Fix:** Move live evidence to private storage or repair the Markdown structure. For an intentional rewrite, record a reviewed exact-hash exception
+- **Verify:** Rerun `python3 useful_scripts/wiki/check_publication.py docs/wiki /ABSOLUTE/CLONED/WIKI`
 
 **Bedrock/Mealie Rebuild Fails on Docker build:**
 - **Symptom:** "buildx failed with: ERROR: failed to solve"
