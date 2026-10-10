@@ -24,7 +24,6 @@ cold_start_stage_3_install_applications: true
 # Use these flags to deploy services individually when the Stage 3 master switch is false.
 manual_install_bedrock: true
 manual_install_pihole: true
-manual_install_prometheus: false
 manual_install_openwebui: true
 manual_install_nextcloud: true
 # Opt-in dedicated target; staging does not convert or switch Nextcloud.
@@ -119,14 +118,11 @@ hdhomerun_device_ids: "YOUR_DEVICE_ID_HERE"
 #    - Set `run_pod_cleanup: true`
 #    - Ensure all desired applications are listed in `pod_cleanup_list`.
 #
-# 4. To Remove Prometheus (including its CRDs):
-#    - Set `run_prometheus_cleanup: true`
-#
-# 5. To Remove Infrastructure (e.g., MetalLB only):
+# 4. To Remove Infrastructure (e.g., MetalLB only):
 #    - Set `run_infrastructure_cleanup: true`
 #    - Set `infrastructure_cleanup_list: ["metallb"]`
 #
-# 6. To Wipe Everything (COLD START):
+# 5. To Wipe Everything (COLD START):
 #    - Set `cold_start_stage_1_wipe_cluster: true` below.
 #    - Then run the `ansible-playbook cleanup.yml` command. This will trigger
 #      the full, ordered teardown of all applications and infrastructure before
@@ -148,7 +144,6 @@ pod_cleanup_list:
 # --- INFRASTRUCTURE CLEANUP ---
 run_infrastructure_cleanup: false
 infrastructure_cleanup_list:
-  - "prometheus"
   - "argocd"
   - "metallb"
   - "rook-ceph"  # Note: This does NOT wipe physical disks.
@@ -156,7 +151,6 @@ infrastructure_cleanup_list:
 # --- Namespace Pre-cooking Configuration ---
 precook_namespaces:
   - {name: "openwebui"}
-  - {name: "monitoring"}
   - {name: "argocd"}
   - {name: "rook-ceph"}
   - {name: "pihole"}
@@ -185,7 +179,6 @@ enable_rook_ceph_part1: "{{ cold_start_stage_2_install_infrastructure | bool }}"
 enable_metallb_native: "{{ cold_start_stage_2_install_infrastructure | bool }}"
 enable_argocd_native: "{{ cold_start_stage_2_install_infrastructure | bool }}"
 enable_internal_pki: "{{ cold_start_stage_2_install_infrastructure | bool }}"
-enable_prometheus: "{{ cold_start_stage_2_install_applications | bool and manual_install_prometheus | bool }}"
 
 # --- Stage 3: Application Deployment Variables ---
 enable_nextcloud_postgresql: "{{ cold_start_stage_3_install_applications | bool and manual_install_nextcloud_postgresql | bool }}"
