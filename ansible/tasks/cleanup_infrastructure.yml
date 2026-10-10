@@ -3,39 +3,6 @@
   ansible.builtin.set_fact:
     KUBECONFIG: /etc/rancher/k3s/k3s.yaml
 
-# === Prometheus Cleanup ===
-- name: "Clean up Prometheus"
-  block:
-    - name: "Delete Prometheus ArgoCD Application"
-      kubernetes.core.k8s:
-        kubeconfig: "{{ KUBECONFIG }}"
-        state: absent
-        kind: Application
-        api_version: argoproj.io/v1alpha1
-        name: prometheus-stack
-        namespace: argocd
-        wait: yes
-        wait_timeout: 300
-      ignore_errors: true
-
-    - name: "Delete Prometheus CRDs"
-      kubernetes.core.k8s:
-        kubeconfig: "{{ KUBECONFIG }}"
-        state: absent
-        kind: CustomResourceDefinition
-        name: "{{ item }}"
-      loop:
-        - "alertmanagerconfigs.monitoring.coreos.com"
-        - "alertmanagers.monitoring.coreos.com"
-        - "podmonitors.monitoring.coreos.com"
-        - "probes.monitoring.coreos.com"
-        - "prometheuses.monitoring.coreos.com"
-        - "prometheusrules.monitoring.coreos.com"
-        - "servicemonitors.monitoring.coreos.com"
-        - "thanosrulers.monitoring.coreos.com"
-      ignore_errors: true
-  when: "'prometheus' in infrastructure_cleanup_list"
-
 # === ArgoCD Cleanup ===
 - name: "Clean up ArgoCD"
   block:
