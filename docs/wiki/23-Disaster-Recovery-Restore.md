@@ -1,108 +1,149 @@
-# Velero + rclone Backup Strategy for K3s Homelab - Complete Implementation Guide
+# Backup and disaster recovery
 
-## Executive Summary
+This guide describes the backup sources and recovery boundaries in the current
+Core and Pro manifests. Use it with the [diagnose-before-recovery runbook](17-Runbooks#diagnose-before-recovery).
+A production restore changes data and requires a separately reviewed recovery
+plan. Keep the original data and backup artifacts until the restored application
+has been verified.
 
-This document provides the complete implementation guide for a dual-strategy backup system protecting critical applications in a K3s homelab cluster. The solution combines Velero v1.17.0 with Kopia deduplication for frequent incremental backups AND rclone for semi-annual plain file archives, providing both operational recovery and long-term "digital dark age" protection.
+## Backup sources
 
-**Scope of Protection:**
-- **Nextcloud**: 3.3TB - Primary data store (backed up daily + archived semi-annually)
-- **OpenWebUI**: ~5GB - User chats and configurations (backed up daily + archived)
-- **N8N**: ~1GB - Workflows and credentials (backed up with known encryption issue)
-- **Jellyfin**: Media references only - Not backed up (media protected via Nextcloud, erasure coding for hardware protection)
-- **PiHole/Portal**: Stateless applications - Not backed up (redeploy via Ansible)
+| Source | Owner | Coverage and schedule | Check before relying on it |
+| --- | --- | --- | --- |
+| Velero with Kopia | Pro `deployments/velero/schedule.yaml` | Daily backup of application namespaces except Nextcloud; separate weekly Nextcloud backup | Backup, PodVolumeBackup and storage-location status; matching objects in the configured S3 destination |
+| Nextcloud file mirror | Core `deployments/nextcloud/s3-backup-cronjob.yaml` | Nightly copy of included Nextcloud data files | Recent Job result and destination comparison; the mirror excludes cache, temporary files, appdata, trash, versions and logs |
+| Nextcloud PostgreSQL native dump | Core `deployments/nextcloud/postgresql/backup-cronjob.yaml` | 03:15 America/New_York after activation; initially suspended during staging | Job and both container results, archive validation, and three nonempty objects for the same attempt |
 
-**Key Capabilities:**
-- **Dual Strategy:** Velero/Kopia for operational recovery, rclone for plain file archives
-- **Disaster Recovery:** Full restoration in 24-48 hours (300Mbps link bottleneck)
-- **Ransomware Protection:** Three-tier IAM model prevents deletion, multiple recovery points
-- **Cost Effective:** ~$11/month for 3.3TB using Deep Archive
-- **Future Proof:** Plain file archives prevent vendor lock-in and "digital dark age"
-- **Deduplication:** Kopia reduces storage from potential 330TB to ~3.5TB for 100 backups
-- **Automated Testing:** Every 6 hours with Gmail alerting using Kubernetes CRDs
-- **Monitored:** Automated backup verification and alerting
-- **Encrypted:** AES256 encryption at rest
+Read the manifests and live Schedule/CronJob objects for the selected revision.
+A configured schedule does not prove that a backup ran or that its data can be
+restored. The file mirror uses `aws s3 sync --delete`; never use that command as
+a restore recipe. A native database dump and a file mirror protect different
+parts of Nextcloud and must be selected as a consistent pair for recovery.
 
-## Prerequisites
+## Read-only inventory
 
-### Required Components Already Installed
-- K3s cluster with 4 nodes operational (yoda, anakin, obiwan, rey)
-- Nextcloud deployed and running (3.3TB data on CephFS)
-- OpenWebUI and N8N deployed
-- Velero v1.17.0 installed via Helm with:
-  - Kopia uploader configured
-  - AWS plugin enabled
-  - Node agents deployed (`node-agent-*` pods running)
-  - Velero CRDs available in cluster
-- Rook-Ceph storage with erasure coding
-- AWS account with S3 access
-- Gmail account with app password for alerts
+Record the observation time and keep command output in a private operator
+evidence location. These commands only
+inspect Kubernetes resources:
 
-### Verify Current Installation
 ```bash
-# Check Velero is running
-kubectl get pods -n velero
-kubectl get deployment velero -n velero
-
-# Verify node agents are running (should see 4)
-kubectl get pods -n velero | grep node-agent
-
-# Check existing configurations
-kubectl get backups -n velero
-kubectl get schedules -n velero
-kubectl get backupstoragelocation -n velero
-
-# Check CRDs are available
-kubectl get crd | grep velero
+kubectl get schedules,backups,backupstoragelocations -n velero
+kubectl get podvolumebackups -n velero
+kubectl get cronjobs,jobs -n nextcloud
+kubectl get applications -n argocd
+kubectl get pvc -A
 ```
 
-## System Architecture
+For a candidate backup, inspect its status, errors and covered namespaces.
+Inspect any PodVolumeBackups for the relevant PVCs. For a native database dump,
+check the dump and upload container exit codes and logs; match the attempt
+identifier to the S3 directory and verify `nextcloud.dump`, `SHA256SUMS` and
+`metadata.txt` are present and nonempty. Check the mirror's included file set
+separately. Keep exact object keys and receipts in private evidence.
 
-### Complete Backup Architecture Diagram
+## Choose a recovery path
 
-```mermaid
-graph TB
-    subgraph K8s["🎯 Kubernetes Cluster (4 Nodes)"]
-        direction TB
-        
-        subgraph VeleroNS["velero namespace"]
-            VeleroServer["Velero Server v1.17.0<br/>Schedule Orchestration"]
-            VeleroUI["Velero UI<br/>https://velero.seadogger-homelab"]
-            TestRunner["Test Executor<br/>CronJob every 6hrs"]
-        end
+1. Identify the failure boundary and stop new writes before restoring data.
+   For Nextcloud, inventory all writers and follow the database/file consistency
+   boundaries in the [PostgreSQL migration runbook](26-Nextcloud-PostgreSQL-Migration).
+2. Select a backup taken before the damage. Compare its timestamp, completed
+   status, source revision, namespace and volume coverage with the recovery goal.
+3. Check the S3 storage class for every required object. Kopia may need index
+   and metadata blobs before it can identify data packs. Objects in Deep Archive
+   must be retrieved before the restore can read them; a successful listing is
+   not proof that retrieval has completed.
+4. Prepare an isolated restore target and review namespace mapping, PVC names,
+   storage classes, Secret handling and available capacity. A restore into the
+   live namespace can overwrite or conflict with current resources.
+5. Execute the reviewed restore through the owning Velero or application
+   workflow. Observe the Restore and PodVolumeRestore results, then validate
+   application behavior and data consistency. Do not treat a completed Restore
+   object alone as proof of usable data.
+6. Record the final state and retain the original PVCs, database and backup
+   artifacts until the recovery decision explicitly disposes of them.
 
-        subgraph NodeAgents["Node Agents (Kopia Uploader)"]
-            Agent1["node-agent-yoda"]
-            Agent2["node-agent-anakin"]
-            Agent3["node-agent-obiwan"]
-            Agent4["node-agent-rey"]
-        end
+For a Velero recovery, first confirm the BackupStorageLocation is available
+and the selected Backup is complete. Build a `velero.io/v1` Restore manifest
+for the reviewed backup and target namespace; inspect the rendered object before
+submitting it. Restore the namespace and its volumes together. If the source
+namespace is still live, test with a distinct namespace and review whether any
+cluster-scoped or external resources need separate handling. The Pro Velero
+schedule excludes K3s system namespaces, Rook-Ceph and Velero itself; rebuild
+those through their owning installation procedures rather than assuming a
+Velero backup covers them.
 
-        subgraph Protected["✅ Protected Applications"]
-            NextcloudPVC["Nextcloud PVC<br/>3.3TB CephFS EC"]
-            OpenWebUIPVC["OpenWebUI PVC<br/>5GB RBD"]
-            N8NPVC["N8N PVC<br/>1GB RBD"]
-        end
+Use this only as a starting point for a reviewed, isolated Restore manifest;
+replace every placeholder and inspect the Backup's included resources and
+volume coverage first:
 
-        subgraph BackupJobs["Backup Jobs"]
-            VeleroSchedules["Daily/Weekly/Monthly<br/>Schedules"]
-            RcloneCron["rclone CronJob<br/>Jan 1 & Jul 1"]
-        end
+```yaml
+apiVersion: velero.io/v1
+kind: Restore
+metadata:
+  name: reviewed-isolated-restore
+  namespace: velero
+spec:
+  backupName: REVIEWED_BACKUP_NAME
+  includedNamespaces:
+    - SOURCE_NAMESPACE
+  namespaceMapping:
+    SOURCE_NAMESPACE: ISOLATED_NAMESPACE
+```
 
-        subgraph Storage["Rook-Ceph Storage"]
-            CephFS["CephFS EC<br/>Erasure Coded<br/>Single Drive Failure Protection"]
-            CephRBD["RBD Block<br/>Replicated"]
-        end
-    end
+After submission, inspect the Restore's warnings/errors, its
+PodVolumeRestores, the target PVCs and the recovered application. Do not remove
+the source namespace or its volumes as a prerequisite to this check.
 
-    subgraph AWS["☁️ AWS S3 Storage"]
-        S3Bucket["seadogger-homelab-backup<br/>us-east-1"]
-        
-        subgraph Paths["Storage Paths"]
-            VeleroPath["/backups/<br/>Kopia Blocks"]
-            RclonePath["/nextcloud-plain/<br/>Original Files"]
-        end
-        
-        S3Standard["S3 Standard<br/>Last 7 days<br/>~100GB metadata + recent"]
-        DeepArchive["Glacier Deep Archive<br/>After 7 days<br/>~3.3TB Velero + 6.6TB rclone"]
-    end
+## Nextcloud recovery boundary
 
+The Nextcloud file tree, configuration and database form one application state.
+Choose a file backup and database backup that can be reconciled at a known
+point in time. The native file mirror is a copy of selected files, not a database
+backup or a complete replacement for a Velero snapshot. The PostgreSQL dump
+contains database state, not user file bytes. Do not pair a stale SQLite
+checkpoint with files that received later writes, and do not switch database
+selection merely to make a restore start.
+
+Before using a native PostgreSQL dump, copy the selected attempt to private
+working storage and verify it without connecting to production:
+
+```bash
+cd /PRIVATE/RESTORE-WORKDIR
+sha256sum -c SHA256SUMS
+pg_restore --list nextcloud.dump >/dev/null
+pg_restore --file=/dev/null nextcloud.dump
+```
+
+These checks establish file integrity and archive readability, not a working
+database restore. Restore into an isolated PostgreSQL target first, validate
+schema and application behavior with the matching files, then plan any
+production cutover. Use the [migration runbook](26-Nextcloud-PostgreSQL-Migration)
+for the saved deployment selection, writer barrier and reopening boundary.
+
+## Deep Archive and Kopia
+
+S3 lifecycle rules may move Kopia data packs into Deep Archive. Kopia repository
+configuration, index and metadata must remain readable for maintenance and
+restore planning. If any required index or metadata object has also moved to
+Deep Archive, retrieve it before asking Kopia to enumerate data packs; changing
+an S3 lifecycle rule does not retrieve existing objects. Inspect the current
+bucket policy and object storage classes through an authorized identity before
+choosing a retrieval tier. Retrieval time and cost depend on the actual object
+set and storage class; record measured outcomes rather than assuming a fixed
+restore time.
+
+## Verification and handoff
+
+- Compare recovered application files, database records and configuration with
+  the chosen backup point. Perform authenticated reads and a bounded write test
+  in the isolated target where appropriate.
+- Check controller health, PVC mounts, application logs, backup schedules and
+  ArgoCD reconciliation after any approved production transition.
+- Record what was restored, what was excluded, the observed completion state and
+  any untested recovery path. Keep raw receipts and object identifiers in
+  private evidence; publish only a reviewed, sanitized conclusion.
+
+See [Deployment and Validation](27-Deployment-and-Validation) for ownership and
+[Storage and Rook-Ceph](06-Storage-Rook-Ceph) for the storage classes. The older
+Velero/rclone example is historical and is not a source of current deployment
+commands.

@@ -20,7 +20,7 @@ Ansible is the operator entry point and provisions protected Secrets and ArgoCD 
 
 `ansible/main.yml` imports `tasks/nextcloud_postgresql_deploy.yml` before `tasks/nextcloud_deploy.yml`. The dedicated database defaults disabled and uses `enable_nextcloud_postgresql`, derived in the example configuration from stage 3 and `manual_install_nextcloud_postgresql`.
 
-`ansible/nextcloud_postgresql.yml` requires explicit staging selection and imports those same database tasks. Its `nextcloud-db` ArgoCD Application points to `deployments/nextcloud/postgresql` at a reviewed immutable Core revision. ArgoCD renders the Kustomize StatefulSet, retained PVC, Services, backup CronJob and monitoring rules. Nextcloud itself still uses its Helm chart.
+`ansible/nextcloud_postgresql.yml` requires explicit staging selection and imports those same database tasks. Its `nextcloud-db` ArgoCD Application points to `deployments/nextcloud/postgresql` at a reviewed immutable Core revision. ArgoCD renders the Kustomize StatefulSet, retained PVC, Services and backup CronJob. Failed/stale backup alert rules are not deployed; the replacement and receiver check remain in Pro issue #28. Nextcloud itself still uses its Helm chart.
 
 Staging provisions a target; the separate `ansible/nextcloud_migration.yml` phase runner controls conversion. Read [the migration runbook](26-Nextcloud-PostgreSQL-Migration) for prerequisite evidence, credential custody, the private deployment marker and both reopening boundaries. For failed pods, begin with [diagnosis before recovery](17-Runbooks#diagnose-before-recovery).
 
@@ -42,7 +42,7 @@ The command checks:
 - The local workflow suite, including real temporary SQLite WAL tests and simulated Ansible/Kubernetes/AWS behavior.
 - Main/staging/phase Ansible syntax, migration-related YAML and the CI workflow, Python compilation, PHP and shell syntax.
 - Pinned chart rendering: replicas zero, captured application image format, external PostgreSQL Secret references, and absence of the bundled database/wait container.
-- Kustomize rendering: seven namespaced resources, explicit retained 10Gi RWO storage and the suspended nightly schedule.
+- Kustomize rendering: six namespaced resources, explicit retained 10Gi RWO storage and the suspended nightly schedule; no alert rule manifest.
 
 This is a scoped guardrail for the migration and its deployment integration, not a claim that every historic repository YAML file is lint-clean. It does not deploy, contact a cluster or AWS, retrieve user backups, or start a restored Nextcloud.
 

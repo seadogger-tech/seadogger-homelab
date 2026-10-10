@@ -256,7 +256,8 @@ Via ArgoCD:
 - OpenWebUI, N8N, Jellyfin
 
 Via Direct Helm/Shell:
-- MetalLB ([metallb_native_deploy.yml](core/ansible/tasks/metallb_native_deploy.yml))- Rook-Ceph operator
+- MetalLB ([metallb_native_deploy.yml](core/ansible/tasks/metallb_native_deploy.yml))
+- Rook-Ceph operator
 
 Via Separate Apply:
 - All Ingress resources downloaded via `get_url` and applied separately
@@ -1128,7 +1129,7 @@ deployment:
 **Solution:** Add pre-flight checks to all deployment tasks:
 
 ```yaml
-# Example: prometheus_deploy.yml
+# Example: nextcloud_postgresql_deploy.yml
 - name: Pre-flight - Validate Rook-Ceph StorageClass exists
   kubernetes.core.k8s_info:
     kind: StorageClass
@@ -1732,9 +1733,6 @@ spec:
         repoURL: https://charts.rook.io/release
         chart: rook-ceph
         targetRevision: "v1.15.7"
-        repoURL: https://prometheus-community.github.io/helm-charts
-        chart: kube-prometheus-stack
-        targetRevision: "67.4.0"
   template:
     metadata:
       name: '{{name}}'
@@ -2375,7 +2373,8 @@ instead of a dead link, and remove the standalone app entirely if the
 portal tile was its only reason to exist.
 
 **Not every tile is a candidate** — apps whose UI is the product
-itself (Argo CD, Traefik dashboard, Ceph Dashboardbenefit from an HA card and are expected to stay portal-linked
+itself (Argo CD, Traefik dashboard, Ceph Dashboard) do not necessarily
+benefit from an HA card and are expected to stay portal-linked
 indefinitely.
 
 ![accent-divider.svg](images/accent-divider.svg)

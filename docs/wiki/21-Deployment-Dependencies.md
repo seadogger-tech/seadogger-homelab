@@ -21,7 +21,7 @@ This document analyzes the "spider web" of deployment dependencies in the Seadog
 6. ArgoCD (control_plane)         ← GitOps layer
 7. Namespace Pre-cooking          ← Preparation
 8. Internal PKI + Cert-Manager    ← Certificate infrastructure
-10. Applications:
+9. Applications:
     - Bedrock Gateway
     - PiHole
     - OpenWebUI
@@ -51,10 +51,9 @@ This document analyzes the "spider web" of deployment dependencies in the Seadog
          │                         │
          │                         │
 Required by:                Required by:
-- Traefik (ingress entry)   - PiHole DNS LB
-                            - Nextcloud PVC
-                            - Jellyfin PVC
-                            - All app PVCs
+- Traefik (ingress entry)   - Nextcloud PVC
+- Pi-hole DNS LB            - Jellyfin PVC
+                            - Other app PVCs
 ```
 
 ### Layer 2: GitOps & PKI
@@ -70,21 +69,7 @@ Required by:                Required by:                Required by:
                                                         - Node trust stores
 ```
 
-### Layer 3: Monitoring
-```
-┌──────────────────┐
-│   Prometheus     │
-│   Grafana        │
-│  Alertmanager    │
-└────────┬─────────┘
-         │
-Required by:
-- Backup monitoring
-- Cluster health
-- App metrics
-```
-
-### Layer 4: Applications
+### Layer 3: Applications
 ```
 ┌─────────┬─────────┬─────────┬─────────┬─────────┐
 │ PiHole  │Nextcloud│Jellyfin │OpenWebUI│   N8N   │
@@ -101,18 +86,11 @@ Required by:
 - ✅ **PiHole** - DNS service needs LoadBalancer IP for network DNS
   - `pihole-values.yaml` - `serviceDns.loadBalancerIP: 192.168.1.250`
 
-**What SHOULD NOT use MetalLB (use Ingress instead):**
-  - **Recommendation:** Use Traefik IngressRoute + cert-manager certificates instead
-  - **Benefit:** Unified access pattern, automatic TLS, fewer IPs consumed
-
 **What MetalLB depends on:**
 - K3s cluster (API server, CNI)
 - Nothing else!
 
 **Current ordering:** ✅ **CORRECT** - MetalLB deployed before Traefik/PiHole
-
-**Action Required:** Refactor Prometheus stack to use Ingress instead of LoadBalancer services
-**GitHub Issue:** [#49](https://github.com/seadogger-tech/seadogger-homelab/issues/49)
 
 ---
 
@@ -154,7 +132,6 @@ Required by:
 **What depends on ArgoCD:**
 - ✅ **Most applications** - Deployed via ArgoCD Application CRDs
   - Nextcloud, PiHole, OpenWebUI, N8N, Jellyfin
-  - Prometheus (if using GitOps pattern)
 
 **What ArgoCD depends on:**
 - K3s cluster
@@ -173,29 +150,7 @@ This creates inconsistency - no single source of truth!
 
 ---
 
-**What depends on Prometheus:**
-- ✅ **Backup monitoring** - PrometheusRule for backup alerts
-- ✅ **Cluster observability** - ServiceMonitors for all apps
-- Optional: Grafana dashboards, AlertManager notifications
-
-**What Prometheus depends on:**
-- **CRITICAL:** MetalLB (for LoadBalancer IPs)
-- **CRITICAL:** Rook-Ceph (for persistent storage)
-- **CRITICAL:** Prometheus CRDs must be installed first
-  - `prometheus_deploy.yml:8-17` - Manually applies CRDs
-
-**Current ordering:** ✅ **CORRECT** - After MetalLB and Rook-Ceph
-
-**Issue:** CRDs downloaded from external URL every deployment
-```yaml
-kubectl apply --server-side -f https://raw.githubusercontent.com/prometheus-operator/kube-prometheus/release-0.13/manifests/setup/...
-```
-
-**Risk:** Network failure = deployment failure
-
----
-
-### 5. **Cert-Manager + Internal PKI Dependencies**
+### 4. **Cert-Manager + Internal PKI Dependencies**
 
 **What depends on Cert-Manager:**
 - ✅ **All Application TLS Certificates** - Uses Certificate CRD
@@ -264,7 +219,7 @@ kubectl apply --server-side -f https://raw.githubusercontent.com/prometheus-oper
 
 ---
 
-### 6. **Application Dependencies**
+### 5. **Application Dependencies**
 
 **Nextcloud:**
 - **CRITICAL:** Rook-Ceph (`ceph-filesystem` StorageClass)
@@ -281,30 +236,14 @@ kubectl apply --server-side -f https://raw.githubusercontent.com/prometheus-oper
 - **CRITICAL:** ArgoCD (deployed via Application CRD)
 - **CRITICAL:** Pre-existing PV/PVC for media mount
 
-**Prometheus/Grafana/Alertmanager:**
-- **CRITICAL:** MetalLB (LoadBalancer IPs)
-- **CRITICAL:** Rook-Ceph (persistent volumes)
-- **CRITICAL:** Prometheus Operator CRDs
-
 ![accent-divider.svg](images/accent-divider.svg)
 ## Problems with Current Approach
 
 ### Problem 1: **Implicit Dependencies**
 
 Dependencies are encoded in task execution order, not declared explicitly.
-
-**Example:** Prometheus task assumes MetalLB exists but doesn't validate:
-```yaml
-# prometheus_deploy.yml:78-97
-- name: Create Prometheus LoadBalancer Service
-  ansible.builtin.k8s:
-    definition:
-      spec:
-        type: LoadBalancer
-        loadBalancerIP: "192.168.1.244"  # ❌ No check if MetalLB ready!
-```
-
-If MetalLB isn't running, service stays in `Pending` forever.
+A stateful application can reach its ArgoCD Application step before its storage
+class or PVC is usable. Check the intended prerequisites before that step.
 
 ### Problem 2: **Default Configuration Conflicts**
 
@@ -347,8 +286,6 @@ Multiple tasks download from GitHub during deployment:
 | Rook-Ceph | Ansible + Helm | Ansible | Can't see in ArgoCD UI |
 | Cert-Manager | ArgoCD Application | ArgoCD | ✅ Consistent |
 | Internal PKI | Ansible + OpenSSL | Ansible | Manual CA generation on yoda.local |
-| Prometheus CRDs | Ansible + kubectl | Ansible | Manual CRD management |
-| Prometheus | ArgoCD Application | ArgoCD | Depends on manually applied CRDs |
 | Nextcloud | ArgoCD Application | ArgoCD | ✅ Consistent |
 | Ingress | Ansible + kubectl | Ansible | Separate from app deployment |
 
@@ -406,59 +343,20 @@ The internal PKI setup is a 492-line Ansible task that:
 
 Add validation tasks before each deployment:
 
-**Example: Pre-flight checks for Prometheus**
+**Example:** Validate the storage class before deploying a stateful application:
+
 ```yaml
----
-# tasks/prometheus_deploy.yml (refactored)
-
-- name: Validate MetalLB is ready
-  kubernetes.core.k8s_info:
-    kind: DaemonSet
-    name: metallb-speaker
-    namespace: metallb-system
-  register: metallb_speaker
-  failed_when: >
-    metallb_speaker.resources | length == 0 or
-    metallb_speaker.resources[0].status.numberReady < 1
-
-- name: Validate Rook-Ceph StorageClass exists
+- name: Check Rook-Ceph StorageClass exists
   kubernetes.core.k8s_info:
     kind: StorageClass
     name: ceph-block-data
   register: storage_class
   failed_when: storage_class.resources | length == 0
-
-- name: Validate Rook-Ceph is healthy
-  kubernetes.core.k8s_exec:
-    namespace: rook-ceph
-    pod: "{{ lookup('kubernetes.core.k8s', kind='Pod', namespace='rook-ceph', label_selector='app=rook-ceph-tools').metadata.name }}"
-    command: ceph health
-  register: ceph_health
-  failed_when: "'HEALTH_OK' not in ceph_health.stdout and 'HEALTH_WARN' not in ceph_health.stdout"
-
-# Only proceed if all checks pass
-- name: Deploy Prometheus
-  # ... existing deployment
 ```
-
-**Benefits:**
-- ✅ Fail fast with clear error messages
-- ✅ Prevents partial deployments
-- ✅ Self-documenting dependencies
 
 ### Solution 2: **Dependency Declaration with Ansible Role Dependencies**
 
 Restructure as roles with `meta/main.yml` dependencies:
-
-```yaml
-# roles/prometheus/meta/main.yml
----
-dependencies:
-  - role: metallb
-    when: enable_metallb | default(true)
-  - role: rook-ceph
-    when: enable_rook_ceph | default(true)
-```
 
 ```yaml
 # roles/nextcloud/meta/main.yml
@@ -518,12 +416,6 @@ spec:
         wave: "1"
         path: deployments/infrastructure/base/internal-pki
 
-      # Wave 2: Monitoring (depends on MetalLB + Rook-Ceph)
-      - name: prometheus
-        namespace: monitoring
-        wave: "2"
-        chart: prometheus-community/kube-prometheus-stack
-
   template:
     metadata:
       name: '{{name}}'
@@ -555,21 +447,9 @@ spec:
 
 ### Solution 4: **Health Checks with Retry Logic**
 
-Add retries for services that depend on eventual consistency:
-
-```yaml
-- name: Wait for MetalLB IP allocation
-  kubernetes.core.k8s_info:
-    kind: Service
-    name: prometheus-k8s-lb
-    namespace: monitoring
-  register: svc
-  until: >
-    svc.resources | length > 0 and
-    svc.resources[0].status.loadBalancer.ingress is defined
-  retries: 30
-  delay: 10
-```
+Wait for storage, certificates and load-balancer allocation when a dependent
+application needs them. Set bounded retries and report the missing prerequisite
+instead of continuing after a failed readiness check.
 
 ### Solution 5: **Remove External URL Dependencies**
 
@@ -632,7 +512,7 @@ Add Ansible assertions at playbook start:
 ### Phase 1: Add Immediate Safeguards (Week 1)
 
 1. **Add pre-flight checks to each task**
-   - Validate MetalLB before Prometheus
+   - Validate MetalLB before load-balanced services
    - Validate Rook-Ceph before app deployments
    - Validate ArgoCD before creating Applications
 
@@ -653,10 +533,8 @@ Add Ansible assertions at playbook start:
    core/manifests/
    ├── ingress/
    │   ├── argocd.yml
-   │   ├── prometheus.yml
    │   └── ...
    ├── crds/
-   │   └── prometheus-operator/
    └── configs/
    ```
 
@@ -667,10 +545,9 @@ Add Ansible assertions at playbook start:
 1. **Create ApplicationSets for infrastructure**
    - Wave 0: MetalLB, Rook-Ceph Operator
    - Wave 1: Rook-Ceph Cluster
-   - Wave 2: Prometheus, ArgoCD itself
 
 2. **Create ApplicationSets for apps**
-   - Wave 3: PiHole, Nextcloud, etc.
+   - Wave 2: PiHole, Nextcloud, etc.
 
 3. **Simplify Ansible to only:**
    - Bootstrap K3s
@@ -689,81 +566,16 @@ Add Ansible assertions at playbook start:
 | Component | Depends On | Used By | Critical Path? |
 |-----------|------------|---------|----------------|
 | K3s Cluster | Hardware | Everything | ✅ YES |
-| MetalLB | K3s | Prometheus, PiHole, Apps (optional) | ✅ YES |
-| Rook-Ceph | K3s, Storage devices | Prometheus, Nextcloud, Jellyfin, All Apps | ✅ YES |
+| MetalLB | K3s | Traefik, PiHole | ✅ YES |
+| Rook-Ceph | K3s, Storage devices | Persistent application volumes | ✅ YES |
 | ArgoCD | K3s | App deployments | ✅ YES |
 | Internal PKI | K3s | Traefik TLS | ⚠️ Optional |
-| Prometheus | MetalLB, Rook-Ceph, CRDs | Monitoring, Alerts | ⚠️ Recommended |
 | Namespaces | K3s | Apps | ❌ Auto-created by ArgoCD |
 | Nextcloud | Rook-Ceph, ArgoCD | User files | App-level |
 | PiHole | MetalLB, ArgoCD | DNS | App-level |
 | Jellyfin | Rook-Ceph, ArgoCD, Static PV | Media | App-level |
 
 **Critical Path:** K3s → MetalLB + Rook-Ceph → ArgoCD → Apps
-
-![accent-divider.svg](images/accent-divider.svg)
-## Example: Improved Prometheus Deployment
-
-**Before (implicit dependencies):**
-```yaml
-# tasks/prometheus_deploy.yml (current)
-- name: Deploy Prometheus
-  # Just creates resources, no validation
-```
-
-**After (explicit dependencies + validation):**
-```yaml
----
-# roles/prometheus/tasks/preflight.yml
-- name: Check MetalLB is operational
-  kubernetes.core.k8s_info:
-    kind: DaemonSet
-    namespace: metallb-system
-    name: metallb-speaker
-  register: metallb
-  failed_when: metallb.resources | length == 0 or metallb.resources[0].status.numberReady < 1
-
-- name: Check Rook-Ceph StorageClass exists
-  kubernetes.core.k8s_info:
-    kind: StorageClass
-    name: ceph-block-data
-  register: sc
-  failed_when: sc.resources | length == 0
-
-- name: Check Prometheus CRDs are installed
-  kubernetes.core.k8s_info:
-    kind: CustomResourceDefinition
-    name: "{{ item }}"
-  loop:
-    - prometheuses.monitoring.coreos.com
-    - servicemonitors.monitoring.coreos.com
-    - alertmanagers.monitoring.coreos.com
-  register: crds
-  failed_when: crds.results | selectattr('resources', 'equalto', []) | list | length > 0
-
----
-# roles/prometheus/tasks/main.yml
-- name: Run pre-flight checks
-  include_tasks: preflight.yml
-
-- name: Deploy Prometheus via ArgoCD
-  kubernetes.core.k8s:
-    definition:
-      apiVersion: argoproj.io/v1alpha1
-      kind: Application
-      metadata:
-        name: prometheus
-        namespace: argocd
-        annotations:
-          argocd.argoproj.io/sync-wave: "2"
-      # ...
-
----
-# roles/prometheus/meta/main.yml
-dependencies:
-  - role: metallb
-  - role: rook-ceph
-```
 
 ![accent-divider.svg](images/accent-divider.svg)
 ## Conclusion
@@ -799,7 +611,6 @@ This transforms the "spider web" into a **directed acyclic graph (DAG)** that's 
 - ✅ Cert-Manager (already is!)
 - ✅ Internal PKI (CA secrets + ClusterIssuer)
 - ✅ ArgoCD itself (self-managed!)
-- ✅ Prometheus
 - ✅ All applications (Nextcloud, PiHole, etc.)
 - ✅ Ingress resources
 
@@ -870,10 +681,6 @@ seadogger-homelab/
 │   │   │   │   ├── ca-secret.yaml  # ← Sealed or external-secrets
 │   │   │   │   ├── clusterissuer.yaml
 │   │   │   │   └── certificates/  # ← All app certs
-│   │   │   └── prometheus/
-│   │   │       ├── kustomization.yaml
-│   │   │       ├── crds/  # ← Store CRDs in Git!
-│   │   │       └── values.yaml
 │   │   └── overlays/
 │   │       ├── production/
 │   │       │   └── kustomization.yaml  # IP addresses, sizes
@@ -1078,10 +885,6 @@ patches:
 # Move external URLs to Git
 mkdir -p core/deployments/manifests/{crds,ingress}
 
-# Prometheus CRDs
-curl https://raw.githubusercontent.com/.../alertmanager.yaml \
-  > core/deployments/prometheus/crds/alertmanager.yaml
-
 # All ingress manifests
 mv core/ingress/*.yml core/deployments/manifests/ingress/
 ```
@@ -1144,8 +947,7 @@ configMapGenerator:
 2. ✅ **ArgoCD** - Bootstrap with Ansible, then self-manage
 3. ✅ **MetalLB** - ArgoCD app (wave 0)
 4. ✅ **Rook-Ceph** - ArgoCD apps (wave 0-1)
-5. ✅ **Prometheus** - ArgoCD app (wave 2)
-6. ✅ **All Apps** - ArgoCD apps (wave 3+)
-7. ✅ **Ingress** - Bundled with each app
+5. ✅ **All Apps** - ArgoCD apps after their prerequisites
+6. ✅ **Ingress** - Bundled with each app
 
 Portal in Pro already proves this works!

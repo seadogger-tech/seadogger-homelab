@@ -262,7 +262,6 @@ graph LR
     O -- "Sets Session Cookie" --> U
     U -- "Authenticated Request" --> T
     
-    T -- "Forwards to" --> A1
     T -- "Forwards to" --> A2
     T -- "Forwards to" --> A3
     T -- "Forwards to" --> A6

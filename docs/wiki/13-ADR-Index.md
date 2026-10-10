@@ -389,7 +389,7 @@ The key decisions were:
 
 3.  **Fix Undefined `env_vars` Variable:** The `rook_ceph_deploy_part2.yml` playbook failed because it referenced an undefined variable `env_vars`. This was corrected by replacing the reference with the proper `environment: { KUBECONFIG: ... }` block for `kubectl` commands.
 
-4.  **Stricter `config.yml` Logic:** The logic for enabling application deployments in `config.yml` was changed from `or` to `and`. This provides more granular control, requiring both the global stage flag (e.g., `cold_start_stage_3_install_applications`) and the individual application's manual flag  to be `true` for a deployment to run.
+4.  **Stricter `config.yml` Logic:** The logic for enabling application deployments in `config.yml` was changed from `or` to `and`. This provides more granular control, requiring both the global stage flag (e.g., `cold_start_stage_3_install_applications`) and the individual application's manual flag to be `true` for a deployment to run.
 
 #### Consequences
 
@@ -399,30 +399,6 @@ The key decisions were:
     -   The fixes for `localhost` delegation follow Ansible best practices.
 -   **Negative:**
     -   None. The changes corrected clear bugs and improved the automation's reliability.
-
-![accent-divider](images/accent-divider.svg)
-#### Context
-
-After successfully configuring the Rook-Ceph NFS server and verifying its accessibility from a Linux client (`yoda.local`), all attempts to mount the NFS share from a macOS client failed. The error message on the macOS client was `rpc.gssapi.mechis.mech_gss_log_status: a gss_display_status() failed`, which misleadingly suggested a Kerberos or GSSAPI authentication issue, even though the server was configured for simple `AUTH_SYS`.
-
-#### Decision
-
-To diagnose the issue at a protocol level, a packet capture (`tcpdump`) was performed on the macOS client during a mount attempt. Analysis of the resulting `nfs_traffic.pcap` file in Wireshark revealed the true root cause.
-
-The macOS client initiated the connection using NFSv4.0. The Rook-Ceph Ganesha NFS server, which was expecting a v4.1+ session, responded to the client's initial request with an `NFS4ERR_MINOR_VERS_MISMATCH` error. This error indicates a fundamental incompatibility between the specific minor version of the NFSv4 protocol implemented by the macOS client and the one implemented by the NFS-Ganesha server in this version of Rook-Ceph.
-
-Since this is a protocol-level incompatibility and not a configuration error on our part, no further configuration changes on the server can resolve it. The decision is to accept this as a known limitation of the current setup.
-
-#### Consequences
-
--   **Positive:**
-    -   The root cause of the mount failure is definitively identified and understood.
-    -   Prevents future time wasted on debugging this specific client-server combination.
-    -   The NFS service remains fully functional and accessible for compatible clients (e.g., Linux).
-
--   **Negative:**
-    -   The NFS share cannot be used by macOS clients in its current state.
-    -   Future workarounds might involve using a different file sharing protocol for macOS (like Samba) or waiting for future updates to either the macOS client or the NFS-Ganesha server that might resolve the version mismatch.
 
 ![accent-divider](images/accent-divider.svg)
 ### ADR-009: Migrate from K8up to Velero for Kubernetes Backup/Restore
@@ -481,9 +457,29 @@ See `.memory_bank/k8up_failure_analysis.md` for detailed technical analysis of K
 - **Status:** Implemented & Verified
 - **Date:** 2025-08-11
 
+#### Context
+
+After successfully configuring the Rook-Ceph NFS server and verifying its accessibility from a Linux client (`yoda.local`), all attempts to mount the NFS share from a macOS client failed. The error message on the macOS client was `rpc.gssapi.mechis.mech_gss_log_status: a gss_display_status() failed`, which misleadingly suggested a Kerberos or GSSAPI authentication issue, even though the server was configured for simple `AUTH_SYS`.
+
 #### Decision
 
-We adopted Nextcloud to serve media to the media player instead on using NFS.
+To diagnose the issue at a protocol level, a packet capture (`tcpdump`) was performed on the macOS client during a mount attempt. Analysis of the resulting `nfs_traffic.pcap` file in Wireshark revealed the true root cause.
+
+The macOS client initiated the connection using NFSv4.0. The Rook-Ceph Ganesha NFS server, which was expecting a v4.1+ session, responded to the client's initial request with an `NFS4ERR_MINOR_VERS_MISMATCH` error. This error indicates a fundamental incompatibility between the specific minor version of the NFSv4 protocol implemented by the macOS client and the one implemented by the NFS-Ganesha server in this version of Rook-Ceph.
+
+Since this is a protocol-level incompatibility and not a configuration error on our part, no further configuration changes on the server can resolve it. The decision is to accept this as a known limitation of the current setup. Nextcloud now serves media to macOS clients instead of NFS.
+
+#### Consequences
+
+-   **Positive:**
+    -   The root cause of the mount failure is definitively identified and understood.
+    -   Prevents future time wasted on debugging this specific client-server combination.
+    -   The NFS service remains fully functional and accessible for compatible clients (e.g., Linux).
+
+-   **Negative:**
+    -   The NFS share cannot be used by macOS clients in its current state.
+    -   Future workarounds might involve using a different file sharing protocol for macOS (like Samba) or waiting for future updates to either the macOS client or the NFS-Ganesha server that might resolve the version mismatch.
+
 
 ![accent-divider](images/accent-divider.svg)
 ### ADR-002: MetalLB Webhook and ArgoCD Configuration

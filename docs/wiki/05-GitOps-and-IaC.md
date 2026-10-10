@@ -370,10 +370,10 @@ Developer → Git Push → GitHub → ArgoCD (polls) → Kubernetes → Running 
    - All application namespaces and resources are gone
 
 ![accent-divider.svg](images/accent-divider.svg)
-### Test Case 6: Full Cold Start Cycle
+### Test Case 4: Full Cold Start Cycle
 
 1) Deploy
-   - Start from a full deployment as in Case 5
+   - Start from a full application and infrastructure deployment
 2) Full teardown
    - Set `cold_start_stage_1_wipe_cluster: true` and optionally `perform_physical_disk_wipe: true`
    - Run `ansible-playbook cleanup.yml`
@@ -399,9 +399,10 @@ Developer → Git Push → GitHub → ArgoCD (polls) → Kubernetes → Running 
 - [#50 - Move infrastructure to ArgoCD](https://github.com/seadogger-tech/seadogger-homelab/issues/50) - Converting all to Kustomize
 
 ![accent-divider.svg](images/accent-divider.svg)
-## Deployment Order (Sync Waves)
+## Proposed Deployment Order (Sync Waves)
 
-Shows ArgoCD sync wave deployment sequence.
+This diagram proposes an ArgoCD sync wave sequence; the playbook imports in
+`ansible/main.yml` remain the current deployment order.
 
 ```mermaid
 graph TD
@@ -416,25 +417,26 @@ graph TD
         PKI[Internal PKI<br/>CA + ClusterIssuer]
     end
 
-    subgraph Wave3["🌊 Wave 3+: Applications"]
+    subgraph Wave2["🌊 Wave 2: Applications"]
         Apps[Nextcloud, Jellyfin<br/>OpenWebUI, N8N<br/>PiHole]
     end
 
-    subgraph WavePro["🌊 Wave 4: Pro Features"]
+    subgraph WavePro["🌊 Wave 3: Pro Features"]
         Pro[Portal<br/>Keycloak Future]
     end
 
     Wave0 --> Wave1
-    Wave3 --> WavePro
+    Wave1 --> Wave2
+    Wave2 --> WavePro
 
     style Wave0 fill:#1e3a5f,stroke:#4a90e2,stroke-width:3px
     style Wave1 fill:#1e3a5f,stroke:#4a90e2,stroke-width:3px
-    style Wave3 fill:#2d5016,stroke:#5a9216,stroke-width:3px
+    style Wave2 fill:#2d5016,stroke:#5a9216,stroke-width:3px
     style WavePro fill:#7b1fa2,stroke:#9c27b0,stroke-width:3px,stroke-dasharray: 5 5
 ```
 
 **Wave Ordering Rationale:**
 - **Wave 0:** Foundation services (MetalLB for IPs, Rook operator, cert-manager)
 - **Wave 1:** Clusters that depend on operators (Ceph cluster, PKI setup)
-- **Wave 3:** Applications (depend on all infrastructure)
-- **Wave 4:** Pro features (depend on base applications)
+- **Wave 2:** Applications (depend on all infrastructure)
+- **Wave 3:** Pro features (depend on base applications)

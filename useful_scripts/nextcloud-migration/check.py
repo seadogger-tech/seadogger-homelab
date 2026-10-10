@@ -119,7 +119,7 @@ def main():
         run(sys.executable, '-m', 'unittest', 'discover', '-s', HERE / 'tests', '-v')
         rendered = run('kubectl', 'kustomize', CORE / 'deployments/nextcloud/postgresql', capture_output=True, text=True).stdout
         resources = list(yaml.safe_load_all(rendered))
-        assert len(resources) == 7 and all(r['metadata']['namespace'] == 'nextcloud' for r in resources)
+        assert len(resources) == 6 and all(r['metadata']['namespace'] == 'nextcloud' for r in resources)
         pvc = next(r for r in resources if r['kind'] == 'PersistentVolumeClaim')
         assert pvc['spec']['storageClassName'] == 'ceph-block-data'
         assert pvc['spec']['resources']['requests']['storage'] == '10Gi'
