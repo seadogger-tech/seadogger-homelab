@@ -6,7 +6,7 @@ The conversion uses the existing production file volume. It creates no isolated 
 
 ## Deployment and backup layout
 
-- `deployments/nextcloud/postgresql/`: a separate `nextcloud-db` StatefulSet, two Services, retained 10Gi RWO `ceph-block-data` PVC, initialization/backup scripts and a suspended native-backup CronJob. Failed/stale backup alert rules are not deployed; their replacement and receiver check remain in Pro issue #28.
+- `deployments/nextcloud/postgresql/`: a separate `nextcloud-db` StatefulSet, two Services, retained 10Gi RWO `ceph-block-data` PVC, initialization/backup scripts and a native-backup CronJob. Staging creates it suspended; the successful cutover activates it. The PrometheusRule object may be present, but rules require a running evaluator and receiver. The Pro cluster-health skill supplies on-demand backup status instead of notification delivery.
 - `ansible/main.yml`: the normal application-stage entry point imports `tasks/nextcloud_postgresql_deploy.yml` before Nextcloud when `enable_nextcloud_postgresql` is selected. Ansible provisions the Secret and ArgoCD Application; ArgoCD renders Kustomize and owns the database, PVC and backup CronJob.
 - `ansible/nextcloud_postgresql.yml`: explicit database-only staging, with the same shared tasks and gitignored `ansible/config.yml`; it neither enables other applications nor converts Nextcloud.
 - `deployments/nextcloud/nextcloud-postgresql-values.yaml`: opt-in external-database overlay. The bundled PostgreSQL must be disabled because chart 8.9.1 gives it precedence over `externalDatabase`.
@@ -46,7 +46,7 @@ Alternatively, after staging has been reviewed and authorized, invoke the dedica
 ansible-playbook -i /ABSOLUTE/CORE/ansible/hosts.ini /ABSOLUTE/CORE/ansible/nextcloud_postgresql.yml -e nextcloud_postgresql_apply=true -e nextcloud_postgresql_revision=REVIEWED_CORE_COMMIT
 ```
 
-Inspect the new PVC, database logs, rollout, resource use, empty target and suspended backup CronJob. Alert rules are not deployed; record that gap for issue #28. Do not connect Nextcloud yet. A partially initialized PVC/target is retained for inspection, never automatically wiped or reinitialized.
+Inspect the new PVC, database logs, rollout, resource use, empty target and suspended backup CronJob. Do not connect Nextcloud yet. A partially initialized PVC/target is retained for inspection, never automatically wiped or reinitialized.
 
 ## Prepare the private run
 
@@ -115,7 +115,7 @@ Run one phase at a time, inspect its outcome, then continue. Use the invocation 
 | `backup` | Create the first native dump Job from the suspended CronJob. Require successful archive validation/upload and all three nonempty S3 artifacts for this Pod UID. This confirms object presence/size, not an isolated restore. |
 | `reopen` | Requires the runtime review below. Protect legacy resources, render external DB values with replicas zero and the captured application digest, verify effective environment, persist the local Ansible selection, stop the maintenance pod, then record the irreversible reopening boundary **before** requesting normal replicas. Verify normal Service HTTP and PostgreSQL bootstrap before restoring mirror/Argo policies and activating nightly dumps. |
 
-Before `reopen`, inspect the new PostgreSQL/maintenance Pod logs and relevant Nextcloud errors privately; review application/table/reference validation, current Ceph/node/PVC health, OOM/restart/resource use, cleanup evidence and the real dump S3 receipt. Inspect the backup Job and S3 artifacts directly because failed/stale alert rules are not deployed. Record that monitoring gap for issue #28. Supply `nextcloud_migration_health_reviewed=true` to the Ansible invocation (or `--health-reviewed` directly) only after completing that review. The attestation is an operator check, not an automatic cluster-health test.
+Before `reopen`, inspect the new PostgreSQL/maintenance Pod logs and relevant Nextcloud errors privately; review application/table/reference validation, current Ceph/node/PVC health, OOM/restart/resource use, cleanup evidence and the real dump S3 receipt. Inspect the backup Job and S3 artifacts directly. Supply `nextcloud_migration_health_reviewed=true` to the Ansible invocation (or `--health-reviewed` directly) only after completing that review. The attestation is an operator check, not an automatic cluster-health test.
 
 After reopening, confirm ordinary client login/files/shares and app operation, Argo reconciliation, restored mirror schedule and unsuspended native backups. Record the completed state and retain all recovery evidence. Do not delete the SQLite checkpoint or legacy database workload as part of this cutover.
 
@@ -174,7 +174,37 @@ Keep external deployment automation held while the new run has no marker. Use a
 new state directory, repeat writer/health checks and take a new checkpoint.
 Never clear old phase flags or install the earlier checkpoint over resumed writes.
 
-For a later pre-change dump, an operator can create a uniquely named Job from `nextcloud-db-backup`, wait for completion, and verify its three S3 artifacts and Pod UID. Do this before the authorized change. Do not equate a CronJob definition or an old successful Job with a fresh backup.
+For a later pre-change dump, obtain approval for that concrete Job creation and
+run the following from the operator workstation. This copies the live CronJob's
+Job template, including image, identity, resources and credentials, without
+waiting for its nightly schedule or changing its `suspend` setting:
+
+```bash
+JOB="nextcloud-db-backup-prechange-$(date -u +%Y%m%d%H%M%S)"
+kubectl create job -n nextcloud --from=cronjob/nextcloud-db-backup "$JOB"
+kubectl wait -n nextcloud --for=condition=complete "job/$JOB" --timeout=35m
+POD="$(kubectl get pods -n nextcloud -l "batch.kubernetes.io/job-name=$JOB" -o jsonpath='{.items[0].metadata.name}')"
+BACKUP_POD_UID="$(kubectl get pod -n nextcloud "$POD" -o jsonpath='{.metadata.uid}')"
+kubectl get pod -n nextcloud "$POD" -o json | jq '.status.initContainerStatuses[], .status.containerStatuses[] | {name, exitCode: .state.terminated.exitCode}'
+kubectl logs -n nextcloud "$POD" -c dump
+kubectl logs -n nextcloud "$POD" -c upload
+```
+
+Require both container exit codes to be zero and the `Validated database dump`
+line. Read the S3 destination from the live CronJob's `upload` container args,
+then set `BUCKET` and `PREFIX` to that bucket and prefix. Use an authorized
+read-only AWS CLI profile to inspect this Pod UID's receipt:
+
+```bash
+aws --profile homelab-backup s3api list-objects-v2 --bucket "$BUCKET" --prefix "$PREFIX" --query "Contents[?contains(Key, '$BACKUP_POD_UID')].[Key,Size]" --output table
+```
+
+Require exactly one attempt directory with nonempty `nextcloud.dump`,
+`SHA256SUMS` and `metadata.txt`. Save exact keys, sizes and outcomes only in
+private evidence. Finish this check before the authorized change. An old
+scheduled Job is not a fresh pre-change dump.
+
+For routine inspection in Pro, run `.agents/skills/cluster-health/scripts/verify-services.sh nextcloud` or generate the default cluster-health HTML report. The read-only check flags a suspended or changed schedule, a failed or incomplete latest Job, a scheduled success older than 36 hours, or missing/empty S3 objects for the latest Job Pod UID. It uses the operator's AWS CLI `homelab-backup` profile by default; set `NEXTCLOUD_BACKUP_AWS_PROFILE` if that profile is named differently. An AWS listing failure is reported as unverified. Follow its `kubectl describe` and `kubectl logs` commands when it fails. The routine check does not reread archive-validation logs, download objects, verify checksums or perform a restore; use the receipt procedure above before claiming recovery was proved. It runs when an operator invokes the skill; no automatic email or alert receiver is configured.
 
 ## Private configuration on a new workstation
 
@@ -196,7 +226,7 @@ The following maps the approved migration requirements to preparation and later 
 | 17–18: omissions and partial targets | Pinned converter refuses every question; CLI tests simulate its nonzero omission result, retain private transcript, and refuse nonempty/retried targets without clearing them. | Ticket 22: actual pinned Nextcloud command and table inventory; local simulation does not run the upstream converter. |
 | 19–20: data/reference/database consistency | Table/migration/sequence checks, canonical reference fingerprints and enabled-app comparison; real collation-independence test. | Ticket 22: actual PostgreSQL comparisons and users/shares/files behavior. |
 | 21–23: private HTTP and bounded concurrent canaries | Loopback-only Apache/port-forward, four tiny parallel uploads/readbacks, recognized-artifact cleanup and uncertain-write refusal. Existing cleanup-limit tests retained. | Ticket 22: authenticated live HTTP, socket exposure, concurrent uploads and cleanup. |
-| 24–26: initial/nightly/pre-change native backups and alerts | Custom dump/full archive parse, unique S3 artifacts and suspended 03:15 schedule; render checks and rerun preservation of activation. No failed/stale alert rules are deployed. | Tickets 22/28: real initial/nightly receipts; establish and verify replacement alerting and receiver delivery. Until then, inspect Jobs and S3 artifacts directly. |
+| 24–26: initial/nightly/pre-change native backups and status | Custom dump/full archive parse, unique S3 artifacts, 03:15 schedule and rerun preservation of activation. Pro cluster-health skill checks current CronJob/Job status, 36-hour freshness and three nonempty S3 artifacts on demand. | Tickets 22/28: real initial and scheduled receipts recorded privately. Object checksum/download and isolated restore remain separate checks. No automatic notification receiver is configured. |
 | 27–28: recovery boundaries | Real SQLite preservation tests plus CLI faults before reopening, after either reopening, and failure while automatic rollback reopens SQLite. Verify one restore at most, then pause without touching the current database. | Ticket 22: actual controlled phase outcomes; no isolated recovery environment. |
 | 29–30: repeat deployment and public/private evidence | Ansible tests cover active PostgreSQL and rollback SQLite image preservation, missing/stale marker refusal, deploy ordering and shared staging. Recovery instructions above; private logs retained. | Tickets 27/28: secure configuration custody and operational handoff. |
 | 31–32: preserve FPA, lifecycle and legacy artifacts | No FPA or bucket-policy changes; upload commands omit deletion; legacy prune protection and retained target/checkpoints. | Tickets 22/28: confirm preserved resources. Retirement and retention remain separate decisions. |
@@ -215,7 +245,11 @@ Before each database-only staging run, record current cluster and storage health
 
 For an authorized persistence check, record the original Pod UID, database system identifier, Secret identity and PVC/PV identity. After requesting one Pod replacement, wait for a **different UID** to become Ready and compare database/storage identity. A name-based waiter can time out after a StatefulSet recreates a Pod with the same name; inspect UIDs and database checks before deciding whether any retry is needed.
 
-For a manual staging backup, derive a uniquely named Job from the deployed `nextcloud-db-backup` CronJob using client-side rendering, then submit that definition through Ansible's `kubernetes.core.k8s` task. This preserves the suspended schedule and the deployed image, identity, resource and credential settings. Inspect both container exit codes and the dump log, then match the three nonempty S3 objects to the backup Pod UID. A pre-cutover dump of an empty target is not a production backup; archive parsing and object checks do not prove a restore. Retain exact keys, version IDs, sizes and outcomes only in private evidence.
+For a manual staging backup, use the same approved one-off Job and receipt
+procedure above. It leaves the CronJob suspended. A pre-cutover dump of an empty
+target is not a production backup; archive parsing and object checks do not
+prove a restore. Retain exact keys, version IDs, sizes and outcomes only in
+private evidence.
 
 Repeat the writer inventory, authenticated application checks, backup destination checks and health preconditions before a cutover. A staging observation from an earlier run does not establish the current writer barrier or authorize conversion.
 
