@@ -2,7 +2,7 @@
 ![accent-divider](images/accent-divider.svg)
 # CI/CD and GitHub Actions
 
-This repository uses three main GitHub Actions workflows for automation: **Publish Wiki** (syncs documentation on every push), **Upstream Bedrock Gateway Rebuild** (keeps the AWS gateway up-to-date every 6 hours, with 6 unmerged upstream PRs cherry-picked in), and **Mealie AI-Import Rebuild** (a pinned-tag build with 2 unmerged upstream PRs cherry-picked in, rebuilt only on demand). The latter two both follow the same "adopting unmerged upstream PRs" pattern — see [ADR-011](13-ADR-Index.md#adr-011-adopting-unmerged-upstream-prs-reusable-pattern) for the full rationale.
+This repository uses three main GitHub Actions workflows for automation: **Check and Publish Wiki** (checks wiki changes on pull requests and publishes reviewed source from `master`), **Upstream Bedrock Gateway Rebuild** (keeps the AWS gateway up-to-date every 6 hours, with 6 unmerged upstream PRs cherry-picked in), and **Mealie AI-Import Rebuild** (a pinned-tag build with 2 unmerged upstream PRs cherry-picked in, rebuilt only on demand). The latter two both follow the same "adopting unmerged upstream PRs" pattern — see [ADR-011](13-ADR-Index.md#adr-011-adopting-unmerged-upstream-prs-reusable-pattern) for the full rationale.
 
 ![accent-divider](images/accent-divider.svg)
 
@@ -22,17 +22,18 @@ This repository uses three main GitHub Actions workflows for automation: **Publi
 graph TB
     subgraph Triggers["🔔 Workflow Triggers"]
         Push[Git Push to master]
+        PR[Pull Request]
         Schedule[Cron: Every 6 hours]
         Manual[Manual Trigger]
     end
 
     subgraph WikiFlow["📚 Publish Wiki Workflow"]
-        WikiTrigger[On Push: master branch]
+        WikiTrigger[On Push, PR or Manual]
         Checkout1[Checkout Source Repo]
-        BuildCheck{Autogen Mode?}
-        BuildScript[Run build_all.py]
-        CloneWiki[Clone Wiki Repo<br/>using GITHUB_TOKEN]
-        Rsync[rsync: Copy MD + Images]
+        Preflight[Stage Allowed Files<br/>and Check Against Live Wiki]
+        PublishCheck{Default Branch<br/>and Not PR?}
+        CloneWiki[Clone Wiki Repo]
+        Rsync[rsync: Copy Checked Payload]
         CommitWiki[Commit & Push to Wiki]
     end
 
@@ -63,16 +64,17 @@ graph TB
     end
 
     Push --> WikiTrigger
+    PR --> WikiTrigger
     Manual --> WikiTrigger
     Schedule --> BedrockTrigger
     Manual --> BedrockTrigger
     Manual --> MealieTrigger
 
     WikiTrigger --> Checkout1
-    Checkout1 --> BuildCheck
-    BuildCheck -->|Yes| BuildScript
-    BuildCheck -->|No| CloneWiki
-    BuildScript --> CloneWiki
+    Checkout1 --> Preflight
+    Preflight --> PublishCheck
+    PublishCheck -->|Yes| CloneWiki
+    PublishCheck -->|No| CheckDone[Check Only]
     CloneWiki --> Rsync
     Rsync --> CommitWiki
 
@@ -109,7 +111,7 @@ graph TB
 ![accent-divider](images/accent-divider.svg)
 ## Publish Wiki Workflow
 
-**Purpose:** Automatically sync documentation from `docs/wiki/` to the GitHub Wiki on every push.
+**Purpose:** Validate the exact public wiki payload on pull requests and pushes, then sync checked-in source from `master` to the GitHub Wiki.
 
 **File Location:** `core/.github/workflows/publish-wiki.yml`
 
@@ -122,48 +124,44 @@ sequenceDiagram
     participant Source as Source Repo
     participant Wiki as Wiki Repo
 
-    Dev->>Source: git push (master branch)
+    Dev->>Dev: Run useful_scripts/wiki/preflight.py before commit
+    Dev->>Source: Open PR or push to master
     Source->>GH: Trigger: publish-wiki.yml
     GH->>Source: Checkout source code
+    GH->>GH: Test preflight and stage allowed files
+    GH->>Wiki: Compare staged pages with live wiki
 
-    alt Autogen Mode (Manual Trigger)
-        GH->>GH: Run docs/wiki/tools/build_all.py
-        Note over GH: Generate additional wiki pages
+    alt Push to master or manual run on master
+        GH->>Wiki: Clone wiki and recheck staged payload
+        GH->>Wiki: rsync staged payload → wiki repo
+        alt Changes Detected
+            GH->>Wiki: Commit and push to master
+        else No Changes
+            GH-->>Dev: Wiki already up to date
+        end
+        GH->>Wiki: Verify master and synced content
+    else Pull request or non-default branch
+        GH-->>Dev: Report check result without publishing
     end
-
-    GH->>Wiki: Clone wiki repo (GITHUB_TOKEN)
-    GH->>GH: Check source against published wiki
-    GH->>GH: rsync docs/wiki/ → wiki repo
-    Note over GH: Copy *.md, images/, memory_bank/
-
-    alt Changes Detected
-        GH->>Wiki: git commit -m "Sync from source"
-        GH->>Wiki: git push
-    else No Changes
-        GH-->>Dev: ℹ️ Wiki Already Up-to-Date
-    end
-    GH->>Wiki: Verify master and synced content
-    Wiki-->>Dev: ✅ Wiki Verified
 ```
 
 ### Configuration
 
 **Trigger Events:**
-- **Automatic:** Every push to `master` branch
-- **Manual:** `workflow_dispatch` with optional `autogen=true` flag
+- **Automatic check:** Pull requests and pushes
+- **Automatic publish:** Successful check on a push to `master`
+- **Manual:** `workflow_dispatch`; publishing only when run on `master`
 
 **Requirements:**
-- Workflow `contents: write` permission for the automatic `GITHUB_TOKEN`
+- Check job has `contents: read`; publish job has `contents: write` for its `GITHUB_TOKEN`
 - Safety guard: Only runs on `seadogger-tech/seadogger-homelab` repository
 
 **Steps:**
-1. **Checkout source** (without default credentials to prevent recursion)
-2. **Optional: Generate pages** - Run `build_all.py` if `autogen=true`
-3. **Clone wiki repo** - Configure Git with `gh auth setup-git`, then clone the wiki
-4. **Check the publication delta** - Test the checker, then compare new Markdown content with the live wiki before copying it
-5. **Sync content** - `rsync` markdown files, images, and memory_bank
-6. **Commit & push to `master`** - Only if changes detected
-7. **Verify publication** - Confirm remote `master` and the local wiki copy match the reviewed source
+1. **Generate locally if needed** - Run `docs/wiki/tools/build_all.py` in the Core checkout, inspect the diff and commit only reviewed pages. CI does not generate pages.
+2. **Run local preflight before committing** - `python3 -B useful_scripts/wiki/preflight.py` from the Core root.
+3. **Check in CI** - Checkout source without persisted credentials, test the checker, stage allowed files, and compare their Markdown delta with the live wiki. Pull requests stop here.
+4. **Publish from `master`** - Recheck the staged payload against a fresh wiki clone, sync it, then commit and push to wiki `master` if changed.
+5. **Verify publication** - Confirm remote `master` and the local wiki copy match the staged payload.
 
 The preflight blocks unclosed fences, large page reductions, personal
 checkout paths, account-bearing S3 bucket names, dated evidence headings and
@@ -186,10 +184,7 @@ file contents with SHA-256; use `null` for the new hash when deleting a page:
 }
 ```
 
-**Key Files Synced:**
-- `docs/wiki/**/*.md` → Wiki root
-- `docs/wiki/images/` → Wiki images/
-- `docs/wiki/memory_bank/` → Wiki memory_bank/
+**Files synced:** Root `docs/wiki/*.md` pages, `docs/wiki/memory_bank/**/*.md`, and rendered images under `docs/wiki/images/` with `.png`, `.jpg`, `.jpeg`, or `.svg` extensions. Finder metadata, editable artwork (`images/Logo.key`), and generator scripts (`tools/`) stay in Core. The preflight rejects other unexpected files before sync.
 
 ![accent-divider](images/accent-divider.svg)
 ## Upstream Bedrock Gateway Rebuild
@@ -418,7 +413,7 @@ graph LR
 ### Wiki Publisher
 - **Token:** `GITHUB_TOKEN` (automatic)
   - Type: Workflow-scoped token (provided by GitHub Actions)
-  - Permission: `contents: write` (declared in workflow)
+  - Permission: `contents: read` for the check job; `contents: write` for the publish job
   - Target: The wiki's default `master` branch
   - Setup: No repository PAT is required
 
@@ -445,9 +440,9 @@ graph LR
    ```yaml
    if: github.repository == 'your-org/your-repo'
    ```
-3. Grant the workflow `contents: write` and configure Git with `gh auth setup-git`
-4. Push to the wiki's default branch
-5. Ensure your wiki content is in `docs/wiki/`
+3. Give the publish job `contents: write` and configure Git with `gh auth setup-git`
+4. Update `useful_scripts/wiki/preflight.py` with the destination wiki URL
+5. Ensure reviewed wiki content is in `docs/wiki/` and publish to the wiki's default branch
 
 ### Customize Bedrock Gateway Rebuild
 
@@ -511,7 +506,7 @@ gh api repos/seadogger-tech/seadogger-homelab/actions/jobs/<job-id> \
 **Wiki Preflight Fails:**
 - **Symptom:** The publication-delta check reports a page and line or a large reduction
 - **Fix:** Move live evidence to private storage or repair the Markdown structure. For an intentional rewrite, record a reviewed exact-hash exception
-- **Verify:** Rerun `python3 useful_scripts/wiki/check_publication.py docs/wiki /ABSOLUTE/CLONED/WIKI`
+- **Verify:** Rerun `python3 -B useful_scripts/wiki/preflight.py` from the Core root
 
 **Bedrock/Mealie Rebuild Fails on Docker build:**
 - **Symptom:** "buildx failed with: ERROR: failed to solve"

@@ -4,6 +4,8 @@ One-shot wiki generator (self-contained):
 - Builds ALL wiki pages from README + manifests + memory_bank + local images.
 - Writes ONLY under docs/wiki/** (no external links/assets).
 - Safe to run repeatedly; overwrites generated pages in-place.
+- Run locally, inspect the diff, then commit reviewed source pages; CI publishes
+  checked-in pages only and never runs this generator.
 
 Usage:
   python docs/wiki/tools/build_all.py

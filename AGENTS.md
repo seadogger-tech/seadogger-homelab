@@ -75,5 +75,7 @@ For deployment changes, read [Deployment and Validation](docs/wiki/27-Deployment
 `docs/wiki/` is published to the GitHub wiki by `publish-wiki.yml`. When you change how
 something works, update the matching wiki page, and add a troubleshooting entry for
 any real incident you debug.
+Before committing wiki changes, run `python3 -B useful_scripts/wiki/preflight.py`
+from the Core root to check the exact public payload against the live wiki.
 Close wiki publication tickets only after the workflow succeeds and the live default
 wiki branch matches the reviewed source.

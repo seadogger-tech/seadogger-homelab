@@ -1,71 +1,65 @@
-name: Publish Wiki (Default branch only)
+name: Check and Publish Wiki
 
 on:
   push:
+  pull_request:
   workflow_dispatch:
-    inputs:
-      autogen:
-        description: 'Regenerate wiki content from README/manifests/memory_bank?'
-        required: false
-        default: 'false'
 
 concurrency:
   group: wiki-publish-${{ github.repository }}-${{ github.ref_name }}
   cancel-in-progress: true
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  publish-wiki:
-    # Only run on default branch in the intended repo
-    if: github.ref_name == github.event.repository.default_branch && github.repository == 'seadogger-tech/seadogger-homelab'
+  check-wiki:
+    if: github.repository == 'seadogger-tech/seadogger-homelab'
     runs-on: ubuntu-latest
-
     env:
-      # Prevent interactive git prompts in CI
       GIT_TERMINAL_PROMPT: '0'
-      GH_TOKEN: ${{ github.token }}
-
     steps:
-      - name: Checkout repository (no default creds)
+      - name: Checkout reviewed source
         uses: actions/checkout@v4
         with:
           persist-credentials: false
+      - name: Test wiki preflight
+        run: python3 -B -m unittest discover -s useful_scripts/wiki -p 'test_*.py'
+      - name: Compare source with live wiki
+        run: python3 -B useful_scripts/wiki/preflight.py
 
-      # Run the generator ONLY when you manually dispatch with autogen=true
-      - name: Setup Python (manual autogen only)
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.autogen == 'true' }}
-        uses: actions/setup-python@v5
+  publish-wiki:
+    needs: check-wiki
+    if: github.event_name != 'pull_request' && github.ref_name == github.event.repository.default_branch && github.repository == 'seadogger-tech/seadogger-homelab'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GIT_TERMINAL_PROMPT: '0'
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout reviewed source
+        uses: actions/checkout@v4
         with:
-          python-version: '3.x'
-
-      - name: Build ALL wiki pages (manual autogen only)
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.autogen == 'true' }}
-        run: python docs/wiki/tools/build_all.py
-
+          persist-credentials: false
       - name: Clone wiki
-        run: |
-          gh auth setup-git
-          git clone https://github.com/seadogger-tech/seadogger-homelab.wiki.git wiki
+        run: git clone https://github.com/seadogger-tech/seadogger-homelab.wiki.git wiki
 
-      - name: Check wiki publication delta
-        run: |
-          python3 -B -m unittest discover -s useful_scripts/wiki -p 'test_*.py'
-          python3 -B useful_scripts/wiki/check_publication.py docs/wiki wiki
+      - name: Stage and recheck reviewed payload
+        run: python3 -B useful_scripts/wiki/preflight.py --published wiki --payload wiki-payload
 
-      - name: Sync wiki (markdown + memory_bank + images)
-        run: |
-          rsync -a --delete --exclude '.git/' docs/wiki/ wiki/
+      - name: Sync pages and rendered images
+        run: rsync -a --delete --exclude '.git/' wiki-payload/ wiki/
 
       - name: Commit & push (to wiki repo)
         working-directory: wiki
         run: |
+          gh auth setup-git
           git config user.name "SeaDogger Wiki Bot"
           git config user.email "wiki-bot@users.noreply.github.com"
           if [ -n "$(git status --porcelain)" ]; then
             git add -A
-            git commit -m "Publish wiki (autogen=${{ github.event_name == 'workflow_dispatch' && inputs.autogen == 'true' }})"
+            git commit -m "Publish reviewed wiki source"
             git push origin HEAD:master
           else
             echo "No changes to publish."
@@ -75,4 +69,4 @@ jobs:
         run: |
           git -C wiki fetch --quiet origin master
           test "$(git -C wiki rev-parse HEAD)" = "$(git -C wiki rev-parse origin/master)"
-          test -z "$(rsync -a --delete --dry-run --itemize-changes --exclude '.git/' docs/wiki/ wiki/)"
+          test -z "$(rsync -a --delete --dry-run --itemize-changes --exclude '.git/' wiki-payload/ wiki/)"
