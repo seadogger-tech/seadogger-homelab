@@ -322,11 +322,12 @@ Signal msg → default → kanban_create(assignee=homelab-it-engineer)
 ### Signal file attachments
 
 Hermes and `signal-cli` run in separate pods. The custom Hermes image build
-encodes each local attachment as a JSON-RPC data URI containing its MIME
+patches both the gateway Signal adapter and the standalone `hermes send` /
+`send_message` sender. Each encodes local attachments as JSON-RPC data URIs containing MIME
 type, filename, and bytes. `signal-cli` 0.14.7 accepts data URIs for its
 `send` attachment parameter, so it does not need to mount the user's
 CephFS volume. The signal-cli nginx proxy is configured for JSON bodies up
-to 140 MiB; the adapter divides image batches so each request contains no
+to 140 MiB; both senders divide batches so each request contains no
 more than 100 MiB of raw attachment data.
 
 When updating the Hermes image, confirm the Core build applied

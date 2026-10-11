@@ -157,7 +157,7 @@ COPY deployments/hermes/s6-sshd/bundle-sshd /etc/s6-overlay/s6-rc.d/user/content
 # Its JSON-RPC API accepts data URI attachments, so encode bytes in Hermes.
 # The patch fails the build if upstream changes the send method.
 COPY useful_scripts/hermes/patch_signal_attachments.py /tmp/patch_signal_attachments.py
-RUN python3 -B /tmp/patch_signal_attachments.py /opt/hermes/gateway/platforms/signal.py && \
+RUN python3 -B /tmp/patch_signal_attachments.py /opt/hermes/gateway/platforms/signal.py /opt/hermes/tools/send_message_senders.py && \
     rm /tmp/patch_signal_attachments.py
 
 # Upstream image drops to hermes user via s6-setuidgid in its run scripts;

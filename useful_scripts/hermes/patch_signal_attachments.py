@@ -72,6 +72,46 @@ NEW_CHUNKS = '''        per = SIGNAL_MAX_ATTACHMENTS_PER_MSG
             att_batches.append(batch)
 '''
 
+OLD_STANDALONE_BATCHES = '''        per_batch = rl.SIGNAL_MAX_ATTACHMENTS_PER_MSG
+        att_batches = [attachment_paths[i:i + per_batch] for i in range(0, len(attachment_paths), per_batch)] or [[]]
+'''
+
+NEW_STANDALONE_BATCHES = '''        per_batch = rl.SIGNAL_MAX_ATTACHMENTS_PER_MSG
+        att_batches = []
+        batch, batch_bytes = [], 0
+        for path in attachment_paths:
+            try:
+                file_bytes = Path(path).stat().st_size
+            except OSError as exc:
+                logger.warning("Signal media file disappeared before send: %s", exc)
+                continue
+            if batch and (len(batch) >= per_batch or batch_bytes + file_bytes > rl.SIGNAL_MAX_ATTACHMENT_SIZE):
+                att_batches.append(batch)
+                batch, batch_bytes = [], 0
+            batch.append(path)
+            batch_bytes += file_bytes
+        if batch:
+            att_batches.append(batch)
+        att_batches = att_batches or [[]]
+'''
+
+OLD_STANDALONE_POST = '''        async def _post(batch_attachments, batch_message):
+            resp = await _rpc_send(batch_message, id_prefix="send", attachments=batch_attachments, styled=True,
+                                   timeout=rl._signal_send_timeout(len(batch_attachments)))
+'''
+
+NEW_STANDALONE_POST = '''        async def _post(batch_attachments, batch_message):
+            encoded = []
+            for path in batch_attachments:
+                raw = await asyncio.to_thread(Path(path).read_bytes)
+                mime = mimetypes.guess_type(Path(path).name)[0] or "application/octet-stream"
+                encoded.append(
+                    f"data:{mime};filename={quote(Path(path).name, safe='')};base64,"
+                    f"{base64.b64encode(raw).decode('ascii')}")
+            resp = await _rpc_send(batch_message, id_prefix="send", attachments=encoded, styled=True,
+                                   timeout=rl._signal_send_timeout(len(batch_attachments)))
+'''
+
 
 def main(path: Path) -> None:
     source = path.read_text()
@@ -85,5 +125,17 @@ def main(path: Path) -> None:
     path.write_text(source.replace(OLD_CHUNKS, NEW_CHUNKS, 1))
 
 
+def patch_standalone_sender(path: Path) -> None:
+    source = path.read_text()
+    if (source.count(OLD_STANDALONE_BATCHES) != 1 or source.count(OLD_STANDALONE_POST) != 1
+            or source.count("import asyncio\n") != 1 or "import mimetypes\n" in source):
+        raise SystemExit("Hermes standalone Signal sender changed; review the attachment patch before building")
+    source = source.replace("import asyncio\n", "import asyncio\nimport base64\nimport mimetypes\n", 1)
+    source = source.replace("import os\n", "import os\nfrom pathlib import Path\nfrom urllib.parse import quote\n", 1)
+    source = source.replace(OLD_STANDALONE_BATCHES, NEW_STANDALONE_BATCHES, 1)
+    path.write_text(source.replace(OLD_STANDALONE_POST, NEW_STANDALONE_POST, 1))
+
+
 if __name__ == "__main__":
     main(Path(sys.argv[1]))
+    patch_standalone_sender(Path(sys.argv[2]))
