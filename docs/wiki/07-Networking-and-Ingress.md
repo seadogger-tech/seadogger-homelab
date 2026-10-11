@@ -98,7 +98,7 @@ graph TB
 
     LAN -->|HTTPS:443| EntryPoint
     LAN -->|HTTP:80| Redirect
-    Redirect -->|301 HTTPS:443| LAN
+    Redirect -->|308 HTTPS:443| LAN
     VPN -->|WireGuard Tunnel| WG
     WG -->|HTTPS:443| EntryPoint
 
@@ -133,7 +133,7 @@ graph TB
 - **AWS Encryption:** Bedrock API calls use TLS 1.3 with AWS credentials from Kubernetes secrets
 - **HTTP to HTTPS:** Each application has a `web` IngressRoute that uses a namespace-local `redirectScheme` middleware to send its hostname permanently to port 443. Its `websecure` IngressRoute serves the application with TLS. Requests for unconfigured hostnames do not match an application route.
 
-To check an application from a network that can reach the Traefik VIP, replace the hostname and VIP below. The first response should be `301` with a `Location` header using the same hostname and path on `https://`. Check the HTTPS endpoint separately with a client that trusts the internal root CA.
+To check an application from a network that can reach the Traefik VIP, replace the hostname and VIP below. The first response should be `308` with a `Location` header using the same hostname and path on `https://`. Check the HTTPS endpoint separately with a client that trusts the internal root CA.
 
 ```bash
 curl -sSI --resolve app.example.internal:80:192.0.2.10 http://app.example.internal/example
