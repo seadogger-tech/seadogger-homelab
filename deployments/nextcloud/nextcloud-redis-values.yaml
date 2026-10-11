@@ -13,6 +13,12 @@ externalRedis:
 nextcloud:
   # The Docker default also sets memcache.distributed. Replace it with a
   # lock-only config while preserving the existing APCu local cache.
+  # The Docker entrypoint selects Redis for PHP sessions when REDIS_HOST is set;
+  # keep sessions on the prior file handler so this Redis serves locks only.
+  phpConfigs:
+    zz-lock-only-session.ini: |-
+      session.save_handler = files
+      session.save_path = "/tmp"
   defaultConfigs:
     redis.config.php: false
   configs:
