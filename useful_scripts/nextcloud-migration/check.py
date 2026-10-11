@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import runpy
 import shutil
 import subprocess
 import sys
@@ -88,7 +89,9 @@ def main():
         # Syntax checks read only public example config, never operator credentials.
         ansible = temp / 'ansible'
         ansible.mkdir()
-        for name in ('main.yml', 'nextcloud_postgresql.yml', 'nextcloud_migration.yml'):
+        playbooks = ('main.yml', 'nextcloud_postgresql.yml', 'nextcloud_migration.yml',
+                     'nextcloud_redis.yml', 'nextcloud_redis_change.yml')
+        for name in playbooks:
             shutil.copy(CORE / 'ansible' / name, ansible / name)
         shutil.copy(CORE / 'ansible/example.config.yml', ansible / 'config.yml')
         (ansible / 'tasks').symlink_to(CORE / 'ansible/tasks', target_is_directory=True)
@@ -103,17 +106,23 @@ def main():
         os.environ.update(ANSIBLE_CONFIG=str(config), ANSIBLE_LOCAL_TEMP=str(temp / 'ansible-tmp'),
                           ANSIBLE_NOCOLOR='1', PYTHONDONTWRITEBYTECODE='1',
                           KUBECONFIG=str(temp / 'no-kubeconfig'))
-        for name in ('main.yml', 'nextcloud_postgresql.yml', 'nextcloud_migration.yml'):
+        for name in playbooks:
             run('ansible-playbook', '--syntax-check', '-i', inventory, ansible / name)
         lint_paths = ['ansible/example.config.yml', 'ansible/main.yml', 'ansible/nextcloud_postgresql.yml',
-                      'ansible/nextcloud_migration.yml', 'ansible/tasks/nextcloud_deploy.yml',
-                      'ansible/tasks/nextcloud_postgresql_deploy.yml', 'deployments/nextcloud/postgresql',
-                      'deployments/nextcloud/nextcloud-postgresql-values.yaml', '.github/workflows/nextcloud-checks.yml']
+                      'ansible/nextcloud_migration.yml', 'ansible/nextcloud_redis.yml',
+                      'ansible/nextcloud_redis_change.yml', 'ansible/tasks/nextcloud_deploy.yml',
+                      'ansible/tasks/nextcloud_postgresql_deploy.yml', 'ansible/tasks/nextcloud_redis_deploy.yml',
+                      'deployments/nextcloud/postgresql', 'deployments/nextcloud/redis',
+                      'deployments/nextcloud/nextcloud-postgresql-values.yaml',
+                      'deployments/nextcloud/nextcloud-redis-values.yaml', '.github/workflows/nextcloud-checks.yml']
         run('yamllint', '-c', CORE / '.yamllint', *(CORE / p for p in lint_paths))
         for path in HERE.glob('*.py'):
             compile(path.read_text(), str(path), 'exec')
         for path in [*HERE.glob('*.php'), CHECKS / 'converter-contract.php']:
             run('php', '-l', path)
+        verifier_php = temp / 'verify-redis-config.php'
+        verifier_php.write_text('<?php\n' + runpy.run_path(str(HERE / 'verify_redis.py'))['PHP_CONFIG'])
+        run('php', '-l', verifier_php)
         for name in ('init.sh', 'backup.sh'):
             run('bash', '-n', CORE / 'deployments/nextcloud/postgresql' / name)
         run(sys.executable, '-m', 'unittest', 'discover', '-s', HERE / 'tests', '-v')
@@ -128,6 +137,26 @@ def main():
         cron = next(r for r in resources if r['kind'] == 'CronJob')['spec']
         assert cron['suspend'] is True and cron['schedule'] == '15 3 * * *'
         assert cron['timeZone'] == 'America/New_York'
+        redis_rendered = run('kubectl', 'kustomize', CORE / 'deployments/nextcloud/redis',
+                             capture_output=True, text=True).stdout
+        redis_resources = [r for r in yaml.safe_load_all(redis_rendered) if r]
+        assert {r['kind'] for r in redis_resources} == {'Deployment', 'Service', 'NetworkPolicy'}
+        assert all(r['metadata']['namespace'] == 'nextcloud' for r in redis_resources)
+        redis_deployment = next(r for r in redis_resources if r['kind'] == 'Deployment')
+        assert redis_deployment['spec']['replicas'] == 1
+        assert redis_deployment['spec']['strategy']['type'] == 'Recreate'
+        redis_pod = redis_deployment['spec']['template']['spec']
+        redis_container = redis_pod['containers'][0]
+        assert redis_container['image'] == ('docker.io/library/redis:7.4.11-bookworm@sha256:'
+                                            '4fa24486b8bcca8eec45ee0eb166edc674795e53a2b53d1a9ef263eecebaac85')
+        assert redis_container['resources']['requests']['memory'] == '96Mi'
+        assert redis_container['resources']['limits']['memory'] == '192Mi'
+        assert all('persistentVolumeClaim' not in volume for volume in redis_pod['volumes'])
+        redis_command = '\n'.join(redis_container['command'])
+        assert all(setting in redis_command for setting in ('maxmemory 64mb', 'maxmemory-policy noeviction',
+                                                             'save ""', 'appendonly no'))
+        redis_policy = next(r for r in redis_resources if r['kind'] == 'NetworkPolicy')
+        assert redis_policy['spec']['policyTypes'] == ['Ingress']
         values = temp / 'values.yaml'
         tag = '32.0.6-apache@sha256:' + 'b' * 64
         values.write_text(yaml.safe_dump({'replicaCount': 0, 'hpa': {'enabled': False},
@@ -150,6 +179,35 @@ def main():
             assert env[name]['valueFrom']['secretKeyRef'] == {'name': 'nextcloud-db-auth', 'key': key}
         assert not any(r['kind'] == 'StatefulSet' and 'postgresql' in r['metadata']['name'] for r in resources)
         assert not any('postgres' in c['name'] for c in pod.get('initContainers', []))
+        redis_helm = run('helm', 'template', 'nextcloud', charts['nextcloud-8.9.1.tgz'], '--namespace', 'nextcloud',
+                         '-f', CORE / 'deployments/nextcloud/nextcloud-values.yaml',
+                         '-f', CORE / 'deployments/nextcloud/nextcloud-postgresql-values.yaml',
+                         '-f', CORE / 'deployments/nextcloud/nextcloud-redis-values.yaml',
+                         '-f', values, capture_output=True, text=True).stdout
+        redis_chart_resources = [r for r in yaml.safe_load_all(redis_helm) if r]
+        deployment = next(r for r in redis_chart_resources
+                          if r['kind'] == 'Deployment' and r['metadata']['name'] == 'nextcloud')
+        container = next(c for c in deployment['spec']['template']['spec']['containers'] if c['name'] == 'nextcloud')
+        env = {e['name']: e for e in container['env']}
+        assert env['REDIS_HOST']['value'] == 'nextcloud-redis.nextcloud.svc.cluster.local'
+        assert env['REDIS_HOST_PASSWORD']['valueFrom']['secretKeyRef'] == {
+            'name': 'nextcloud-redis-auth', 'key': 'redis-password'}
+        assert env['POSTGRES_HOST']['value'] == fixture['arguments']['hostname']
+        assert container['image'] == 'docker.io/library/nextcloud:' + tag
+        assert not any(r['kind'] == 'StatefulSet' and 'redis' in r['metadata']['name'] for r in redis_chart_resources)
+        config = next(r for r in redis_chart_resources
+                      if r['kind'] == 'ConfigMap' and r['metadata']['name'] == 'nextcloud-config')['data']
+        assert 'memcache.local' in config['apcu.config.php']
+        assert 'memcache.distributed' not in '\n'.join(config.values())
+        redis_config = config['redis.config.php']
+        assert 'memcache.locking' in redis_config and 'memcache.distributed' not in redis_config
+        php_config = next(r for r in redis_chart_resources
+                          if r['kind'] == 'ConfigMap' and r['metadata']['name'] == 'nextcloud-phpconfig')['data']
+        assert 'session.save_handler = files' in php_config['zz-lock-only-session.ini']
+        assert 'session.save_path = "/tmp"' in php_config['zz-lock-only-session.ini']
+        mounts = {mount['mountPath'] for mount in container['volumeMounts']}
+        assert '/var/www/html/config/redis.config.php' in mounts
+        assert '/usr/local/etc/php/conf.d/zz-lock-only-session.ini' in mounts
     print('All migration checks passed. No cluster or AWS operations were performed.')
 
 

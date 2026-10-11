@@ -278,7 +278,13 @@ Staging Redis does not change Nextcloud. For a separately approved controlled en
 ansible-playbook -i /ABSOLUTE/CORE/ansible/hosts.ini /ABSOLUTE/CORE/ansible/nextcloud_redis_change.yml --tags nextcloud_configuration
 ```
 
-The dedicated change path resumes Argo reconciliation and appends only the Redis overlay. Verify the live Application still selects PostgreSQL and the captured Nextcloud image, then wait for the replacement Nextcloud Pod. Check effective `memcache.local` is APCu, `memcache.locking` is Redis, `memcache.distributed` is unset, and `session.save_handler` is `files`; do not print the Redis password or PHP `session.save_path` from the entrypoint's Redis configuration. Perform representative authenticated upload, readback, and delete operations. Inspect Nextcloud and Redis logs, `used_memory`, `evicted_keys` (must remain zero), and Redis command statistics for rejected calls. Keep raw receipts in private operational evidence.
+The dedicated change path resumes Argo reconciliation and appends only the Redis overlay. Verify the live Application still selects PostgreSQL and the captured Nextcloud image, then wait for the replacement Nextcloud Pod. After approval for an authenticated file check, run the validator with the existing protected WebDAV credential file:
+
+```bash
+python3 /ABSOLUTE/CORE/useful_scripts/nextcloud-migration/verify_redis.py --context YOUR_KUBECTL_CONTEXT --credentials /ABSOLUTE/PRIVATE/webdav-credentials.json
+```
+
+It reads the live config fragments using Nextcloud's merge behavior, requires APCu local cache, Redis locking, no distributed cache, and file-backed PHP sessions, then checks GitOps health and performs an authenticated WebDAV create, exact readback, and delete in a unique folder. Each request has a 120-second timeout. It verifies probe content before cleanup; a timed-out write or unexpected data leaves the folder for inspection and reports its path locally. Do not print the Redis password or PHP `session.save_path` from the entrypoint's Redis configuration. Inspect Nextcloud and Redis logs, `used_memory`, `evicted_keys` (must remain zero), and Redis command statistics for rejected calls separately. Keep raw receipts in private operational evidence.
 
 If the checks fail, pause writers and Argo reconciliation again, restore the pre-Redis marker, and run the same dedicated change playbook to return to the prior GitOps overlay. Verify the previous Nextcloud Pod and PostgreSQL configuration before resuming writers. Preserve current PostgreSQL and files; an old SQLite checkpoint is not a safe rollback after reopening. If Redis itself fails, its lock store can be replaced empty only after writers are paused and in-flight operations are understood.
 
