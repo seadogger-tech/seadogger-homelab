@@ -96,9 +96,6 @@ data:
           { name: "Ceph Dashboard", url: "https://ceph.seadogger-homelab/#/login", logo: "https://raw.githubusercontent.com/seadogger-tech/seadogger-homelab/refs/heads/master/assets/logos/ceph.svg" },
           { name: "Argo CD", url: "https://argocd.seadogger-homelab/login", logo: "https://raw.githubusercontent.com/seadogger-tech/seadogger-homelab/refs/heads/master/assets/logos/argocd.svg" },
           { name: "Bedrock API", url: "http://192.168.1.242:6880/docs", logo: "https://raw.githubusercontent.com/seadogger-tech/seadogger-homelab/refs/heads/master/assets/logos/bedrock-color.svg" },
-          { name: "Prometheus", url: "http://192.168.1.244:9090", logo: "https://raw.githubusercontent.com/seadogger-tech/seadogger-homelab/refs/heads/master/assets/logos/prometheus.svg" },
-          { name: "Grafana", url: "http://192.168.1.245:3000", logo: "https://raw.githubusercontent.com/seadogger-tech/seadogger-homelab/refs/heads/master/assets/logos/grafana.svg" },
-          { name: "Alertmanager", url: "http://192.168.1.246:9093", logo: "https://raw.githubusercontent.com/seadogger-tech/seadogger-homelab/refs/heads/master/assets/logos/alertmanager.svg" },
           { name: "Ubiquiti DM", url: "http://192.168.1.1", logo: "https://raw.githubusercontent.com/seadogger-tech/seadogger-homelab/refs/heads/master/assets/logos/ubiquiti.svg" }
         ];
 
