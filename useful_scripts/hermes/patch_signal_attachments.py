@@ -58,7 +58,11 @@ NEW_CHUNKS = '''        per = SIGNAL_MAX_ATTACHMENTS_PER_MSG
         batch = []
         batch_bytes = 0
         for path in attachments:
-            file_bytes = Path(path).stat().st_size
+            try:
+                file_bytes = Path(path).stat().st_size
+            except OSError as exc:
+                logger.warning("Signal: batch attachment disappeared before send: %s", exc)
+                continue
             if batch and (len(batch) >= per or batch_bytes + file_bytes > SIGNAL_MAX_ATTACHMENT_SIZE):
                 att_batches.append(batch)
                 batch, batch_bytes = [], 0
