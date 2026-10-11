@@ -319,13 +319,23 @@ Signal msg → default → kanban_create(assignee=homelab-it-engineer)
           → task done → result back through default's Signal connection
 ```
 
-### Known limitation — file attachments
+### Signal file attachments
 
-Report files produced by an agent **cannot be delivered over Signal**:
-Hermes passes attachments to `signal-cli` by local path, but `signal-cli`
-runs in its own pod mounting only `/data` and cannot see `/opt/data`.
-Every attachment fails with `AttachmentInvalidException` while the text
-reply still arrives, so it fails invisibly. Tracked as
+Hermes and `signal-cli` run in separate pods. The custom Hermes image build
+encodes each local attachment as a JSON-RPC data URI containing its MIME
+type, filename, and bytes. `signal-cli` 0.14.7 accepts data URIs for its
+`send` attachment parameter, so it does not need to mount the user's
+CephFS volume. The signal-cli nginx proxy is configured for JSON bodies up
+to 140 MiB; the adapter divides image batches so each request contains no
+more than 100 MiB of raw attachment data.
+
+When updating the Hermes image, confirm the Core build applied
+`useful_scripts/hermes/patch_signal_attachments.py`, then deliberately pin
+the new GHCR digest in Pro's `deployments/hermes/base/deployment.yaml`.
+To validate after ArgoCD sync, send a small synthetic file to a test
+Signal chat through Hermes, confirm both the text and attachment arrive,
+and check the Hermes logs for `AttachmentInvalidException` or HTTP 413.
+The old local-path failure is tracked in
 [pro#13](https://github.com/seadogger-tech/seadogger-homelab-pro/issues/13).
 
 ### Kanban DB on CephFS

@@ -148,10 +148,17 @@ RUN ssh-keygen -A && \
 # The upstream image uses s6-overlay as PID 1 (/init). We register sshd as a
 # longrun service in the s6-rc dependency tree so it starts alongside the
 # hermes gateway — no entrypoint override needed.
-COPY --chmod=0755 s6-sshd/run /etc/s6-overlay/s6-rc.d/sshd/run
-COPY s6-sshd/type /etc/s6-overlay/s6-rc.d/sshd/type
-COPY s6-sshd/dependencies.d/base /etc/s6-overlay/s6-rc.d/sshd/dependencies.d/base
-COPY s6-sshd/bundle-sshd /etc/s6-overlay/s6-rc.d/user/contents.d/sshd
+COPY --chmod=0755 deployments/hermes/s6-sshd/run /etc/s6-overlay/s6-rc.d/sshd/run
+COPY deployments/hermes/s6-sshd/type /etc/s6-overlay/s6-rc.d/sshd/type
+COPY deployments/hermes/s6-sshd/dependencies.d/base /etc/s6-overlay/s6-rc.d/sshd/dependencies.d/base
+COPY deployments/hermes/s6-sshd/bundle-sshd /etc/s6-overlay/s6-rc.d/user/contents.d/sshd
+
+# signal-cli lives in another pod and cannot read paths on Hermes's PVC.
+# Its JSON-RPC API accepts data URI attachments, so encode bytes in Hermes.
+# The patch fails the build if upstream changes the send method.
+COPY useful_scripts/hermes/patch_signal_attachments.py /tmp/patch_signal_attachments.py
+RUN python3 -B /tmp/patch_signal_attachments.py /opt/hermes/gateway/platforms/signal.py && \
+    rm /tmp/patch_signal_attachments.py
 
 # Upstream image drops to hermes user via s6-setuidgid in its run scripts;
 # sshd must start as root (needs to bind :22 and manage PAM/keys), which is

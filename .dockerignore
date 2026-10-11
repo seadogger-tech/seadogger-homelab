@@ -1,0 +1,8 @@
+*
+!deployments/
+!deployments/hermes/
+!deployments/hermes/s6-sshd/
+!deployments/hermes/s6-sshd/**
+!useful_scripts/
+!useful_scripts/hermes/
+!useful_scripts/hermes/patch_signal_attachments.py
