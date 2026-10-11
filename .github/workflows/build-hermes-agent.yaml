@@ -18,7 +18,7 @@ permissions:
 
 concurrency:
   group: build-hermes-agent
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 env:
   IMAGE: ghcr.io/seadogger-tech/hermes-agent
@@ -55,7 +55,7 @@ jobs:
       - name: Check if changed
         id: changed
         run: |
-          if [[ "${{ github.event_name }}" != "push" && "${{ steps.upstream.outputs.digest }}" == "${{ steps.last.outputs.digest }}" ]]; then
+          if [[ "${{ github.event_name }}" == "schedule" && "${{ steps.upstream.outputs.digest }}" == "${{ steps.last.outputs.digest }}" ]]; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
             echo "No upstream change — skipping build."
           else
