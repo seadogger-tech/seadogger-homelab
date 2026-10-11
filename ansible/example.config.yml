@@ -32,6 +32,11 @@ nextcloud_postgresql_revision: ""  # Reviewed, published 40-character Core commi
 # Set distinct >=24-character passwords in private config.yml, never in Git.
 nextcloud_postgresql_admin_password: ""
 nextcloud_postgresql_password: ""
+# Stage Redis separately before enabling Nextcloud locking.
+manual_install_nextcloud_redis: false
+nextcloud_redis_revision: ""  # Reviewed, published 40-character Core commit.
+# Generate with `openssl rand -hex 32` and keep only in private config.yml.
+nextcloud_redis_password: ""
 manual_install_jellyfin: true
 manual_install_traefik_dashboard: true
 manual_install_nextcloud_s3_backup: true
@@ -182,6 +187,7 @@ enable_internal_pki: "{{ cold_start_stage_2_install_infrastructure | bool }}"
 
 # --- Stage 3: Application Deployment Variables ---
 enable_nextcloud_postgresql: "{{ cold_start_stage_3_install_applications | bool and manual_install_nextcloud_postgresql | bool }}"
+enable_nextcloud_redis: "{{ cold_start_stage_3_install_applications | bool and manual_install_nextcloud_redis | bool }}"
 # An application is enabled if the STAGE 3 master switch is ON, AND if its individual MANUAL switch is ON.
 enable_bedrock: "{{ cold_start_stage_3_install_applications | bool and manual_install_bedrock | bool }}"
 enable_pihole: "{{ cold_start_stage_3_install_applications | bool and manual_install_pihole | bool }}"

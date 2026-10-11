@@ -1,0 +1,87 @@
+---
+- name: Select the cluster kubeconfig
+  ansible.builtin.set_fact:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+
+- name: Require a reviewed Core revision for Redis
+  ansible.builtin.assert:
+    that:
+      - nextcloud_redis_revision | default('') is match('^[0-9a-f]{40}$')
+    fail_msg: Set nextcloud_redis_revision to the reviewed, published Core commit.
+
+- name: Require a protected Redis credential
+  ansible.builtin.assert:
+    that:
+      - nextcloud_redis_password | default('') is match('^[0-9a-f]{64}$')
+    fail_msg: Set nextcloud_redis_password to a private 64-character hex value.
+  no_log: true
+
+- name: Read existing Redis credential
+  kubernetes.core.k8s_info:
+    kubeconfig: '{{ KUBECONFIG }}'
+    kind: Secret
+    name: nextcloud-redis-auth
+    namespace: nextcloud
+  register: nc_redis_existing_secret
+  no_log: true
+
+- name: Refuse implicit Redis credential rotation
+  ansible.builtin.assert:
+    that:
+      - nc_redis_existing_secret.resources[0].data['redis-password'] | b64decode == nextcloud_redis_password
+  when: nc_redis_existing_secret.resources | length > 0
+  no_log: true
+
+- name: Provision Redis credential outside public GitOps resources
+  kubernetes.core.k8s:
+    kubeconfig: '{{ KUBECONFIG }}'
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: nextcloud-redis-auth
+        namespace: nextcloud
+      type: Opaque
+      stringData:
+        redis-password: '{{ nextcloud_redis_password }}'
+  no_log: true
+
+- name: Deploy the dedicated Nextcloud Redis Application
+  kubernetes.core.k8s:
+    kubeconfig: '{{ KUBECONFIG }}'
+    state: present
+    definition:
+      apiVersion: argoproj.io/v1alpha1
+      kind: Application
+      metadata:
+        name: nextcloud-redis
+        namespace: argocd
+      spec:
+        project: default
+        source:
+          repoURL: https://github.com/seadogger-tech/seadogger-homelab
+          targetRevision: '{{ nextcloud_redis_revision }}'
+          path: deployments/nextcloud/redis
+        destination:
+          server: https://kubernetes.default.svc
+          namespace: nextcloud
+        syncPolicy:
+          automated:
+            prune: true
+            selfHeal: true
+
+- name: Wait for the dedicated Redis workload
+  kubernetes.core.k8s_info:
+    kubeconfig: '{{ KUBECONFIG }}'
+    api_version: apps/v1
+    kind: Deployment
+    namespace: nextcloud
+    name: nextcloud-redis
+  register: nc_redis_ready
+  until: >-
+    nc_redis_ready.resources | length == 1 and
+    nc_redis_ready.resources[0].status.readyReplicas | default(0) == 1
+  retries: 60
+  delay: 10
+  when: not ansible_check_mode

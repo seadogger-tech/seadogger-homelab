@@ -120,6 +120,11 @@
       when: enable_nextcloud_postgresql | default(false) | bool
       tags: [nextcloud_postgresql]
 
+    - name: Deploy dedicated Nextcloud Redis
+      ansible.builtin.import_tasks: tasks/nextcloud_redis_deploy.yml
+      when: enable_nextcloud_redis | default(false) | bool
+      tags: [nextcloud_redis]
+
     - name: Deploy Nextcloud
       import_tasks: tasks/nextcloud_deploy.yml
       when: enable_nextcloud | default(true)

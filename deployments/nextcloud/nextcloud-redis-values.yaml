@@ -1,0 +1,30 @@
+---
+# Add only after the dedicated Redis Application is ready and writers are paused.
+redis:
+  enabled: false
+externalRedis:
+  enabled: true
+  host: nextcloud-redis.nextcloud.svc.cluster.local
+  port: '6379'
+  existingSecret:
+    enabled: true
+    secretName: nextcloud-redis-auth
+    passwordKey: redis-password
+nextcloud:
+  # The Docker default also sets memcache.distributed. Replace it with a
+  # lock-only config while preserving the existing APCu local cache.
+  defaultConfigs:
+    redis.config.php: false
+  configs:
+    redis.config.php: |-
+      <?php
+      if (getenv('REDIS_HOST')) {
+        $CONFIG = array(
+          'memcache.locking' => '\OC\Memcache\Redis',
+          'redis' => array(
+            'host' => 'tcp://' . getenv('REDIS_HOST'),
+            'port' => (int) getenv('REDIS_HOST_PORT'),
+            'password' => (string) getenv('REDIS_HOST_PASSWORD'),
+          ),
+        );
+      }

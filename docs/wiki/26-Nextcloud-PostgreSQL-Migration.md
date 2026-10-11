@@ -253,4 +253,33 @@ private evidence.
 
 Repeat the writer inventory, authenticated application checks, backup destination checks and health preconditions before a cutover. A staging observation from an earlier run does not establish the current writer barrier or authorize conversion.
 
+## Dedicated Redis file locking after PostgreSQL cutover
+
+Redis is a separate, disposable lock store. The Docker Official ARM64 image is pinned in `deployments/nextcloud/redis/deployment.yaml`; it has a 64 MB `noeviction` key budget, a 96Mi request, a 192Mi limit, no persistence, and a one-Pod `Recreate` rollout. A restart briefly interrupts file operations and starts with no old locks. Keep the bundled chart Redis disabled. The `nextcloud-redis-values.yaml` overlay replaces Docker's Redis config with a lock-only config; APCu remains the local cache.
+
+Before an approved staging change, check current node memory, Nextcloud/PostgreSQL health, and the latest native S3 database backup. Publish and review the Core commit, then set `nextcloud_redis_revision` to its full commit ID and `nextcloud_redis_password` to a new `openssl rand -hex 32` value in protected `ansible/config.yml` (never in a shell argument, Git, or logs). Stage only Redis with:
+
+```bash
+ansible-playbook -i /ABSOLUTE/CORE/ansible/hosts.ini /ABSOLUTE/CORE/ansible/nextcloud_redis.yml
+kubectl get application -n argocd nextcloud-redis
+kubectl get deployment/nextcloud-redis service/nextcloud-redis networkpolicy/nextcloud-redis -n nextcloud
+kubectl get pod -n nextcloud -l app.kubernetes.io/name=nextcloud-redis -o wide
+```
+
+Require the Redis Application to be Synced/Healthy, one Ready Pod on a worker, the intended official image digest, and the Secret to exist without printing its data. Check authentication and limits from inside the Redis Pod without placing the password in process arguments or logs:
+
+```bash
+kubectl exec -n nextcloud deployment/nextcloud-redis -- sh -ec 'REDISCLI_AUTH="$(cat /run/secrets/redis-password)"; export REDISCLI_AUTH; redis-cli ping; redis-cli CONFIG GET maxmemory maxmemory-policy save appendonly; redis-cli INFO memory | grep ^used_memory:; redis-cli INFO stats | grep ^evicted_keys:; redis-cli INFO commandstats | grep rejected_calls='
+```
+
+Staging Redis does not change Nextcloud. For a separately approved controlled enablement, first record a fresh pre-change PostgreSQL dump using the procedure above. Inventory and pause all normal Nextcloud writers and Argo reconciliation using the existing writer-barrier procedure; verify zero writer Pods and that the Redis workload is Ready. Back up the protected `ansible/nextcloud-database.local.json` marker at mode 0600. Set `nextcloud_redis_active: true` and `nextcloud_redis_revision` to the published Core commit in that marker; leave its PostgreSQL selection, image digest, and Helm values object intact. Then run:
+
+```bash
+ansible-playbook -i /ABSOLUTE/CORE/ansible/hosts.ini /ABSOLUTE/CORE/ansible/nextcloud_redis_change.yml --tags nextcloud_configuration
+```
+
+The dedicated change path resumes Argo reconciliation and appends only the Redis overlay. Verify the live Application still selects PostgreSQL and the captured Nextcloud image, then wait for the replacement Nextcloud Pod. Check effective `memcache.local` is APCu, `memcache.locking` is Redis, and `memcache.distributed` is unset; do not print the Redis password. Perform representative authenticated upload, readback, and delete operations. Inspect Nextcloud and Redis logs, `used_memory`, `evicted_keys` (must remain zero), and Redis command statistics for rejected calls. Keep raw receipts in private operational evidence.
+
+If the checks fail, pause writers and Argo reconciliation again, restore the pre-Redis marker, and run the same dedicated change playbook to return to the prior GitOps overlay. Verify the previous Nextcloud Pod and PostgreSQL configuration before resuming writers. Preserve current PostgreSQL and files; an old SQLite checkpoint is not a safe rollback after reopening. If Redis itself fails, its lock store can be replaced empty only after writers are paused and in-flight operations are understood.
+
 Primary references: [Nextcloud conversion and omitted tables](https://docs.nextcloud.com/server/32/admin_manual/configuration_database/db_conversion.html), [pinned converter source](https://github.com/nextcloud/server/blob/v32.0.6/core/Command/Db/ConvertType.php), [PostgreSQL dump](https://www.postgresql.org/docs/17/app-pgdump.html), [archive parsing versus restore](https://www.postgresql.org/docs/17/app-pgrestore.html), [Docker Official PostgreSQL image](https://github.com/docker-library/postgres), [supported AWS CLI container interface](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-docker.html), [Argo automated sync](https://argo-cd.readthedocs.io/en/stable/user-guide/auto_sync/), [Argo resource prune protection](https://argo-cd.readthedocs.io/en/stable/user-guide/sync-options/#no-prune-resources).
