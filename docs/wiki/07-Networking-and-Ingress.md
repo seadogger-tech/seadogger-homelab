@@ -50,7 +50,7 @@ Note: Prefer exposing application UIs via Ingress + TLS (cert-manager) at the Tr
 
 **Related Issues:**
 - [#41 - Centralize subnet config](https://github.com/seadogger-tech/seadogger-homelab/issues/41) - Network configuration management
-- [#4 (Pro) - HTTP to HTTPS redirect](https://github.com/seadogger-tech/seadogger-homelab-pro/issues/4) - Traefik middleware
+- [#4 (Pro) - HTTP to HTTPS redirect](https://github.com/seadogger-tech/seadogger-homelab-pro/issues/4) - redirect implementation
 
 ![accent-divider.svg](images/accent-divider.svg)
 ### Level 3: Network & Security
@@ -76,7 +76,7 @@ graph TB
         EntryPoint[EntryPoints<br/>:80 :443]
         Router[IngressRoutes<br/>Routing Rules]
         TLSStore[TLS Store<br/>Certificates]
-        Note1[Note: HTTP→HTTPS<br/>redirect not yet<br/>implemented]
+        Redirect[HTTP :80<br/>per-host permanent<br/>HTTPS redirect]
     end
 
     subgraph CertManager["🔐 cert-manager"]
@@ -97,6 +97,8 @@ graph TB
     end
 
     LAN -->|HTTPS:443| EntryPoint
+    LAN -->|HTTP:80| Redirect
+    Redirect -->|301 HTTPS:443| LAN
     VPN -->|WireGuard Tunnel| WG
     WG -->|HTTPS:443| EntryPoint
 
@@ -106,8 +108,6 @@ graph TB
     EntryPoint --> Router
     Router --> TLSStore
     Router --> Nextcloud
-
-    Note1 -.->|Future: Issue #4| Router
 
     CMController --> Issuer
     Issuer --> IntermediateCA
@@ -124,11 +124,20 @@ graph TB
     style CertManager fill:#2d5016,stroke:#5a9216,stroke-width:3px
     style Apps fill:#2d5016,stroke:#5a9216,stroke-width:3px
     style Encryption fill:#7b1fa2,stroke:#9c27b0,stroke-width:2px
-    style Note1 fill:#ffeb3b,stroke:#fbc02d,stroke-width:2px,stroke-dasharray: 5 5
+    style Redirect fill:#2d5016,stroke:#5a9216,stroke-width:2px
 ```
 
 **Security Features:**
 - **External Access:** WireGuard VPN required for remote access
 - **TLS Everywhere:** All ingress traffic uses cert-manager certificates
 - **AWS Encryption:** Bedrock API calls use TLS 1.3 with AWS credentials from Kubernetes secrets
-- **Future:** HTTP→HTTPS redirect middleware ([Pro #4](https://github.com/seadogger-tech/seadogger-homelab-pro/issues/4))
+- **HTTP to HTTPS:** Each application has a `web` IngressRoute that uses a namespace-local `redirectScheme` middleware to send its hostname permanently to port 443. Its `websecure` IngressRoute serves the application with TLS. Requests for unconfigured hostnames do not match an application route.
+
+To check an application from a network that can reach the Traefik VIP, replace the hostname and VIP below. The first response should be `301` with a `Location` header using the same hostname and path on `https://`. Check the HTTPS endpoint separately with a client that trusts the internal root CA.
+
+```bash
+curl -sSI --resolve app.example.internal:80:192.0.2.10 http://app.example.internal/example
+curl -sSI --resolve app.example.internal:443:192.0.2.10 https://app.example.internal/example
+```
+
+The redirect is configured per namespace, so new applications need both the middleware and a `web` IngressRoute alongside their `websecure` route. This does not add HSTS; that is a separate security policy decision.
