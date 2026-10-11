@@ -77,6 +77,7 @@ OLD_STANDALONE_BATCHES = '''        per_batch = rl.SIGNAL_MAX_ATTACHMENTS_PER_MS
 '''
 
 NEW_STANDALONE_BATCHES = '''        per_batch = rl.SIGNAL_MAX_ATTACHMENTS_PER_MSG
+        max_batch_bytes = 100 * 1024 * 1024  # match Signal adapter and 140 MiB proxy limit
         att_batches = []
         batch, batch_bytes = [], 0
         for path in attachment_paths:
@@ -85,7 +86,7 @@ NEW_STANDALONE_BATCHES = '''        per_batch = rl.SIGNAL_MAX_ATTACHMENTS_PER_MS
             except OSError as exc:
                 logger.warning("Signal media file disappeared before send: %s", exc)
                 continue
-            if batch and (len(batch) >= per_batch or batch_bytes + file_bytes > rl.SIGNAL_MAX_ATTACHMENT_SIZE):
+            if batch and (len(batch) >= per_batch or batch_bytes + file_bytes > max_batch_bytes):
                 att_batches.append(batch)
                 batch, batch_bytes = [], 0
             batch.append(path)
