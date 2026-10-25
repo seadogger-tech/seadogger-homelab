@@ -196,7 +196,8 @@ jobs:
             echo "::error::Expected one public ECR Python base in $dockerfile; found $count"
             exit 1
           fi
-          sed -i 's|^FROM public.ecr.aws/docker/library/python:|FROM python:|' "$dockerfile"
+          sed -i.bak 's|^FROM public.ecr.aws/docker/library/python:|FROM python:|' "$dockerfile"
+          rm "${dockerfile}.bak"
           grep '^FROM python:' "$dockerfile"
 
       - name: Setup QEMU (for multi-arch emulation)
