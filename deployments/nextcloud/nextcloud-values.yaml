@@ -215,7 +215,19 @@ nextcloud:
 
   # Extra config files created in /var/www/html/config/
   # ref: https://docs.nextcloud.com/server/latest/admin_manual/configuration_server/config_sample_php_parameters.html#multiple-config-php-file
-  configs: {}
+  configs:
+    # Behind Traefik: trust its forwarded client IP so brute-force throttling
+    # sees real addresses instead of throttling everyone as one proxy. CLI URL
+    # makes occ-generated links (and the setup check) use the real hostname.
+    homelab.config.php: |-
+      <?php
+      $CONFIG = array(
+        'overwrite.cli.url' => 'https://nextcloud.seadogger-homelab',
+        'trusted_proxies' => array('10.42.0.0/16'),
+        'forwarded_for_headers' => array('HTTP_X_FORWARDED_FOR'),
+        'maintenance_window_start' => 6,
+        'default_phone_region' => 'US',
+      );
   # For example, to enable image and text file previews:
   #  previews.config.php: |-
   #    <?php
@@ -457,7 +469,9 @@ mariadb:
 ## for more options see https://github.com/bitnami/charts/tree/main/bitnami/postgresql
 ##
 postgresql:
-  enabled: true
+  # Nextcloud runs on the dedicated nextcloud-db Application (official
+  # postgres image); the bundled Bitnami chart was never used and is retired.
+  enabled: false
   global:
     postgresql:
       # global.postgresql.auth overrides postgresql.auth
@@ -569,12 +583,20 @@ collabora:
 ## ref: https://docs.nextcloud.com/server/latest/admin_manual/configuration_server/background_jobs_configuration.html#cron
 ##
 cronjob:
-  enabled: false
+  # Without this, background jobs only run on browser page loads (AJAX mode),
+  # which sync clients never trigger - jobs had gone 14 days without running.
+  # After enabling, switch the mode once: occ background:cron
+  enabled: true
 
   ## Cronjob sidecar resource requests and limits
   ## ref: http://kubernetes.io/docs/user-guide/compute-resources/
   ##
-  resources: {}
+  resources:
+    requests:
+      cpu: 20m
+      memory: 64Mi
+    limits:
+      memory: 512Mi
 
   # Allow configuration of lifecycle hooks
   # ref: https://kubernetes.io/docs/tasks/configure-pod-container/attach-handler-lifecycle-event/

@@ -30,6 +30,18 @@ spec:
           port: 8080
 
 ---
+# HTTPS: HSTS header (Nextcloud's setup check wants at least 180 days)
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: hsts
+  namespace: nextcloud
+spec:
+  headers:
+    stsSeconds: 15552000
+    stsIncludeSubdomains: false
+
+---
 # HTTPS: real route with TLS
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
@@ -41,6 +53,8 @@ spec:
   routes:
     - match: Host(`nextcloud.seadogger-homelab`)
       kind: Rule
+      middlewares:
+        - name: hsts
       services:
         - name: nextcloud
           port: 8080
