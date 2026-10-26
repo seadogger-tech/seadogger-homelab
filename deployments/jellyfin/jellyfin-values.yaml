@@ -6,6 +6,16 @@ controllers:
     pod:
       hostNetwork: true
       dnsPolicy: ClusterFirstWithHostNet
+      # Keep off yoda. The control plane runs etcd, and Jellyfin's ~1 GiB
+      # (up to 4 GiB while transcoding) was a large part of the memory
+      # pressure behind k3s losing leader election and restarting.
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: node-role.kubernetes.io/control-plane
+                    operator: DoesNotExist
       annotations:
         # media = the read-only mount of Nextcloud's data (3.3 TiB) - Nextcloud
         # owns it and backs it up itself; including it here would duplicate the
@@ -41,14 +51,11 @@ controllers:
       app:
         image:
           repository: jellyfin/jellyfin
-          # 12.0 is a release-candidate preview (not yet stable) - opted in
-          # deliberately for the Live TV "tuner not releasing" fix, EPG
-          # fixes, and .NET 10 performance rewrite polish. Pre-upgrade
-          # Velero backup: jellyfin-preupgrade-v12-rc3 (config + cache,
-          # media volume excluded per the existing backup-volumes-excludes
-          # annotation). Revert to 10.11.11 (last stable 10.11.x release,
-          # includes the same security fixes) if this causes problems.
-          tag: "12.0-rc3"
+          # Stable 12.x (moved off the 12.0-rc3 preview on 2026-10-26).
+          # Pre-upgrade config backup: daily-backup-20261025020046. Jellyfin
+          # migrates its database forward on start, so rolling back means
+          # restoring that config volume, not just reverting this tag.
+          tag: "12.3"
           pullPolicy: IfNotPresent
         env:
           TZ: America/New_York
