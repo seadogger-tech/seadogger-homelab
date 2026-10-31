@@ -209,7 +209,10 @@
 # The target governs BlueStore cache rather than total process RSS. It was
 # 2Gi until 2026-10-31; at 2Gi the OSDs ran 2.1-2.4Gi working set and peaked at
 # the 3Gi limit on every 8GB worker, leaving the OS nothing. 1.5Gi trades some
-# cache hit rate for ~0.5Gi per worker. The OSD request (1792Mi) follows it.
+# cache hit rate for ~0.5Gi per worker. NOTE: the running OSDs take their
+# target from POD_MEMORY_REQUEST (the OSD memory request in
+# rook-ceph-cluster-values.yaml), which overrides this mon-level value. Keep
+# both at 1.5Gi; this one only matters if the request is ever removed.
 - name: Align OSD memory target with the container memory limit
   ansible.builtin.shell: |
     POD="$(kubectl -n rook-ceph get pods -l app=rook-ceph-tools -o jsonpath='{.items[0].metadata.name}')"

@@ -140,13 +140,19 @@ cephClusterSpec:
       # 2.1-2.4Gi working set and peaked at 3.08Gi - right at this limit - on
       # every worker, while the 8GB workers had no memory left for the OS.
       # A smaller BlueStore cache costs some random-read speed; Nextcloud and
-      # Jellyfin mostly stream large files. Request follows the new target.
+      # Jellyfin mostly stream large files.
+      #
+      # THE REQUEST IS THE TARGET. Rook passes POD_MEMORY_REQUEST into the OSD
+      # and Ceph uses it as osd_memory_target, overriding the mon config value
+      # (`ceph config show osd.N` reports source "env"). So the request must be
+      # exactly the cache target wanted. Steady RSS sits ~200-300Mi above the
+      # target, a known, bounded under-count per OSD.
       limits:
         cpu: "1"
         memory: "3Gi"    # must exceed osd_memory_target (1.5Gi) + overhead
       requests:
         cpu: "150m"      # was 500m; measured 24-44m
-        memory: "1792Mi" # 1.5Gi target + ~250Mi non-cache overhead
+        memory: "1536Mi" # = osd_memory_target (see above)
     prepareosd:
       limits:
         cpu: "500m"
