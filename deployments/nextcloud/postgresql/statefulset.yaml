@@ -91,7 +91,9 @@ spec:
           resources:
             requests:
               cpu: 100m
-              memory: 512Mi
+              # 512Mi -> 192Mi (2026-10-31): shared_buffers is 64MB and the
+              # database measured 78Mi working set, 142Mi peak.
+              memory: 192Mi
             limits:
               cpu: '1'
               memory: 1Gi

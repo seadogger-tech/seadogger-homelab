@@ -51,7 +51,7 @@ spec:
           resources:
             requests:
               cpu: "50m"
-              memory: "256Mi"
+              memory: "320Mi"   # was 256Mi; measured 306Mi working set (2026-10-31)
             limits:
               cpu: "1000m"
               memory: "1Gi"

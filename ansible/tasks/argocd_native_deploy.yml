@@ -26,6 +26,24 @@
     release_namespace: argocd
     state: present
     kubeconfig: "{{ KUBECONFIG }}"
+    # Pinned to the installed chart: an unpinned run would silently upgrade
+    # ArgoCD. Both helm tasks must carry the same values, because each run
+    # replaces the release values rather than merging them.
+    chart_version: "8.5.8"
+    values:
+      server:
+        service:
+          type: ClusterIP
+      controller:
+        # The application controller had no resources and fell back to the
+        # namespace LimitRange default (64Mi) while using ~350Mi, 606Mi peak
+        # (2026-10-31), so every node it landed on was under-counted.
+        resources:
+          requests:
+            cpu: 100m
+            memory: 384Mi
+          limits:
+            memory: 1Gi
 
 - name: Force argocd server.service.type=ClusterIP via Helm
   kubernetes.core.helm:
@@ -34,10 +52,24 @@
     release_namespace: argocd
     state: present
     kubeconfig: "{{ KUBECONFIG }}"
+    # Pinned to the installed chart: an unpinned run would silently upgrade
+    # ArgoCD. Both helm tasks must carry the same values, because each run
+    # replaces the release values rather than merging them.
+    chart_version: "8.5.8"
     values:
       server:
         service:
           type: ClusterIP
+      controller:
+        # The application controller had no resources and fell back to the
+        # namespace LimitRange default (64Mi) while using ~350Mi, 606Mi peak
+        # (2026-10-31), so every node it landed on was under-counted.
+        resources:
+          requests:
+            cpu: 100m
+            memory: 384Mi
+          limits:
+            memory: 1Gi
 
 # --- Fix the proxy/TLS loop by telling ArgoCD it’s behind TLS-terminating proxy
 - name: Set server.insecure=true in argocd-cmd-params-cm
