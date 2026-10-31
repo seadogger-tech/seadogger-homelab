@@ -114,11 +114,11 @@ cephClusterSpec:
         memory: "1536Mi"  # was 1Gi; must exceed mon_memory_target (1Gi) + overhead
       requests:
         cpu: "100m"      # was 500m; measured 26-36m
-        # 512Mi -> 256Mi. The mons measured 445-459Mi when mon_memory_target was
-        # at Ceph's 2Gi default; with the target pinned to 1Gi they settled at
-        # 70-92Mi. 256Mi leaves room to grow into the target without reserving
-        # half a gig per mon that is never touched.
-        memory: "256Mi"
+        # 256Mi -> 512Mi (2026-10-31). The 70-92Mi measured just after the
+        # 1Gi target was pinned did not last: the mons grew back to 403-508Mi
+        # working set, 556-742Mi peak, so 256Mi under-counted every mon and
+        # let the scheduler overpack the workers.
+        memory: "512Mi"
     osd:
       # The limit MUST stay above `osd_memory_target` (set to 2Gi in
       # rook_ceph_deploy_part1.yml), not merely above measured usage.
@@ -136,14 +136,17 @@ cephClusterSpec:
       # container needs roughly 30-50% headroom above it for everything else
       # the process allocates. 2Gi target / 3Gi limit gives that.
       #
-      # The request stays at 2Gi: it already matches measured steady state, and
-      # raising it would add scheduling pressure on nodes already ~87% committed.
+      # 2026-10-31: osd_memory_target lowered 2Gi -> 1.5Gi. At 2Gi the OSDs ran
+      # 2.1-2.4Gi working set and peaked at 3.08Gi - right at this limit - on
+      # every worker, while the 8GB workers had no memory left for the OS.
+      # A smaller BlueStore cache costs some random-read speed; Nextcloud and
+      # Jellyfin mostly stream large files. Request follows the new target.
       limits:
         cpu: "1"
-        memory: "3Gi"    # was 2Gi; must exceed osd_memory_target (2Gi) + overhead
+        memory: "3Gi"    # must exceed osd_memory_target (1.5Gi) + overhead
       requests:
         cpu: "150m"      # was 500m; measured 24-44m
-        memory: "2Gi"    # was 1Gi; measured 1.6-1.9Gi -- request now honest
+        memory: "1792Mi" # 1.5Gi target + ~250Mi non-cache overhead
     prepareosd:
       limits:
         cpu: "500m"
@@ -291,7 +294,9 @@ cephFileSystems:
             memory: "1536Mi"
           requests:
             cpu: "100m"
-            memory: "512Mi"
+            # 512Mi -> 1Gi (2026-10-31): measured 972-1147Mi working set with
+            # the 768Mi auto-tuned cache, so 512Mi under-counted each MDS.
+            memory: "1Gi"
         placement:
           nodeAffinity:
             requiredDuringSchedulingIgnoredDuringExecution:
@@ -338,6 +343,12 @@ cephFileSystems:
           csi.storage.k8s.io/controller-expand-secret-namespace: rook-ceph
           csi.storage.k8s.io/node-stage-secret-name: rook-csi-cephfs-node
           csi.storage.k8s.io/node-stage-secret-namespace: rook-ceph
+
+# The chart's default object store (ceph-objectstore + RGW + ceph-bucket
+# StorageClass) was never used: no ObjectBucketClaims, no buckets, no PVCs.
+# Its gateway held ~280Mi and a 484Mi request on an 8GB worker. Removed
+# 2026-10-31; re-add a cephObjectStores entry if S3 is ever needed.
+cephObjectStores: []
 
 csi:
   enableCephfsDriver: true

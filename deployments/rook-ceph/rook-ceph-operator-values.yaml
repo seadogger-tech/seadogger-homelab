@@ -61,35 +61,35 @@ csi:
     - name : csi-provisioner
       resource:
         requests:
-          memory: 64Mi   # was 128Mi; measured well under
+          memory: 32Mi   # measured 13-45Mi working set, <=63Mi peak (2026-10-31)
           cpu: 50m
         limits:
           memory: 256Mi
     - name : csi-resizer
       resource:
         requests:
-          memory: 64Mi   # was 128Mi; measured well under
+          memory: 32Mi   # measured 13-45Mi working set, <=63Mi peak (2026-10-31)
           cpu: 50m
         limits:
           memory: 256Mi
     - name : csi-attacher
       resource:
         requests:
-          memory: 64Mi   # was 128Mi; measured well under
+          memory: 32Mi   # measured 13-45Mi working set, <=63Mi peak (2026-10-31)
           cpu: 50m
         limits:
           memory: 256Mi
     - name : csi-snapshotter
       resource:
         requests:
-          memory: 64Mi   # was 128Mi; measured well under
+          memory: 32Mi   # measured 13-45Mi working set, <=63Mi peak (2026-10-31)
           cpu: 50m
         limits:
           memory: 256Mi
     - name : csi-rbdplugin
       resource:
         requests:
-          memory: 128Mi   # was 512Mi; measured ~53Mi
+          memory: 64Mi   # measured 20-29Mi working set, <=34Mi peak (2026-10-31)
           cpu: 100m
         limits:
           memory: 1Gi
@@ -126,35 +126,35 @@ csi:
     - name : csi-provisioner
       resource:
         requests:
-          memory: 64Mi   # was 128Mi; measured well under
+          memory: 32Mi   # measured 13-45Mi working set, <=63Mi peak (2026-10-31)
           cpu: 50m
         limits:
           memory: 256Mi
     - name : csi-resizer
       resource:
         requests:
-          memory: 64Mi   # was 128Mi; measured well under
+          memory: 32Mi   # measured 13-45Mi working set, <=63Mi peak (2026-10-31)
           cpu: 50m
         limits:
           memory: 256Mi
     - name : csi-attacher
       resource:
         requests:
-          memory: 64Mi   # was 128Mi; measured well under
+          memory: 32Mi   # measured 13-45Mi working set, <=63Mi peak (2026-10-31)
           cpu: 50m
         limits:
           memory: 256Mi
     - name : csi-snapshotter
       resource:
         requests:
-          memory: 64Mi   # was 128Mi; measured well under
+          memory: 32Mi   # measured 13-45Mi working set, <=63Mi peak (2026-10-31)
           cpu: 50m
         limits:
           memory: 256Mi
     - name : csi-cephfsplugin
       resource:
         requests:
-          memory: 128Mi   # was 512Mi; measured ~53Mi
+          memory: 64Mi   # measured 20-29Mi working set, <=34Mi peak (2026-10-31)
           cpu: 100m
         limits:
           memory: 1Gi

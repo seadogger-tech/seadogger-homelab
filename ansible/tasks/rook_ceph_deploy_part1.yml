@@ -206,12 +206,14 @@
 # OSD restarts, each one dropping a replica on a 3-host cluster where
 # size=3/min_size=2 leaves no rebuild headroom.
 #
-# 2Gi target sits comfortably inside the 3Gi container limit, since the target
-# governs BlueStore cache rather than total process RSS.
+# The target governs BlueStore cache rather than total process RSS. It was
+# 2Gi until 2026-10-31; at 2Gi the OSDs ran 2.1-2.4Gi working set and peaked at
+# the 3Gi limit on every 8GB worker, leaving the OS nothing. 1.5Gi trades some
+# cache hit rate for ~0.5Gi per worker. The OSD request (1792Mi) follows it.
 - name: Align OSD memory target with the container memory limit
   ansible.builtin.shell: |
     POD="$(kubectl -n rook-ceph get pods -l app=rook-ceph-tools -o jsonpath='{.items[0].metadata.name}')"
-    kubectl -n rook-ceph exec "$POD" -- ceph config set osd osd_memory_target 2147483648
+    kubectl -n rook-ceph exec "$POD" -- ceph config set osd osd_memory_target 1610612736
   environment: "{{ env_vars }}"
   changed_when: true
 
