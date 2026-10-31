@@ -20,7 +20,10 @@
       kubelet-arg:
         - "kube-reserved=memory={{ control_plane_kube_reserved_memory | default('1Gi') }}"
         - "system-reserved=memory={{ control_plane_system_reserved_memory | default('512Mi') }}"
-        - "eviction-hard=memory.available<{{ control_plane_eviction_memory | default('500Mi') }}"
+        # eviction-hard replaces kubelet's whole default threshold set, so the
+        # disk signals are restated here; a memory-only value silently turned
+        # disk-pressure eviction off on this node (2026-10-25 to 2026-10-31).
+        - "eviction-hard=memory.available<{{ control_plane_eviction_memory | default('500Mi') }},nodefs.available<10%,imagefs.available<15%,nodefs.inodesFree<5%"
   become: true
 
 - name: Ensure K3s service is restarted
