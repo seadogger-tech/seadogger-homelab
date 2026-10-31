@@ -71,6 +71,28 @@
   register: helm_operator_result
   changed_when: "'STATUS: deployed' in helm_operator_result.stdout or 'STATUS: upgraded' in helm_operator_result.stdout"
 
+# CSI controller-plugin memory. With ROOK_USE_CSI_OPERATOR the CSI pods are
+# rendered by ceph-csi-operator from the Driver CRs, and Rook only seeds those
+# CRs once: the operator values' csiRBDProvisionerResource / csiCephFSProvisionerResource
+# never reach the four sidecars (they get ceph-csi-operator's 64Mi default)
+# and later value changes never reach plugin/liveness either. Patching the
+# Driver CRs is the only lever. Measured 2026-10-31: sidecars 13-45Mi working
+# set (<=63Mi peak), plugin 20-29Mi (<=34Mi peak) - 416Mi requested per pod.
+- name: Right-size CSI controller-plugin containers on the Driver CRs
+  ansible.builtin.shell: |
+    for d in rook-ceph.rbd.csi.ceph.com rook-ceph.cephfs.csi.ceph.com; do
+      kubectl -n rook-ceph patch drivers.csi.ceph.io "$d" --type merge -p '{"spec":{"controllerPlugin":{"resources":{
+        "provisioner":{"requests":{"cpu":"10m","memory":"32Mi"},"limits":{"memory":"256Mi"}},
+        "resizer":{"requests":{"cpu":"10m","memory":"32Mi"},"limits":{"memory":"256Mi"}},
+        "attacher":{"requests":{"cpu":"10m","memory":"32Mi"},"limits":{"memory":"256Mi"}},
+        "snapshotter":{"requests":{"cpu":"10m","memory":"32Mi"},"limits":{"memory":"256Mi"}},
+        "plugin":{"requests":{"cpu":"100m","memory":"64Mi"},"limits":{"memory":"1Gi"}},
+        "liveness":{"requests":{"cpu":"25m","memory":"32Mi"},"limits":{"memory":"256Mi"}}}}}}'
+    done
+  environment: "{{ env_vars }}"
+  register: csi_driver_patch
+  changed_when: "'patched' in csi_driver_patch.stdout and 'no change' not in csi_driver_patch.stdout"
+
 # Step 5: Wait for operator to be ready
 - name: Wait for operator to be ready
   ansible.builtin.shell:
