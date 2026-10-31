@@ -34,10 +34,10 @@ hermes_users:
   - name: jason
     cluster_admin: true    # binds cluster-admin ClusterRoleBinding
     dev_pod: true          # deploys code-server pod + portal tile
-  - name: kelly
-    cluster_admin: false   # read-only cluster access only
-    dev_pod: false         # no code-server pod
 ```
+
+Add another entry per family member. A user with `cluster_admin: false` gets
+read-only cluster access, and `dev_pod: false` skips the code-server pod.
 
 ### What the playbook does (hermes section)
 
