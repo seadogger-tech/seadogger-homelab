@@ -40,7 +40,14 @@
     #
     # Setting the high threshold below Ceph's warn point makes kubelet
     # reclaim before Ceph ever complains.
-    - name: Configure kubelet image GC below Ceph's mon disk-warning threshold
+    #
+    # Memory reservation (added 2026-10-31). Without it each 8GB worker offered
+    # ~7.9GiB to pods, leaving nothing for the OS or k3s-agent. When pods grew
+    # past the RAM, the node thrashed and froze (rey, 2026-10-31) instead of
+    # kubelet evicting a pod. Same pattern as the control plane, smaller
+    # kube-reserved because k3s-agent has no etcd or API server.
+    # Allocatable drops to ~6.7GiB per worker.
+    - name: Configure kubelet image GC and memory reservation on workers
       ansible.builtin.copy:
         dest: /etc/rancher/k3s/config.yaml
         mode: "0644"
@@ -49,12 +56,15 @@
           kubelet-arg:
             - "image-gc-high-threshold={{ kubelet_image_gc_high | default(65) }}"
             - "image-gc-low-threshold={{ kubelet_image_gc_low | default(50) }}"
+            - "kube-reserved=memory={{ worker_kube_reserved_memory | default('384Mi') }}"
+            - "system-reserved=memory={{ worker_system_reserved_memory | default('512Mi') }}"
+            - "eviction-hard=memory.available<{{ worker_eviction_memory | default('300Mi') }}"
       register: k3s_kubelet_cfg
 
     # throttle: 1 so only one worker restarts at a time -- pods keep running
     # (containerd is untouched) but the node briefly goes NotReady, and we
     # do not want all workers doing that simultaneously.
-    - name: Restart k3s-agent to apply kubelet GC thresholds
+    - name: Restart k3s-agent to apply kubelet settings
       ansible.builtin.systemd:
         name: k3s-agent
         state: restarted
