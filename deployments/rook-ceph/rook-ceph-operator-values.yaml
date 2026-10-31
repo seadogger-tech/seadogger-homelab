@@ -60,10 +60,10 @@ csi:
           cpu: 25m
         limits:
           memory: 256Mi
-  # NOTE: with ROOK_USE_CSI_OPERATOR these *ProvisionerResource values only
-  # seed the ceph-csi-operator Driver CRs on first creation, and the sidecar
-  # entries never apply at all. Live values are set by the Driver CR patch in
-  # ansible/tasks/rook_ceph_deploy_part1.yml; keep the two in step.
+  # NOTE: with ROOK_USE_CSI_OPERATOR these *ProvisionerResource values have
+  # no effect: on every start the operator re-renders the Driver CRs, taking
+  # the controller plugin request from the node *PluginResource and leaving
+  # the sidecars unset. See rook_ceph_deploy_part1.yml.
   csiRBDProvisionerResource: |
     - name : csi-provisioner
       resource:
