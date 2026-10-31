@@ -34,6 +34,14 @@
       server:
         service:
           type: ClusterIP
+      # Behind Traefik's TLS termination. Set here as well as by the patch
+      # tasks below, because a helm upgrade rewrites these ConfigMaps and a
+      # values-less upgrade put server.insecure back to false (2026-10-31).
+      configs:
+        params:
+          server.insecure: true
+        cm:
+          url: https://argocd.seadogger-homelab
       controller:
         # The application controller had no resources and fell back to the
         # namespace LimitRange default (64Mi) while using ~350Mi, 606Mi peak
@@ -60,6 +68,14 @@
       server:
         service:
           type: ClusterIP
+      # Behind Traefik's TLS termination. Set here as well as by the patch
+      # tasks below, because a helm upgrade rewrites these ConfigMaps and a
+      # values-less upgrade put server.insecure back to false (2026-10-31).
+      configs:
+        params:
+          server.insecure: true
+        cm:
+          url: https://argocd.seadogger-homelab
       controller:
         # The application controller had no resources and fell back to the
         # namespace LimitRange default (64Mi) while using ~350Mi, 606Mi peak
