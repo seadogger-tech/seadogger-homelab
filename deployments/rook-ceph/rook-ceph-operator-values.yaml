@@ -8,7 +8,10 @@ image:
 
 resources:
   limits:
-    cpu: 200m
+    # 200m -> 1 CPU (2026-10-31): at 200m the operator was throttled in 88% of
+    # CFS periods (31 min in its first hour), which made every Ceph change
+    # roll slowly. It idles near zero; the limit only matters while reconciling.
+    cpu: "1"
     memory: 256Mi
   requests:
     cpu: 100m
