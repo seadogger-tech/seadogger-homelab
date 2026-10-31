@@ -58,7 +58,9 @@
             - "image-gc-low-threshold={{ kubelet_image_gc_low | default(50) }}"
             - "kube-reserved=memory={{ worker_kube_reserved_memory | default('384Mi') }}"
             - "system-reserved=memory={{ worker_system_reserved_memory | default('512Mi') }}"
-            - "eviction-hard=memory.available<{{ worker_eviction_memory | default('300Mi') }}"
+            # Setting eviction-hard replaces kubelet's whole default set, so the
+            # disk signals must be restated or they silently become zero.
+            - "eviction-hard=memory.available<{{ worker_eviction_memory | default('300Mi') }},nodefs.available<10%,imagefs.available<15%,nodefs.inodesFree<5%"
       register: k3s_kubelet_cfg
 
     # throttle: 1 so only one worker restarts at a time -- pods keep running
