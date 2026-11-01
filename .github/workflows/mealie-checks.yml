@@ -39,7 +39,7 @@ jobs:
           python3 useful_scripts/mealie-migration/check.py --help
           python3 -m json.tool useful_scripts/mealie-migration/fixtures/ordinary-web.expected.json > /dev/null
           yamllint -c .yamllint .github/workflows/mealie-checks.yml useful_scripts/mealie-migration/candidate
-      - name: Render the offline candidate contract
+      - name: Assert the offline candidate contract and reject regressions
         env:
           KUBECONFIG: /dev/null
-        run: kubectl kustomize useful_scripts/mealie-migration/candidate
+        run: python3 -m unittest discover -s useful_scripts/mealie-migration/tests -p 'test_render.py' -v
