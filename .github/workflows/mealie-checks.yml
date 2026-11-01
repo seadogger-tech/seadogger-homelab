@@ -31,6 +31,8 @@ jobs:
   prepare:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
+    outputs:
+      failure: ${{ steps.contract.outputs.failure }}
     strategy:
       fail-fast: false
       matrix:
@@ -60,7 +62,36 @@ jobs:
           python3 -m json.tool useful_scripts/mealie-migration/fixtures/ordinary-web.expected.json > /dev/null
           yamllint -c .yamllint .github/workflows/mealie-checks.yml useful_scripts/mealie-migration/candidate
       - name: Assert the offline render and inert Ansible Application contract
+        id: contract
         env:
           KUBECONFIG: /dev/null
+          S2_SUITE: ${{ matrix.suite }}
         working-directory: useful_scripts/mealie-migration/tests
-        run: python3 -m unittest -v '${{ matrix.suite }}'
+        run: |
+          python3 - <<'PY'
+          import io
+          import os
+          import re
+          import sys
+          import unittest
+          output = io.StringIO()
+          suite = unittest.defaultTestLoader.loadTestsFromName(os.environ["S2_SUITE"])
+          result = unittest.TextTestRunner(stream=output, verbosity=2).run(suite)
+          print(output.getvalue())
+          failures = result.failures + result.errors
+          if failures:
+              detail = failures[0][1]
+              match = re.search(r"\[ERROR\]: ([^\n]+)", detail)
+              summary = match.group(1) if match else detail.strip().splitlines()[-1]
+              summary = " ".join(summary.split())[:130]
+              with open(os.environ["GITHUB_OUTPUT"], "a") as stream:
+                  stream.write("failure=" + summary + "\n")
+          sys.exit(not result.wasSuccessful())
+          PY
+  diagnostic:
+    needs: prepare
+    if: ${{ failure() && needs.prepare.outputs.failure != '' }}
+    name: "S2 diagnostic - ${{ needs.prepare.outputs.failure }}"
+    runs-on: ubuntu-24.04
+    steps:
+      - run: echo "The failed preparation check contains the full inert test diagnostic."
