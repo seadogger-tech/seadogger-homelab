@@ -13,11 +13,33 @@ import stat
 from contextlib import contextmanager
 from pathlib import Path
 
-from contract import Binding, Denied, decode, encode, require
+from contract import Binding, Denied, SLUG, decode, encode, exact_keys, require
 
 
 ACTIVE = ("PREPARED", "RUNNING_UNUSED", "SPENT", "STOPPING")
 TERMINAL = ("QUIESCENT_RETAINED", "FAILED_UNCERTAIN_RETAINED")
+
+
+def checked_state(raw: bytes) -> dict:
+    state = decode(raw)
+    exact_keys(state, {"phase", "sequence", "launchConsumed", "importSpent", "readSpent", "slug",
+                       "attempt", "reason", "inspectionAllowed"})
+    require(state["phase"] in ACTIVE + TERMINAL and type(state["sequence"]) is int
+            and state["sequence"] >= 0 and state["inspectionAllowed"] is False, "LEDGER_CORRUPT")
+    require(all(type(state[key]) is bool for key in ("launchConsumed", "importSpent", "readSpent")), "LEDGER_CORRUPT")
+    require(state["slug"] is None or (isinstance(state["slug"], str) and 0 < len(state["slug"]) <= 250
+                                     and bool(SLUG.fullmatch(state["slug"]))), "LEDGER_CORRUPT")
+    require(state["attempt"] is None or (isinstance(state["attempt"], str) and len(state["attempt"]) == 32
+                                        and all(c in "0123456789abcdef" for c in state["attempt"])), "LEDGER_CORRUPT")
+    require(not state["importSpent"] or (state["launchConsumed"] and state["attempt"] is not None), "LEDGER_CORRUPT")
+    require(not state["readSpent"] or (state["importSpent"] and state["slug"] is not None), "LEDGER_CORRUPT")
+    require(state["slug"] is None or state["importSpent"], "LEDGER_CORRUPT")
+    require(state["phase"] not in ("RUNNING_UNUSED", "SPENT") or state["launchConsumed"], "LEDGER_CORRUPT")
+    require(state["phase"] != "RUNNING_UNUSED" or not state["importSpent"], "LEDGER_CORRUPT")
+    require(state["phase"] != "SPENT" or state["importSpent"], "LEDGER_CORRUPT")
+    require(state["reason"] is None or (isinstance(state["reason"], str) and len(state["reason"]) <= 64
+                                       and all(c in "ABCDEFGHIJKLMNOPQRSTUVWXYZ_" for c in state["reason"])), "LEDGER_CORRUPT")
+    return state
 
 
 def protected_directory(path: Path) -> None:
@@ -97,9 +119,10 @@ class Ledger:
         """Any daemon restart burns active runs, including an unused import."""
         interrupted = []
         with self.transaction():
-            for run_id, raw_binding, raw_state in self.connection.execute("SELECT run_id,binding,state FROM runs"):
+            for run_id, epoch, raw_binding, raw_state in self.connection.execute("SELECT run_id,epoch,binding,state FROM runs"):
                 binding = Binding.parse(raw_binding)
-                state = decode(raw_state)
+                require(binding.value["runId"] == run_id and binding.value["epoch"] == epoch, "LEDGER_CORRUPT")
+                state = checked_state(raw_state)
                 if state["phase"] in ACTIVE:
                     state.update(phase="FAILED_UNCERTAIN_RETAINED", reason="CONTROLLER_RESTART",
                                  sequence=state["sequence"] + 1)
@@ -128,13 +151,14 @@ class Ledger:
             self.poisoned = True
             raise Denied("LEDGER_UNAVAILABLE") from None
         require(row is not None and row[0] == binding.raw, "BINDING_MISMATCH")
-        return decode(row[1])
+        return checked_state(row[1])
 
     def change(self, binding: Binding, expected: dict, **updates) -> dict:
         with self.transaction():
             state = self.read(binding)
             require(state == expected, "STATE_CHANGED")
             state.update(updates, sequence=state["sequence"] + 1)
+            checked_state(encode(state))
             self.connection.execute("UPDATE runs SET state=? WHERE run_id=?",
                                     (encode(state), binding.value["runId"]))
         return state

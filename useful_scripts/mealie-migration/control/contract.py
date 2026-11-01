@@ -196,13 +196,20 @@ def verify_image_bytes(index_raw: bytes, manifest_raw: bytes, config_raw: bytes,
     require(digest(config_raw) == expected_config, "IMAGE_CONFIG_MISMATCH")
     index, manifest, config = (decode(raw) for raw in (index_raw, manifest_raw, config_raw))
     require(index.get("schemaVersion") == 2 and manifest.get("schemaVersion") == 2, "IMAGE_SCHEMA")
+    require(index.get("mediaType") in ("application/vnd.oci.image.index.v1+json",
+                                       "application/vnd.docker.distribution.manifest.list.v2+json"), "IMAGE_MEDIA_TYPE")
+    require(manifest.get("mediaType") in ("application/vnd.oci.image.manifest.v1+json",
+                                          "application/vnd.docker.distribution.manifest.v2+json"), "IMAGE_MEDIA_TYPE")
     matches = [d for d in index.get("manifests", []) if d.get("digest") == ARM64]
     require(len(matches) == 1, "IMAGE_MEMBERSHIP")
     child = matches[0]
+    require(child.get("mediaType") == manifest["mediaType"], "IMAGE_MEDIA_TYPE")
     require(child.get("size") == len(manifest_raw) and child.get("platform", {}).get("os") == "linux"
             and child.get("platform", {}).get("architecture") == "arm64", "IMAGE_PLATFORM")
     require(manifest.get("config", {}).get("digest") == expected_config
             and manifest["config"].get("size") == len(config_raw), "IMAGE_CONFIG_DESCRIPTOR")
+    require(manifest["config"].get("mediaType") in ("application/vnd.oci.image.config.v1+json",
+                                                    "application/vnd.docker.container.image.v1+json"), "IMAGE_MEDIA_TYPE")
     require(config.get("os") == "linux" and config.get("architecture") == "arm64", "IMAGE_PLATFORM")
     require(isinstance(manifest.get("layers"), list) and isinstance(config.get("rootfs"), dict), "IMAGE_LAYERS")
     require(config["rootfs"].get("type") == "layers"
@@ -210,6 +217,10 @@ def verify_image_bytes(index_raw: bytes, manifest_raw: bytes, config_raw: bytes,
     for layer in manifest["layers"]:
         sha(layer.get("digest"))
         require(type(layer.get("size")) is int and layer["size"] >= 0, "IMAGE_LAYER_DESCRIPTOR")
+        require(layer.get("mediaType") in ("application/vnd.oci.image.layer.v1.tar",
+                                            "application/vnd.oci.image.layer.v1.tar+gzip",
+                                            "application/vnd.oci.image.layer.v1.tar+zstd",
+                                            "application/vnd.docker.image.rootfs.diff.tar.gzip"), "IMAGE_MEDIA_TYPE")
     for diff_id in config["rootfs"]["diff_ids"]:
         sha(diff_id)
     return {"identity": "BYTES_LINKED", "layersVerified": False, "sourceEquivalence": "UNPROVEN",

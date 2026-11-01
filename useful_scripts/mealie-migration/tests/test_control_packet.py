@@ -28,6 +28,22 @@ class ControlPacketTests(unittest.TestCase):
         self.assertEqual(result.returncode, 2, result.stdout)
         self.assertEqual(json.loads(result.stdout)["outcome"], "CLOSED")
 
+    def test_valid_synthetic_shape_does_not_grant_execution_authority(self):
+        packet = json.loads(FIXTURE.read_text(encoding="utf-8"))
+        result = self.validate(packet)
+        self.assertEqual(result.returncode, 0, result.stdout)
+        report = json.loads(result.stdout)
+        self.assertEqual(report["shape"], "VALID")
+        self.assertEqual(report["authority"], "NOT_VERIFIED")
+        self.assertIs(report["ready"], False)
+
+    def test_runner_cannot_be_the_observer_principal(self):
+        packet = json.loads(FIXTURE.read_text(encoding="utf-8"))
+        packet["observerId"] = packet["runnerId"]
+        result = self.validate(packet)
+        self.assertEqual(result.returncode, 2, result.stdout)
+        self.assertEqual(json.loads(result.stdout)["outcome"], "CLOSED")
+
 
 if __name__ == "__main__":
     unittest.main()

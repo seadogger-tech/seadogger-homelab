@@ -192,7 +192,18 @@ on OCE-56 being execution-ready or V01 completing.
 
 The preparation workflow compiles these files and checks CLI help. Its existing
 seven S2 cases remain deployment/configuration coverage, not controller coverage.
-Record actual workflow links and head separately. No local checkout, local test,
+Three new offline packet checks use the public `validate` command: reject boolean
+numeric limits, reject shared runner/observer identity, and accept a valid
+synthetic shape while explicitly withholding authority/readiness. The first
+regression was committed before its fix: preparation CI failed at `db4350bb` and
+passed at `184ea2fb`. Check-run status was observed through the developer
+connector; step logs were not available through that tool. The other two checks
+characterize existing behavior and prevent an always-reject implementation from
+passing the rejection cases. No internal clock/store/adapter is replaced.
+
+`fixtures/packet.synthetic.json` is a shape-only test artifact: its fake references
+and synthetic asset entry cannot authorize a run or represent the candidate UI.
+Record actual workflow links and current head separately. No local checkout, local test,
 control simulation, image/host/VM/cluster/import/provider probe or enforcement
 test was run while authoring this draft. The new deterministic test seam is
 pending the precise checkpoint described above; there is no passing controller

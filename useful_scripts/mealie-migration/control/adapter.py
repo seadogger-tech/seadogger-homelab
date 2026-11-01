@@ -7,7 +7,6 @@ the protected target map, host tombstones and independent watchdog.
 
 from __future__ import annotations
 
-import os
 import socket
 import stat
 import struct

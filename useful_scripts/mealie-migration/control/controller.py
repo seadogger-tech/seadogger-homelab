@@ -6,7 +6,7 @@ capability consumed by the broker, serialized there with closure of the same run
 
 from __future__ import annotations
 
-import base64
+import re
 import threading
 import uuid
 
@@ -160,11 +160,13 @@ class Controller:
             require(isinstance(pair, list) and len(pair) == 2 and all(isinstance(x, str) for x in pair), "INVALID_HEADERS")
             name, val = pair
             require(name == name.lower() and name not in headers and len(val) <= 8192, "AMBIGUOUS_HEADERS")
+            require(bool(re.fullmatch(r"[!#$%&'*+.^_`|~0-9a-z-]+", name)), "INVALID_HEADERS")
             require(all(32 <= ord(c) < 127 for c in name + val), "INVALID_HEADERS")
             require(not name.startswith(("x-forwarded-", "x-http-method", "x-method-"))
                     and name not in ("forwarded", "transfer-encoding", "content-encoding", "upgrade", "proxy-authorization"),
                     "AMBIGUOUS_HEADERS")
             headers[name] = val
+        require(headers.get("connection", "close") in ("close", "keep-alive"), "AMBIGUOUS_HEADERS")
         require(headers.get("host") == value["authority"], "INVALID_AUTHORITY")
         body = unbase64(request["body"])
         require(headers.get("content-length", "0") == str(len(body)), "AMBIGUOUS_LENGTH")

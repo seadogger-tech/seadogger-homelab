@@ -77,6 +77,8 @@ def main() -> int:
             result = {"phase": state["phase"], "inspectionAllowed": False,
                       "applicationConsistency": "UNPROVEN"}
         print(json.dumps(result, sort_keys=True))
+        if args.command == "supervise":
+            return 0 if result["phase"] == "QUIESCENT_RETAINED" else 2
         return 0
     except (Denied, OSError, ValueError, TypeError, KeyError, AttributeError, KeyboardInterrupt):
         if controller is not None:
