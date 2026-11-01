@@ -5,12 +5,22 @@ on:
     paths:
       - 'useful_scripts/mealie-migration/**'
       - 'deployments/mealie/**'
+      - 'ansible/main.yml'
+      - 'ansible/tasks/mealie_deploy.yml'
+      - 'ansible/example.config.yml'
+      - 'useful_scripts/nextcloud-migration/checks/requirements.txt'
+      - '.yamllint'
       - '.github/workflows/mealie-checks.yml'
   push:
     branches: [master]
     paths:
       - 'useful_scripts/mealie-migration/**'
       - 'deployments/mealie/**'
+      - 'ansible/main.yml'
+      - 'ansible/tasks/mealie_deploy.yml'
+      - 'ansible/example.config.yml'
+      - 'useful_scripts/nextcloud-migration/checks/requirements.txt'
+      - '.yamllint'
       - '.github/workflows/mealie-checks.yml'
 permissions:
   contents: read
@@ -31,15 +41,15 @@ jobs:
       - uses: azure/setup-kubectl@v4
         with:
           version: v1.34.1
-      - name: Install repository lint versions
-        run: python3 -m pip install --disable-pip-version-check yamllint==1.38.0 PyYAML==6.0.3 pathspec==1.1.1
+      - name: Install repository validation versions
+        run: python3 -m pip install --disable-pip-version-check -r useful_scripts/nextcloud-migration/checks/requirements.txt
       - name: Check syntax and CLI without executing an import
         run: |
-          python3 -m py_compile useful_scripts/mealie-migration/check.py
+          python3 -m compileall -q useful_scripts/mealie-migration
           python3 useful_scripts/mealie-migration/check.py --help
           python3 -m json.tool useful_scripts/mealie-migration/fixtures/ordinary-web.expected.json > /dev/null
           yamllint -c .yamllint .github/workflows/mealie-checks.yml useful_scripts/mealie-migration/candidate
-      - name: Assert the offline candidate contract and reject regressions
+      - name: Assert the offline render and inert Ansible Application contract
         env:
           KUBECONFIG: /dev/null
-        run: python3 -m unittest discover -s useful_scripts/mealie-migration/tests -p 'test_render.py' -v
+        run: python3 -m unittest discover -s useful_scripts/mealie-migration/tests -p 'test_*.py' -v
