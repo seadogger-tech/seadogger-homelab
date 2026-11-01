@@ -129,6 +129,8 @@ class Binding:
         require(type(value["t0Ns"]) is int and value["t0Ns"] >= 0, "INVALID_CLOCK")
         require(type(value["observerValidUntilNs"]) is int
                 and value["observerValidUntilNs"] >= value["t0Ns"] + END_NS, "SESSION_WINDOW")
+        require(isinstance(value["limits"], dict) and all(type(item) is int for item in value["limits"].values()),
+                "LIMIT_TYPE")
         require(value["limits"] == {
             "requestBytes": BODY_LIMIT, "responseBytes": BODY_LIMIT, "packetBytes": PACKET_LIMIT,
             "stopSeconds": 295, "endSeconds": 300, "intakePerMinute": 6, "intakeBurst": 1,
