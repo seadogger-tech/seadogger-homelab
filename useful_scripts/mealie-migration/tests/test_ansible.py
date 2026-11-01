@@ -143,14 +143,12 @@ class ApplicationSwitchTests(unittest.TestCase):
         self.config.update(cold_start_stage_3_install_applications=False, manual_install_mealie=False)
         self.assert_application(self.run_main(), True)
 
-    def test_missing_manual_flag_with_stage_enabled_reports_undefined(self):
+    def test_missing_manual_flag_with_stage_enabled_uses_existing_true_default(self):
         del self.config["manual_install_mealie"]
         self.config["cold_start_stage_3_install_applications"] = True
-        result = self.run_main()
-        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertEqual(self.calls, [])
-        self.assertIn("manual_install_mealie", result.stdout + result.stderr)
-        self.assertIn("undefined", (result.stdout + result.stderr).lower())
+        # The outer default(true) also handles undefined derived configuration.
+        # Characterize this legacy behavior; do not silently harden the policy.
+        self.assert_application(self.run_main(), True)
 
     def test_missing_manual_flag_short_circuits_when_stage_disabled(self):
         del self.config["manual_install_mealie"]
