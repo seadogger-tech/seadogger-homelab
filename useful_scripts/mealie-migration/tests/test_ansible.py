@@ -86,6 +86,10 @@ class ApplicationSwitchTests(unittest.TestCase):
             "ANSIBLE_COLLECTIONS_PATH": str(self.root / "collections"),
             "KUBECONFIG": os.devnull, "MEALIE_TEST_CALLS": str(self.calls_file),
         }
+        # setup-python's hosted interpreter needs its shared-library search path.
+        # Preserve this runtime setting without inheriting operator credentials.
+        if "LD_LIBRARY_PATH" in os.environ:
+            env["LD_LIBRARY_PATH"] = os.environ["LD_LIBRARY_PATH"]
         result = subprocess.run([
             shutil.which("ansible-playbook"), str(self.playbooks / "main.yml"),
             "-i", str(self.root / "inventory"), "-e", "@" + str(self.root / "vars.json"),
