@@ -122,26 +122,74 @@ Inspect the rendered contract: one replica/Recreate, ARM64 scheduling, original
 Certificate/IngressRoute/TLS linkage. Effective capacity and writer fencing are
 runtime evidence, not conclusions from these fields.
 
-S2 executable assertions and Ansible recorded-module switch tests remain pending.
-The inspected public example computes `enable_mealie` from stage 3 AND
-`manual_install_mealie`; the main entrypoint uses `enable_mealie | default(true)`.
-Cover all four stage/manual combinations, explicit false/true, absent
-`enable_mealie` (legacy default true), and the missing manual-flag case without
-inventing its behavior. Record Application source/path/revision and automated
-policy using inert Kubernetes modules and public examples only. Never run the
-real playbook to obtain these observations.
+## Offline S2 checks
+
+With Python 3.12+, kubectl 1.34.1, and the pinned validation requirements installed
+in an approved development environment, run from any directory:
+
+```bash
+python3 -m pip install -r /ABSOLUTE/CORE/useful_scripts/nextcloud-migration/checks/requirements.txt
+python3 -m unittest discover -s /ABSOLUTE/CORE/useful_scripts/mealie-migration/tests -p 'test_*.py' -v
+```
+
+The dependency file reuses Core's existing validation toolchain, including
+Ansible 14.4.0 / ansible-core 2.21.4, PyYAML and yamllint. Installation retrieves
+public packages; the checks themselves contact no application, registry or cluster.
+
+The render suite invokes only local `kubectl kustomize` with an empty kubeconfig.
+It checks literal contract requirements against actual rendered resources:
+candidate image/index, ARM64 selector, one replica/Recreate, original RWO claim,
+mounts, PUID/PGID, resources, probes, Service, Certificate, ingress and TLS.
+It checks that the four retained prompt inputs reach the generated ConfigMap
+unchanged. Sixteen focused mutations of rendered output must be rejected,
+including a second writer, missing digest, wrong architecture, replaced storage,
+changed ownership/probes/resources/routing/TLS and a removed prompt input.
+This proves assertion sensitivity, not application execution or image membership.
+
+The Ansible suite reads only public examples and source. It copies the actual
+`ansible/main.yml`, adds a test selection tag to its one Mealie import, and uses
+the original condition and imported task body. It never rewrites the enable
+expression. A temporary localhost inventory, no privilege escalation and
+recording `k8s`/`k8s_info` modules replace the external Kubernetes boundary.
+Other tags and fact gathering are skipped. Parse-only sentinels for unselected
+Helm/patch modules fail if invoked. An allowlist rejects new task actions,
+includes, loops or delegation before execution. Operator configuration,
+inventory and credential environment are not used. The recorded healthy
+Application response is a test double, not a readiness observation.
+
+Checks assert the actual emitted Application source repository/path, `HEAD`,
+destination, `prune: true`, `selfHeal: true` and namespace creation policy.
+That is existing source behavior, not a new deployment selection or approval.
+The pinned Ansible execution established these existing behaviors:
+
+| Configuration | Recorded Application |
+| --- | --- |
+| Stage 3 false, manual false or true | None |
+| Stage 3 true, manual false | None |
+| Stage 3 true, manual true | Existing Application contract |
+| Explicit enable false or true | Follows explicit enable |
+| Enable absent, even with both stage/manual false | Existing Application contract |
+| Manual absent, stage 3 false | None |
+| Manual absent, stage 3 true | Existing Application contract |
+
+The last case does **not** raise an undefined-variable error with ansible-core
+2.21.4: the outer `enable_mealie | default(true)` also defaults the undefined
+derived configuration to true. This is characterization, not a hardening change.
+A different Ansible version must recheck these cases. A syntax result or template
+comment alone does not establish switch behavior.
 
 ## Validation state
 
-The executable case and offline overlay are source preparation. Local Python
-syntax/CLI checks, application execution, Kustomize render, YAML lint, Ansible
-switch tests and image re-verification have not run in the authoring workspace.
-The credential-free `Mealie preparation checks` workflow compiles the runner,
-checks its help/fixture JSON, lints its YAML and renders the offline overlay.
-It uses the repository's existing Python/kubectl/lint versions, no application
-credentials, and never invokes `--execute`. Its result proves preparation only;
-S2 contract assertions and application behavior remain pending. CI results and
-review findings belong to the exact PR head record.
+The credential-free `Mealie preparation checks` workflow compiles Python,
+checks CLI help/fixture JSON, lints preparation YAML and runs the full S2 suite.
+Relevant Mealie, Ansible entrypoint/example/task and validation dependency changes
+trigger it. It never invokes `check.py --execute`. Exact-head CI evidence is
+recorded on the PR; passing S2 does not pass V01.
+
+No local checkout or local test execution is claimed for the connector authoring
+workspace. Actual import/reopen/UI and zero-provider observations, registry and
+running-image identities, effective capacity/writer fencing and environment
+enforcement remain separately gated.
 
 Requested non-runtime checks after local capability is bound:
 
