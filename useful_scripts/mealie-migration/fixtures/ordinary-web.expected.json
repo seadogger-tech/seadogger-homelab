@@ -1,0 +1,23 @@
+{
+  "case": "V01",
+  "seam": "S1",
+  "source_url": "https://recipes.test/ordinary-web.html",
+  "name": "Pantry Tomato Rice",
+  "recipe_yield": "4 servings",
+  "prep_time": "PT5M",
+  "cook_time": "PT20M",
+  "total_time": "PT25M",
+  "ingredients": [
+    "1 cup long-grain rice",
+    "2 cups water",
+    "1/2 teaspoon salt",
+    "2 tablespoons tomato paste"
+  ],
+  "instructions": [
+    "Rinse the rice.",
+    "Combine the rice, water, salt and tomato paste in a saucepan.",
+    "Bring to a boil, cover, and simmer for 20 minutes."
+  ],
+  "source_image": null,
+  "notes": null
+}
