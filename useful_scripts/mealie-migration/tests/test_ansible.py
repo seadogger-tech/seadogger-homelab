@@ -52,6 +52,15 @@ class ApplicationSwitchTests(unittest.TestCase):
         modules.mkdir(parents=True)
         for name in ("k8s", "k8s_info"):
             (modules / (name + ".py")).write_text(FAKE_MODULE.replace("__MODULE__", name))
+        # Static imports in main.yml resolve these actions even when their tasks
+        # are not selected. The test collection shadows the installed collection;
+        # supply parseable sentinels that fail if selection ever reaches them.
+        denied = (
+            "from ansible.module_utils.basic import AnsibleModule\n"
+            "AnsibleModule(argument_spec={}).fail_json(msg='unexpected non-Mealie action')\n"
+        )
+        for name in ("helm", "helm_repository", "k8s_json_patch"):
+            (modules / (name + ".py")).write_text(denied)
         (self.root / "inventory").write_text("[control_plane]\nlocalhost ansible_connection=local\n")
         (self.root / "ansible.cfg").write_text("[defaults]\nretry_files_enabled = False\n")
         self.variables = {"ansible_connection": "local", "ansible_become": False,
