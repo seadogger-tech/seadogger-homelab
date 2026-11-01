@@ -57,15 +57,16 @@ registry identity verification, image scan or migration/recovery result is claim
 The ordinary-import case cannot be marked complete from fixture review.
 
 The next development step is one executable V01 test at S1 using the authorized
-target, followed by an observed failing result and the smallest supported
-configuration change needed to pass. Record the exact entry command and protected
-credential reference with that test. A test runner is not yet provided; do not
-report the proposed `check.py` command as runnable.
+target. Record the initial result before changing configuration. If it already
+passes with upstream defaults, retain those defaults. If a change is needed, use
+an observed failing result and the smallest supported change needed to pass.
+Record the exact entry command and protected credential reference with that test.
+A test runner is not yet provided; do not report the proposed `check.py` command as
+runnable.
 
-For this preparation diff, no local test command is required to prove application
-behavior because application execution is still outstanding. Once a bound checkout
-is available, JSON/HTML inspection and the repository's applicable checks can
-validate fixture syntax; those checks still cannot pass V01.
+Local syntax and fixture checks have not run; the current workspace has no bound
+Core checkout. Once a bound checkout is available, inspect the JSON/HTML and run
+the repository's applicable checks. These checks cannot pass V01.
 
 Candidate identity inherited from the accepted specification: upstream v3.30.0,
 source `9552df62118224a377d9c9b0a62706a62220ab86`, OCI index
