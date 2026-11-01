@@ -31,6 +31,16 @@ jobs:
   prepare:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        suite:
+          - test_render
+          - test_ansible.ApplicationSwitchTests.test_public_stage_and_manual_switch_matrix
+          - test_ansible.ApplicationSwitchTests.test_explicit_enable_overrides_the_derived_switch
+          - test_ansible.ApplicationSwitchTests.test_absent_enable_uses_the_existing_true_default
+          - test_ansible.ApplicationSwitchTests.test_missing_manual_flag_with_stage_enabled_uses_existing_true_default
+          - test_ansible.ApplicationSwitchTests.test_missing_manual_flag_short_circuits_when_stage_disabled
     steps:
       - uses: actions/checkout@v4
         with:
@@ -52,4 +62,5 @@ jobs:
       - name: Assert the offline render and inert Ansible Application contract
         env:
           KUBECONFIG: /dev/null
-        run: python3 -m unittest discover -s useful_scripts/mealie-migration/tests -p 'test_*.py' -v
+        working-directory: useful_scripts/mealie-migration/tests
+        run: python3 -m unittest -v '${{ matrix.suite }}'
