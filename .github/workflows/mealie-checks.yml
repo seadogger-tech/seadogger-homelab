@@ -47,6 +47,7 @@ jobs:
         run: |
           python3 -m compileall -q useful_scripts/mealie-migration
           python3 useful_scripts/mealie-migration/check.py --help
+          python3 useful_scripts/mealie-migration/control/control.py --help
           python3 -m json.tool useful_scripts/mealie-migration/fixtures/ordinary-web.expected.json > /dev/null
           yamllint -c .yamllint .github/workflows/mealie-checks.yml useful_scripts/mealie-migration/candidate
       - name: Assert the offline render and inert Ansible Application contract
