@@ -136,7 +136,12 @@ real playbook to obtain these observations.
 The executable case and offline overlay are source preparation. Local Python
 syntax/CLI checks, application execution, Kustomize render, YAML lint, Ansible
 switch tests and image re-verification have not run in the authoring workspace.
-Existing CI results and review findings belong to the exact PR head record.
+The credential-free `Mealie preparation checks` workflow compiles the runner,
+checks its help/fixture JSON, lints its YAML and renders the offline overlay.
+It uses the repository's existing Python/kubectl/lint versions, no application
+credentials, and never invokes `--execute`. Its result proves preparation only;
+S2 contract assertions and application behavior remain pending. CI results and
+review findings belong to the exact PR head record.
 
 Requested non-runtime checks after local capability is bound:
 

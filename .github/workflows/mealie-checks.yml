@@ -1,0 +1,45 @@
+---
+name: Mealie preparation checks
+on:
+  pull_request:
+    paths:
+      - 'useful_scripts/mealie-migration/**'
+      - 'deployments/mealie/**'
+      - '.github/workflows/mealie-checks.yml'
+  push:
+    branches: [master]
+    paths:
+      - 'useful_scripts/mealie-migration/**'
+      - 'deployments/mealie/**'
+      - '.github/workflows/mealie-checks.yml'
+permissions:
+  contents: read
+concurrency:
+  group: mealie-checks-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: azure/setup-kubectl@v4
+        with:
+          version: v1.34.1
+      - name: Install repository lint versions
+        run: python3 -m pip install --disable-pip-version-check yamllint==1.38.0 PyYAML==6.0.3 pathspec==1.1.1
+      - name: Check syntax and CLI without executing an import
+        run: |
+          python3 -m py_compile useful_scripts/mealie-migration/check.py
+          python3 useful_scripts/mealie-migration/check.py --help
+          python3 -m json.tool useful_scripts/mealie-migration/fixtures/ordinary-web.expected.json > /dev/null
+          yamllint -c .yamllint .github/workflows/mealie-checks.yml useful_scripts/mealie-migration/candidate
+      - name: Render the offline candidate contract
+        env:
+          KUBECONFIG: /dev/null
+        run: kubectl kustomize useful_scripts/mealie-migration/candidate
