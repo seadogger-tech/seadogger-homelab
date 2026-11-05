@@ -314,6 +314,21 @@ cephFileSystems:
                         - anakin.local
                         - obiwan.local
                         - rey.local
+          # Active and standby MDS must never share a node: after reboots both
+          # landed on obiwan (2.2Gi reserved together), starving its sensor pod
+          # and losing HA. Required (not preferred) so the scheduler refuses to
+          # co-locate them; 3 eligible nodes leave room for failover.
+          # Verify with:
+          #   kubectl get cephfilesystem -n rook-ceph ceph-fs -o jsonpath='{.spec.metadataServer.placement}'
+          podAntiAffinity:
+            requiredDuringSchedulingIgnoredDuringExecution:
+              - labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - rook-ceph-mds
+                topologyKey: kubernetes.io/hostname
 
     # Primary CephFS StorageClass (replicated)
     storageClass:
