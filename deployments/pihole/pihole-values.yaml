@@ -198,6 +198,9 @@ whitelist:
     - app.alpaca.markets
     - docs.alpaca.markets
     - sentry.alpaca.markets
+    # YouTube playback breaks with these blocked (owner request 2026-11-01)
+    - static.doubleclick.net
+    - googleads.g.doubleclick.net
     - authx.alpaca.markets
     - live.alpaca.markets
     - unleash.alpaca.markets
