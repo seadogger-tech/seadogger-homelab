@@ -246,4 +246,5 @@ dnsmasq:
     # Pi-hole's dns.hosts, managed by ansible/tasks/hermes_deploy.yml (Pro repo).
     - address=/octoprint.seadogger-homelab/192.168.1.77
     - address=/hdhomerun.seadogger-homelab/192.168.1.70
+    - address=/stellarmate.seadogger-homelab/192.168.1.206
     - address=/gateway.seadogger-homelab/192.168.1.1
