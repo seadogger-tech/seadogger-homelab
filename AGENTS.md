@@ -23,7 +23,7 @@ This is a **live production cluster** with real users and ~4TB of data
 | `ansible/ansible_collections/` | Vendored third-party collection. Don't edit it. |
 | `deployments/<app>/` | Helm values, Kustomize manifests and Dockerfiles for each app. |
 | `ingress/` | Traefik IngressRoutes. |
-| `.github/workflows/` | CI that rebuilds images from upstream (hermes, mealie, signal-cli, bedrock gateway) and publishes the wiki. |
+| `.github/workflows/` | CI that rebuilds Hermes, signal-cli and Bedrock gateway images, runs checks and publishes the wiki. Mealie pulls a fixed upstream release pinned by digest; it has no image-build workflow. |
 | `.github/*_upstream_*` | Digest and SHA pins that CI writes. Its `ci(...)` commits land on `master` automatically. |
 | `docs/wiki/` | Source for the GitHub wiki (`Home.md`, numbered pages, `_Sidebar.md`). CODEOWNERS requires review. |
 | `useful_scripts/` | NVMe partition and boot scripts for node bring-up. |
