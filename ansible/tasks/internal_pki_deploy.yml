@@ -393,7 +393,6 @@
     - "pihole-certificate.yml"
     - "traefik-dashboard-certificate.yml"
     - "home-assistant-certificate.yml"
-    - "mealie-certificate.yml"
   run_once: true
   delegate_to: yoda.local
   become: false
@@ -412,7 +411,6 @@
     - "pihole-certificate.yml"
     - "traefik-dashboard-certificate.yml"
     - "home-assistant-certificate.yml"
-    - "mealie-certificate.yml"
   run_once: true
   delegate_to: yoda.local
   become: false
@@ -430,7 +428,6 @@
     - "pihole-certificate.yml"
     - "traefik-dashboard-certificate.yml"
     - "home-assistant-certificate.yml"
-    - "mealie-certificate.yml"
   run_once: true
   delegate_to: yoda.local
   become: false
