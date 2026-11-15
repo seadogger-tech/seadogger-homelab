@@ -221,7 +221,7 @@
         name: cert-manager
         kubeconfig: "{{ KUBECONFIG }}"
       register: cert_manager_ns
-      until: 
+      until:
         - cert_manager_ns.resources | length > 0
         - cert_manager_ns.resources[0].status.phase == 'Active'
       retries: 30
@@ -236,9 +236,9 @@
         kubeconfig: "{{ KUBECONFIG }}"
       register: cert_manager_deployments
       until: >
-        cert_manager_deployments.resources | 
-        selectattr('status.readyReplicas', 'defined') | 
-        selectattr('status.readyReplicas', '>', 0) | 
+        cert_manager_deployments.resources |
+        selectattr('status.readyReplicas', 'defined') |
+        selectattr('status.readyReplicas', '>', 0) |
         list | length == 3
       retries: 30
       delay: 10
@@ -265,7 +265,7 @@
   rescue:
     - name: Debug cert-manager deployment failure
       ansible.builtin.debug:
-        msg: 
+        msg:
           - "Cert-manager deployment encountered an issue"
           - "Deployment result: {{ cert_manager_deploy }}"
       run_once: true
@@ -362,7 +362,7 @@
   register: clusterissuer_result
   retries: 3
   delay: 10
-  until: 
+  until:
     - clusterissuer_result is success
     - clusterissuer_result.result.status is defined
     - "'Ready' in clusterissuer_result.result.status.conditions | map(attribute='type') | list"
@@ -371,7 +371,7 @@
 
 - name: Debug ClusterIssuer Creation Failure
   ansible.builtin.debug:
-    msg: 
+    msg:
       - "ClusterIssuer creation failed"
       - "Result: {{ clusterissuer_result }}"
   when: clusterissuer_result is failed
