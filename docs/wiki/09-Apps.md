@@ -81,7 +81,9 @@ User facing applications that are applied thru ArgoCD on top of the k3s tech sta
   same self-contained-Kustomize pattern used elsewhere in this repo.
 - SQLite backend (default, no separate Postgres needed) on
   `ceph-block-data`, `Recreate` deploy strategy (single writer).
-- Image pinned (not `:latest`) — bump deliberately, verify after.
+- Stock upstream image `ghcr.io/mealie-recipes/mealie:v3.30.0`, pinned by
+  multi-architecture digest in `deployments/mealie/deployment.yaml`.
+  Update the release and digest deliberately through a reviewed PR; never use `:latest`.
 
 ### Home Assistant Integration
 - HA's built-in `mealie` integration (core since 2024.7) connects directly
@@ -170,7 +172,10 @@ GPT-5, etc.) in any region — verified directly against the Bedrock
 `gpt-oss` line is available on Bedrock; the closed GPT models remain
 exclusive to OpenAI's own API / Azure OpenAI.
 
-#### Custom prompts (defense in depth)
+#### Custom prompts (runtime configuration)
+These files configure the stock upstream container through its prompt override
+setting. They do not patch Mealie source or build a custom image.
+
 Custom prompt overrides also live in `deployments/mealie/prompts/recipes/`
 and are mounted into the pod via a Kustomize `configMapGenerator`. These
 predate the gateway patch above (added when prompt wording was the only
@@ -206,34 +211,21 @@ the schema again:
    it without any manual step.
 
 #### Forcing the AI Import Path
-Mealie's scraper-selection order is hardcoded server-side
-(`RecipeScraperPackage` always tries first; the AI scraper only runs if
-that returns nothing at all) — there is no request-level way to force AI
-for a page the plain scraper can technically read but parses badly (e.g.
-duplicated/mislabeled instruction steps from pages that interleave
-step-number labels with restated ingredient lists). Today, the only
-workaround is manual: fetch the page, extract just the visible recipe
-text (no HTML/JSON-LD for the plain scraper to grab), and POST it to
-`/api/recipes/create/html-or-json` directly via the API.
+The former custom Mealie image and its cherry-picked UI changes are retired.
+Use the import features supplied by the pinned upstream release. The repository
+no longer builds or maintains a separate Force OpenAI Scraper interface.
 
-Two real, tested, unmerged upstream PRs fix this properly by adding
-actual UI controls:
-- [#7618](https://github.com/mealie-recipes/mealie/pull/7618) — a
-  "Force OpenAI Scraper" checkbox on the Import-from-URL page
-- [#7825](https://github.com/mealie-recipes/mealie/pull/7825) — a
-  dedicated "Create from Text" page
+The retired workflow, patch helpers and build-identity file were removed in
+[PR #65](https://github.com/seadogger-tech/seadogger-homelab/pull/65).
+The old design remains historical context in
+[ADR-011](13-ADR-Index.md#adr-011-adopting-unmerged-upstream-prs-reusable-pattern);
+it is not an instruction to restore the custom build.
 
-Both are cherry-picked into a custom image
-(`ghcr.io/seadogger-tech/mealie:v3.21.0-ai-import`) built by
-`core/.github/workflows/mealie-rebuild.yaml`, following the same
-adopted-unmerged-PR pattern established for the Bedrock gateway — see
-[ADR-011](13-ADR-Index.md#adr-011-adopting-unmerged-upstream-prs-reusable-pattern).
-Unlike the gateway, this pipeline is pinned to a specific upstream
-**release tag** (`v3.21.0`), not the active `mealie-next` development
-branch — Mealie holds real household data, so unattended tracking of
-in-progress upstream commits would be inappropriate here. The pipeline
-only rebuilds when the cherry-picked PRs change or `UPSTREAM_TAG` is
-bumped manually.
+For upgrades, review the upstream release and migration notes, verify ARM64
+support, and update the fixed tag and digest in the deployment manifest.
+Preserve a recoverable database backup before a database-changing upgrade.
+A rollback must pair the recorded previous image with a compatible database;
+changing an image tag alone does not undo database migrations.
 
 ![accent-divider](images/accent-divider.svg)
 ## OpenWebUI: **Website:** [https://open-webui.com](https://open-webui.com)
@@ -278,7 +270,7 @@ bumped manually.
 
 3. **Gateway Authentication:**
    - **API_KEY:** `bedrock` (used by clients to authenticate to the gateway)
-   - Clients must include header: `Authorization: Bearer bedrock`
+   - Clients send the configured gateway API key in the Authorization header using the Bearer scheme.
    - This is separate from AWS credentials (gateway → Bedrock authentication)
 
 4. **Container Configuration:**

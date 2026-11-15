@@ -83,6 +83,12 @@ Assistant Dashboard Migration."
 ![accent-divider](images/accent-divider.svg)
 ### ADR-011: Adopting Unmerged Upstream PRs (Reusable Pattern)
 
+> **Mealie portion retired:** [PR #65](https://github.com/seadogger-tech/seadogger-homelab/pull/65)
+> removed the Mealie build workflow, patch helpers and build-identity file.
+> Mealie now uses stock upstream `v3.30.0`, pinned by digest. The Mealie
+> examples below describe the historical decision, not the current deployment.
+> The Bedrock gateway portion is unaffected.
+
 - **Status:** Implemented & Verified
 - **Date:** 2026-07-25
 
@@ -136,7 +142,7 @@ the adopted PR commit(s) on top before building. This keeps tracking
 all *other* upstream changes automatically — only the specific adopted
 fix is pinned to a manual step, not the whole codebase.
 
-**Shape B — pinned stable tag** (`mealie`,
+**Shape B — pinned stable tag (historical; Mealie retired)** (`mealie`,
 `.github/workflows/mealie-rebuild.yaml`): the pipeline checks out a
 fixed upstream release tag (not the active dev branch) and cherry-picks
 on top of that. Used when the upstream project's default branch is

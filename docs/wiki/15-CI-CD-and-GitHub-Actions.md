@@ -2,7 +2,7 @@
 ![accent-divider](images/accent-divider.svg)
 # CI/CD and GitHub Actions
 
-This repository uses three main GitHub Actions workflows for automation: **Check and Publish Wiki** (checks wiki changes on pull requests and publishes reviewed source from `master`), **Upstream Bedrock Gateway Rebuild** (keeps the AWS gateway up-to-date every 6 hours, with 6 unmerged upstream PRs cherry-picked in), and **Mealie AI-Import Rebuild** (a pinned-tag build with 2 unmerged upstream PRs cherry-picked in, rebuilt only on demand). The latter two both follow the same "adopting unmerged upstream PRs" pattern — see [ADR-011](13-ADR-Index.md#adr-011-adopting-unmerged-upstream-prs-reusable-pattern) for the full rationale.
+GitHub Actions publishes the wiki, runs repository checks, and builds the Bedrock gateway, Hermes and signal-cli images. Mealie is deployed directly from a fixed upstream release pinned by digest; it has no custom image-build pipeline. The Bedrock gateway still uses the adopted-upstream-PR pattern described in [ADR-011](13-ADR-Index.md#adr-011-adopting-unmerged-upstream-prs-reusable-pattern).
 
 ![accent-divider](images/accent-divider.svg)
 
@@ -53,22 +53,11 @@ graph TB
         UpdateSHA[Commit New Identity<br/>to .github/upstream_sha]
     end
 
-    subgraph MealieFlow["🍲 Mealie AI-Import Rebuild"]
-        MealieTrigger[Manual / on cherry-pick change]
-        Checkout3[Checkout This Repo]
-        CheckoutTag[Checkout upstream Mealie<br/>@ pinned tag v3.21.0]
-        MealiePRStatus{Adopted PR<br/>merged/closed?}
-        MealieCherryPick[Cherry-pick 2 unmerged PRs<br/>#7618 #7825]
-        MealieBuild[Build Multi-Arch<br/>Yarn frontend + Python backend]
-        MealiePush[Push to ghcr.io<br/>mealie:v3.21.0-ai-import]
-    end
-
     Push --> WikiTrigger
     PR --> WikiTrigger
     Manual --> WikiTrigger
     Schedule --> BedrockTrigger
     Manual --> BedrockTrigger
-    Manual --> MealieTrigger
 
     WikiTrigger --> Checkout1
     Checkout1 --> Preflight
@@ -94,17 +83,8 @@ graph TB
     BuildPush --> PushGHCR
     PushGHCR --> UpdateSHA
 
-    MealieTrigger --> Checkout3
-    Checkout3 --> CheckoutTag
-    CheckoutTag --> MealiePRStatus
-    MealiePRStatus -->|Yes| MealieCherryPick
-    MealiePRStatus -->|No| MealieCherryPick
-    MealieCherryPick --> MealieBuild
-    MealieBuild --> MealiePush
-
     style WikiFlow fill:#2d5016,stroke:#5a9216,stroke-width:3px
     style BedrockFlow fill:#1e3a5f,stroke:#4a90e2,stroke-width:3px
-    style MealieFlow fill:#8b4513,stroke:#c17a3d,stroke-width:3px
     style Triggers fill:#ff9900,stroke:#ff9900,stroke-width:3px
 ```
 
@@ -289,68 +269,28 @@ sequenceDiagram
 - The merge-status warning step means adopted PRs don't silently rot forever once they land upstream for real
 
 ![accent-divider](images/accent-divider.svg)
-## Mealie AI-Import Rebuild
+## Mealie Upstream Image
 
-**Purpose:** Build a custom Mealie image with 2 unmerged upstream PRs cherry-picked in, giving a real "Force AI Import" button and a "Create from Text" page inside Mealie's own UI — the stock image has neither, and Mealie's scraper-selection logic is hardcoded server-side with no request-level override.
+Mealie pulls the stock `ghcr.io/mealie-recipes/mealie:v3.30.0` image,
+pinned by the multi-architecture digest in
+`deployments/mealie/deployment.yaml`. There is no local build, cherry-pick,
+repackaging or push to a Seadogger Mealie image registry.
 
-**File Location:** `core/.github/workflows/mealie-rebuild.yaml`
+[PR #65](https://github.com/seadogger-tech/seadogger-homelab/pull/65)
+removed the custom Mealie build workflow, its two patch helpers and its
+build-identity file. Historical workflow runs and old registry artifacts
+do not define the current deployment.
 
-**Key architectural difference from the Bedrock workflow:** this pipeline checks out a **pinned upstream release tag** (`v3.21.0`), not the active development branch (`mealie-next`). Mealie holds real household data — recipes, meal plans — so unattended tracking of in-progress upstream commits every 6 hours would be inappropriate. This workflow has no cron schedule; it only runs on `workflow_dispatch` (manual) or when re-triggered after bumping `UPSTREAM_TAG` or the cherry-picked PRs change.
+The Mealie ArgoCD Application reads `deployments/mealie` from the Core
+repository. Kubernetes pulls the exact upstream digest selected there.
+`imagePullPolicy: Always` checks that pinned reference when a pod starts;
+it does not select `:latest` or upgrade the chosen version.
 
-### Workflow Details
-
-```mermaid
-sequenceDiagram
-    participant Dev as Developer, manual trigger
-    participant GH as GitHub Actions
-    participant This as This Repo
-    participant Upstream as mealie-recipes/mealie<br/>@ v3.21.0 (pinned tag)
-    participant PR7618 as zdenek-stursa/mealie<br/>(Force AI Scraper checkbox)
-    participant PR7825 as bferd/mealie<br/>(Create from Text page)
-    participant GHCR as ghcr.io Registry
-
-    Dev->>GH: workflow_dispatch
-    GH->>This: Checkout master branch
-    GH->>Upstream: Checkout tag v3.21.0 (NOT mealie-next)
-
-    GH->>Upstream: Check status of #7618, #7825
-    alt Either PR no longer OPEN
-        GH-->>GH: ⚠️ Warning annotation<br/>check if it shipped in a release > v3.21.0
-    end
-
-    GH->>PR7618: Cherry-pick "Force OpenAI Scraper" checkbox
-    Note over GH: Applies cleanly on top of v3.21.0
-
-    GH->>PR7825: Cherry-pick "Create from Text" page
-    Note over GH: PR branch tip is a MERGE commit —<br/>cherry-pick the 2 real feature commits<br/>(fd8ab18e, 9fea1830) directly instead
-
-    GH->>GH: Compute build identity
-
-    alt Build identity changed
-        GH->>GH: Setup QEMU + Buildx
-        GH->>GHCR: Login (GITHUB_TOKEN)
-        GH->>GH: Build multi-arch image<br/>(full Yarn frontend + Python backend)
-        Note over GH: Much heavier build than the<br/>gateway's small Python-only image
-        GH->>GHCR: Push image<br/>Tags: v3.21.0-ai-import, sha-<short>
-        GH->>This: Update .github/mealie_upstream_sha
-    else Unchanged
-        GH-->>Dev: No changes, skip build
-    end
-```
-
-### Configuration
-
-**Trigger Events:**
-- **Automatic:** None — no cron schedule (deliberate; see rationale above)
-- **Manual:** `workflow_dispatch` only
-
-**Container Registry:**
-- **Registry:** `ghcr.io/seadogger-tech/mealie`
-- **Tags:** `v3.21.0-ai-import`, `sha-<short>`
-
-**Known cherry-pick gotcha:** PR #7825's contributor branch has a merge commit at its tip (upstream `mealie-next` was merged into the feature branch mid-review). `git cherry-pick` cannot replay a merge commit without `-m <parent>`, so the workflow targets the two actual feature commits (`fd8ab18e`, `9fea1830`) directly instead of the branch HEAD. If the contributor rebases/force-pushes, these SHAs may need updating — check `git log <branch>` for the real feature commits if this step starts failing.
-
-**Status as of 2026-07-25:** first real build triggered and in progress at time of writing — not yet cut over to the live Mealie deployment. Per [ADR-011](13-ADR-Index.md#adr-011-adopting-unmerged-upstream-prs-reusable-pattern), verify in a throwaway test pod before touching production, since the live Mealie instance holds real recipes and meal-plan data.
+To upgrade, open a PR that deliberately changes both the release tag and
+digest, verify ARM64 support, and follow the repository's review and deployment
+process. Check database migration and recovery requirements before rollout.
+Prompt overrides under `deployments/mealie/prompts` are runtime configuration
+mounted into the stock image, not a custom image build.
 
 ![accent-divider](images/accent-divider.svg)
 ## CI/CD Architecture Diagram
@@ -360,6 +300,7 @@ graph LR
     subgraph Developer["👨‍💻 Developer Workflow"]
         EditWiki[Edit docs/wiki/]
         EditCode[Update Bedrock Config]
+        EditMealie[Update pinned Mealie tag and digest]
         AdoptPR[Adopt a new unmerged<br/>upstream PR]
         Commit[git commit + push]
     end
@@ -367,13 +308,12 @@ graph LR
     subgraph GitHub["🔄 GitHub Actions"]
         WikiAction[publish-wiki.yml]
         BedrockAction[upstream-rebuild.yaml<br/>cron: every 6h]
-        MealieAction[mealie-rebuild.yaml<br/>manual only]
     end
 
     subgraph Outputs["📦 Outputs"]
         WikiSite[GitHub Wiki<br/>Updated Docs]
         GHCRBedrock[ghcr.io<br/>aws-bedrock-gateway image]
-        GHCRMealie[ghcr.io<br/>mealie:v3.21.0-ai-import image]
+        GHCRMealie[Upstream GHCR<br/>mealie v3.30.0 pinned by digest]
     end
 
     subgraph Deployment["🚀 Deployment"]
@@ -385,17 +325,17 @@ graph LR
 
     EditWiki --> Commit
     EditCode --> Commit
+    EditMealie --> Commit
+    Commit -->|Reviewed manifests| ArgoCD
     AdoptPR --> Commit
     Commit --> WikiAction
     Commit -.->|Indirectly| BedrockAction
-    Commit -.->|Indirectly| MealieAction
 
     WikiAction --> WikiSite
     BedrockAction --> GHCRBedrock
-    MealieAction --> GHCRMealie
 
     GHCRBedrock --> ArgoCD
-    GHCRMealie -.->|Manual cutover only —<br/>not yet in prod| K3sCluster
+    GHCRMealie -->|Pull pinned upstream image| MealiePod
     ArgoCD --> K3sCluster
     K3sCluster --> BedrockPod
     K3sCluster --> MealiePod
@@ -424,11 +364,10 @@ graph LR
   - Why: Push container images to GHCR, commit `.github/upstream_sha`, and query adopted-PR merge status via `gh pr view`
   - Setup: No action required (automatic)
 
-### Mealie AI-Import Rebuild
-- **Token:** `GITHUB_TOKEN` (automatic)
-  - Type: Workflow-scoped token (provided by GitHub Actions)
-  - Permissions: `packages:write`, `contents:write` — same shape as the Bedrock workflow
-  - Setup: No action required (automatic)
+### Mealie Upstream Pull
+Mealie has no build or package-publishing token requirement. The cluster pulls
+the selected public upstream image; normal repository credentials govern
+manifest changes and ArgoCD reads.
 
 ![accent-divider](images/accent-divider.svg)
 ## Adapting/Extending
@@ -508,12 +447,12 @@ gh api repos/seadogger-tech/seadogger-homelab/actions/jobs/<job-id> \
 - **Fix:** Move live evidence to private storage or repair the Markdown structure. For an intentional rewrite, record a reviewed exact-hash exception
 - **Verify:** Rerun `python3 -B useful_scripts/wiki/preflight.py` from the Core root
 
-**Bedrock/Mealie Rebuild Fails on Docker build:**
+**Bedrock Rebuild Fails on Docker build:**
 - **Symptom:** "buildx failed with: ERROR: failed to solve"
 - **Fix:** Check Dockerfile in upstream repo is valid
 - **Common cause:** Upstream introduced ARM64-incompatible dependencies
 
-**Bedrock/Mealie Rebuild Fails on a Cherry-Pick Step:**
+**Bedrock Rebuild Fails on a Cherry-Pick Step:**
 - **Symptom:** `::error::Cherry-pick of PR #N (<sha>) failed — likely diverged from upstream main`
 - **Cause:** Upstream has changed the same lines the adopted PR touches, since the last time the cherry-pick was verified
 - **Fix:** Re-run the cherry-pick locally against current upstream, resolve the new conflict, update `.github/scripts/resolve_bedrock_gateway_conflicts.py` (or the workflow's inline logic for a one-off conflict) accordingly
