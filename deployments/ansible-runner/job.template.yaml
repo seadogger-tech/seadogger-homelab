@@ -1,0 +1,62 @@
+---
+# One-shot Ansible run. Copy, set the three REPLACE_* values, then create.
+# Never apply this file unmodified and never commit a filled-in copy.
+#   REPLACE_RUN_ID   short unique suffix, e.g. 20261117-pki
+#   REPLACE_REVISION full 40-char Core commit SHA (not a branch)
+#   REPLACE_ARGS     ansible-playbook arguments, e.g. main.yml -e '{"enable_internal_pki": true}'
+# Prerequisite: Secret ansible-runner-private (keys: config.yml, hosts.ini, id_ed25519,
+# known_hosts) created by the owner. See docs/wiki/28-Ansible-Runner.md.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ansible-run-REPLACE_RUN_ID
+  namespace: ansible-runner
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 604800
+  template:
+    spec:
+      restartPolicy: Never
+      nodeSelector:
+        kubernetes.io/arch: arm64
+      initContainers:
+        - name: checkout
+          image: alpine/git:2.47.2
+          command: ["/bin/sh", "-ec"]
+          args:
+            - |
+              git clone https://github.com/seadogger-tech/seadogger-homelab.git /work/core
+              git -C /work/core checkout --detach REPLACE_REVISION
+              git -C /work/core rev-parse HEAD
+          volumeMounts:
+            - {name: work, mountPath: /work}
+      containers:
+        - name: ansible
+          image: python:3.12-slim-bookworm
+          workingDir: /work/core/ansible
+          command: ["/bin/sh", "-ec"]
+          args:
+            - |
+              apt-get update -qq && apt-get install -y -qq --no-install-recommends openssh-client >/dev/null
+              pip install --quiet 'ansible-core>=2.17,<2.19' 'kubernetes' 'PyYAML' 'jinja2'
+              install -m 0600 /private/config.yml config.yml
+              install -m 0600 /private/hosts.ini hosts.ini
+              install -d -m 0700 ~/.ssh
+              install -m 0600 /private/id_ed25519 ~/.ssh/id_ed25519
+              install -m 0644 /private/known_hosts ~/.ssh/known_hosts
+              echo "revision: $(git -C /work/core rev-parse HEAD)"
+              ansible --version | head -1
+              exec ansible-playbook REPLACE_ARGS
+          env:
+            - {name: ANSIBLE_FORCE_COLOR, value: "0"}
+            - {name: ANSIBLE_HOST_KEY_CHECKING, value: "True"}
+          volumeMounts:
+            - {name: work, mountPath: /work}
+            - {name: private, mountPath: /private, readOnly: true}
+      volumes:
+        - name: work
+          emptyDir: {}
+        - name: private
+          secret:
+            secretName: ansible-runner-private
+            defaultMode: 0400
