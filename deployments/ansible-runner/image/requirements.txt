@@ -1,0 +1,5 @@
+# Pin exact versions when building; update together with ANSIBLE_CORE_VERSION and record in the wiki page.
+# TODO(owner/Spock at first build): replace with `pip freeze`-verified versions from the controller.
+kubernetes
+PyYAML
+jinja2
