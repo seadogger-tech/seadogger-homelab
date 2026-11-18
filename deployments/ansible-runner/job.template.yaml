@@ -2,15 +2,16 @@
 # One-shot Ansible run. Copy, set the REPLACE_* values, then create.
 # Never apply this file unmodified and never commit a filled-in copy.
 #   REPLACE_RUN_ID        short unique suffix, e.g. 20261117-check
-#   REPLACE_IMAGE         pinned runner image by digest (repo@sha256:...), see image/Dockerfile
-#   REPLACE_REVISION      full 40-char Core commit SHA (not a branch)
-#   REPLACE_PRO_REPO      git@github.com:<org>/<pro-repo>.git, or empty to skip the Pro checkout
+#   REPLACE_IMAGE         ghcr.io/seadogger-tech/ansible-runner@sha256:<digest> (never a tag), see image/Dockerfile
+#   REPLACE_REVISION      full 40-char Core commit SHA (not a branch); must include guard.py
+#   REPLACE_PRO_REPO      git@github.com:seadogger-tech/seadogger-homelab-pro.git, or empty to skip the Pro checkout
 #   REPLACE_PRO_REVISION  full 40-char Pro commit SHA (ignored when REPLACE_PRO_REPO is empty)
-#   REPLACE_WORKDIR       /work/core/ansible, or the Pro playbook directory under /work/pro
-#   REPLACE_ARGS          ansible-playbook arguments, e.g. main.yml --check --diff
+#   REPLACE_WORKDIR       /work/core/ansible, or /work/pro/ansible for Pro (Pro pins Core as submodule core/)
+#   REPLACE_ARGS          ansible-playbook arguments, e.g. main.yml -i hosts.ini --check --diff
 # Prerequisite: Secret ansible-runner-private (config.yml, hosts.ini, id_ed25519, known_hosts,
 # optional pro_deploy_key) from refresh-secret.sh. See docs/wiki/28-Ansible-Runner.md.
-# The Job refuses cleanup and cold-start playbooks: they wipe or restart the cluster the runner lives in.
+# Before running, guard.py evaluates the effective variables (config.yml + any -e) and refuses to run
+# wipe, cleanup or cold-start stage 1/2 flags: they wipe or restart the cluster the runner lives in.
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -36,9 +37,11 @@ spec:
               PRO_REPO='REPLACE_PRO_REPO'
               if [ -n "$PRO_REPO" ]; then
                 export GIT_SSH_COMMAND='ssh -i /private/pro_deploy_key -o UserKnownHostsFile=/private/known_hosts -o StrictHostKeyChecking=yes'
-                git clone "$PRO_REPO" /work/pro
+                git clone --recurse-submodules "$PRO_REPO" /work/pro
                 git -C /work/pro checkout --detach REPLACE_PRO_REVISION
+                git -C /work/pro submodule update --init --recursive
                 git -C /work/pro rev-parse HEAD
+                git -C /work/pro/core rev-parse HEAD
               fi
           volumeMounts:
             - {name: work, mountPath: /work}
@@ -54,10 +57,6 @@ spec:
               REPLACE_ARGS
               EOF_ARGS
               )
-              case "$ARGS" in
-                *cleanup*|*cold-start*|*cold_start*|*coldstart*)
-                  echo "refused: cleanup/cold-start stages run from the owner's controller, not in-cluster" >&2; exit 2;;
-              esac
               install -m 0600 /private/config.yml config.yml
               install -m 0600 /private/hosts.ini hosts.ini
               install -d -m 0700 ~/.ssh
@@ -67,7 +66,8 @@ spec:
               [ -d /work/pro ] && echo "pro revision: $(git -C /work/pro rev-parse HEAD)"
               echo "config.yml sha256: $(sha256sum config.yml | cut -d' ' -f1)"
               ansible --version | head -1
-              exec ansible-playbook REPLACE_ARGS
+              python3 /work/core/deployments/ansible-runner/guard.py "$ARGS"
+              exec ansible-playbook $ARGS
           env:
             - {name: ANSIBLE_FORCE_COLOR, value: "0"}
             - {name: ANSIBLE_HOST_KEY_CHECKING, value: "True"}

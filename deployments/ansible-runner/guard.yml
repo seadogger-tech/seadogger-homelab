@@ -1,0 +1,23 @@
+---
+# Refuses to run when the EFFECTIVE variables (config.yml plus any -e overrides) enable a stage
+# that wipes or restarts the cluster the runner lives in. Invoked by guard.py before every run.
+# Stage 2 is included because it restarts k3s and Rook underneath the runner.
+- hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    destructive_flags:
+      - cold_start_stage_1_wipe_cluster
+      - enable_wipe_k3s_cluster
+      - perform_physical_disk_wipe
+      - cold_start_stage_2_install_infrastructure
+      - run_pod_cleanup
+      - run_infrastructure_cleanup
+  tasks:
+    - name: Refuse destructive stages
+      ansible.builtin.assert:
+        that:
+          - not (vars[item] | default(false) | bool)
+        fail_msg: "refused: {{ item }} is true in the effective variables; run this from the owner's controller, not in-cluster"
+        quiet: true
+      loop: "{{ destructive_flags }}"
