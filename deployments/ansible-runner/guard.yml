@@ -1,7 +1,9 @@
 ---
 # Refuses to run when the EFFECTIVE variables (config.yml plus any -e overrides) enable a stage
 # that wipes or restarts the cluster the runner lives in. Invoked by guard.py before every run.
-# Stage 2 is included because it restarts k3s and Rook underneath the runner.
+# Stage 2 is included because it restarts k3s and Rook underneath the runner. The enable_* flags below
+# are derived from cold_start_stage_2_install_infrastructure in example.config.yml; they are blocked
+# too so that overriding them directly cannot bypass the stage-2 check.
 - hosts: localhost
   connection: local
   gather_facts: false
@@ -13,6 +15,12 @@
       - cold_start_stage_2_install_infrastructure
       - run_pod_cleanup
       - run_infrastructure_cleanup
+      - enable_k3s_control_plane
+      - enable_k3s_workers
+      - enable_rook_ceph_part1
+      - enable_metallb_native
+      - enable_argocd_native
+      - enable_raspberry_pi_config
   tasks:
     - name: Refuse destructive stages
       ansible.builtin.assert:
