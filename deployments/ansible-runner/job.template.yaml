@@ -7,11 +7,11 @@
 #   REPLACE_PRO_REPO      git@github.com:seadogger-tech/seadogger-homelab-pro.git, or empty to skip the Pro checkout
 #   REPLACE_PRO_REVISION  full 40-char Pro commit SHA (ignored when REPLACE_PRO_REPO is empty)
 #   REPLACE_WORKDIR       /work/core/ansible, or /work/pro/ansible for Pro (Pro pins Core as submodule core/)
-#   REPLACE_ARGS          ansible-playbook arguments, e.g. main.yml -i hosts.ini --check --diff
+#   REPLACE_ARGS          ansible-playbook arguments, shell-quoted as one string, e.g. main.yml -i hosts.ini --check --diff
 # Prerequisite: Secret ansible-runner-private (config.yml, hosts.ini, id_ed25519, known_hosts,
 # optional pro_deploy_key) from refresh-secret.sh. See docs/wiki/28-Ansible-Runner.md.
-# Before running, guard.py evaluates the effective variables (config.yml + any -e) and refuses to run
-# wipe, cleanup or cold-start stage 1/2 flags: they wipe or restart the cluster the runner lives in.
+# guard.py parses REPLACE_ARGS once, evaluates the effective variables (config.yml + any -e), refuses
+# wipe, cleanup and cold-start stage 1/2 flags, then execs ansible-playbook with the same parsed list.
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -19,10 +19,12 @@ metadata:
   namespace: ansible-runner
 spec:
   backoffLimit: 0
+  activeDeadlineSeconds: 7200
   ttlSecondsAfterFinished: 604800
   template:
     spec:
       restartPolicy: Never
+      automountServiceAccountToken: false
       nodeSelector:
         kubernetes.io/arch: arm64
       initContainers:
@@ -43,6 +45,9 @@ spec:
                 git -C /work/pro rev-parse HEAD
                 git -C /work/pro/core rev-parse HEAD
               fi
+          resources:
+            requests: {cpu: 100m, memory: 128Mi}
+            limits: {cpu: "1", memory: 512Mi}
           volumeMounts:
             - {name: work, mountPath: /work}
             - {name: private, mountPath: /private, readOnly: true}
@@ -66,11 +71,13 @@ spec:
               [ -d /work/pro ] && echo "pro revision: $(git -C /work/pro rev-parse HEAD)"
               echo "config.yml sha256: $(sha256sum config.yml | cut -d' ' -f1)"
               ansible --version | head -1
-              python3 /work/core/deployments/ansible-runner/guard.py "$ARGS"
-              exec ansible-playbook $ARGS
+              exec python3 /work/core/deployments/ansible-runner/guard.py "$ARGS"
           env:
             - {name: ANSIBLE_FORCE_COLOR, value: "0"}
             - {name: ANSIBLE_HOST_KEY_CHECKING, value: "True"}
+          resources:
+            requests: {cpu: 250m, memory: 256Mi}
+            limits: {cpu: "2", memory: 1Gi}
           volumeMounts:
             - {name: work, mountPath: /work}
             - {name: private, mountPath: /private, readOnly: true}
