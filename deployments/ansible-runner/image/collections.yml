@@ -1,0 +1,13 @@
+# Exact collection pins, matching the owner's controller (ansible-galaxy collection list).
+# Only the collections the Core and Pro playbooks use, not the full set.
+collections:
+  - name: kubernetes.core
+    version: 6.5.0
+  - name: community.general
+    version: 13.4.0
+  - name: community.okd
+    version: 5.0.0
+  - name: ansible.posix
+    version: 2.2.2
+  - name: ansible.utils
+    version: 6.1.0
