@@ -81,7 +81,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_ACTOR: ${{ github.actor }}
-        run: .github/scripts/ghcr_tag_exists.sh "$IMAGE_REPO" "${{ steps.tag.outputs.tag }}"
+        run: bash .github/scripts/ghcr_tag_exists.sh "$IMAGE_REPO" "${{ steps.tag.outputs.tag }}"
 
       - name: Decide whether to build
         id: plan
