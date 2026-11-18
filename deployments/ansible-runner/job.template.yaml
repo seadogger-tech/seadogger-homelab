@@ -75,6 +75,9 @@ spec:
           env:
             - {name: ANSIBLE_FORCE_COLOR, value: "0"}
             - {name: ANSIBLE_HOST_KEY_CHECKING, value: "True"}
+            # Core's ansible.cfg sets collections_path = ./, which hides the image's collections.
+            # The env var overrides the cfg; keep ./ for the repo's vendored collections.
+            - {name: ANSIBLE_COLLECTIONS_PATH, value: "./:/usr/share/ansible/collections"}
           resources:
             requests: {cpu: 250m, memory: 256Mi}
             limits: {cpu: "2", memory: 1Gi}
