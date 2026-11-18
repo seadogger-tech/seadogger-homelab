@@ -1,0 +1,42 @@
+---
+# Refuses to run when the EFFECTIVE variables (config.yml plus any -e overrides) enable a stage
+# that wipes or restarts the cluster the runner lives in. Invoked by guard.py before every run.
+# Stage 2 is included because it restarts k3s and Rook underneath the runner. The derived enable_*
+# flags are blocked too so that overriding them directly cannot bypass the stage-2 check.
+# main.yml treats several derived flags as TRUE when undefined (default(true)), so they must be
+# explicitly defined (and false) in the runner config; an undefined derived flag is refused.
+- hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    destructive_flags:
+      - cold_start_stage_1_wipe_cluster
+      - enable_wipe_k3s_cluster
+      - perform_physical_disk_wipe
+      - cold_start_stage_2_install_infrastructure
+      - run_pod_cleanup
+      - run_infrastructure_cleanup
+    derived_flags:
+      - enable_k3s_control_plane
+      - enable_k3s_workers
+      - enable_rook_ceph_part1
+      - enable_metallb_native
+      - enable_argocd_native
+      - enable_raspberry_pi_config
+  tasks:
+    - name: Refuse destructive stages
+      ansible.builtin.assert:
+        that:
+          - not (vars[item] | default(false) | bool)
+        fail_msg: "refused: {{ item }} is true in the effective variables; run this from the owner's controller, not in-cluster"
+        quiet: true
+      loop: "{{ destructive_flags }}"
+
+    - name: Refuse derived stage-2 flags that are undefined or true
+      ansible.builtin.assert:
+        that:
+          - vars[item] is defined
+          - not (vars[item] | bool)
+        fail_msg: "refused: {{ item }} must be explicitly defined and false in the runner config.yml (main.yml defaults some of these to true when undefined)"
+        quiet: true
+      loop: "{{ derived_flags }}"

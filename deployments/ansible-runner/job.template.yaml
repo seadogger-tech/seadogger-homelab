@@ -1,0 +1,90 @@
+---
+# One-shot Ansible run. Copy, set the REPLACE_* values, then create.
+# Never apply this file unmodified and never commit a filled-in copy.
+#   REPLACE_RUN_ID        short unique suffix, e.g. 20261117-check
+#   REPLACE_IMAGE         ghcr.io/seadogger-tech/ansible-runner@sha256:<digest> (never a tag), see image/Dockerfile
+#   REPLACE_REVISION      full 40-char Core commit SHA (not a branch); must include guard.py
+#   REPLACE_PRO_REPO      git@github.com:seadogger-tech/seadogger-homelab-pro.git, or empty to skip the Pro checkout
+#   REPLACE_PRO_REVISION  full 40-char Pro commit SHA (ignored when REPLACE_PRO_REPO is empty)
+#   REPLACE_WORKDIR       /work/core/ansible, or /work/pro/ansible for Pro (Pro pins Core as submodule core/)
+#   REPLACE_ARGS          ansible-playbook arguments, shell-quoted as one string, e.g. main.yml -i hosts.ini --check --diff
+# Prerequisite: Secret ansible-runner-private (config.yml, hosts.ini, id_ed25519, known_hosts,
+# optional pro_deploy_key) from refresh-secret.sh. See docs/wiki/28-Ansible-Runner.md.
+# guard.py parses REPLACE_ARGS once, evaluates the effective variables (config.yml + any -e), refuses
+# wipe, cleanup and cold-start stage 1/2 flags, then execs ansible-playbook with the same parsed list.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ansible-run-REPLACE_RUN_ID
+  namespace: ansible-runner
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 7200
+  ttlSecondsAfterFinished: 604800
+  template:
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      nodeSelector:
+        kubernetes.io/arch: arm64
+      initContainers:
+        - name: checkout
+          image: REPLACE_IMAGE
+          command: ["/bin/sh", "-ec"]
+          args:
+            - |
+              git clone https://github.com/seadogger-tech/seadogger-homelab.git /work/core
+              git -C /work/core checkout --detach REPLACE_REVISION
+              git -C /work/core rev-parse HEAD
+              PRO_REPO='REPLACE_PRO_REPO'
+              if [ -n "$PRO_REPO" ]; then
+                export GIT_SSH_COMMAND='ssh -i /private/pro_deploy_key -o UserKnownHostsFile=/private/known_hosts -o StrictHostKeyChecking=yes'
+                git clone --recurse-submodules "$PRO_REPO" /work/pro
+                git -C /work/pro checkout --detach REPLACE_PRO_REVISION
+                git -C /work/pro submodule update --init --recursive
+                git -C /work/pro rev-parse HEAD
+                git -C /work/pro/core rev-parse HEAD
+              fi
+          resources:
+            requests: {cpu: 100m, memory: 128Mi}
+            limits: {cpu: "1", memory: 512Mi}
+          volumeMounts:
+            - {name: work, mountPath: /work}
+            - {name: private, mountPath: /private, readOnly: true}
+      containers:
+        - name: ansible
+          image: REPLACE_IMAGE
+          workingDir: REPLACE_WORKDIR
+          command: ["/bin/sh", "-ec"]
+          args:
+            - |
+              ARGS=$(cat <<'EOF_ARGS'
+              REPLACE_ARGS
+              EOF_ARGS
+              )
+              install -m 0600 /private/config.yml config.yml
+              install -m 0600 /private/hosts.ini hosts.ini
+              install -d -m 0700 ~/.ssh
+              install -m 0600 /private/id_ed25519 ~/.ssh/id_ed25519
+              install -m 0644 /private/known_hosts ~/.ssh/known_hosts
+              echo "core revision: $(git -C /work/core rev-parse HEAD)"
+              [ -d /work/pro ] && echo "pro revision: $(git -C /work/pro rev-parse HEAD)"
+              echo "config.yml sha256: $(sha256sum config.yml | cut -d' ' -f1)"
+              ansible --version | head -1
+              exec python3 /work/core/deployments/ansible-runner/guard.py "$ARGS"
+          env:
+            - {name: ANSIBLE_FORCE_COLOR, value: "0"}
+            - {name: ANSIBLE_HOST_KEY_CHECKING, value: "True"}
+          resources:
+            requests: {cpu: 250m, memory: 256Mi}
+            limits: {cpu: "2", memory: 1Gi}
+          volumeMounts:
+            - {name: work, mountPath: /work}
+            - {name: private, mountPath: /private, readOnly: true}
+      volumes:
+        - name: work
+          emptyDir: {}
+        - name: private
+          secret:
+            secretName: ansible-runner-private
+            defaultMode: 0400

@@ -1,0 +1,60 @@
+name: Build ansible-runner
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/build-ansible-runner.yaml
+      - deployments/ansible-runner/image/**
+  workflow_dispatch:        # allow manual run
+
+permissions:
+  contents: read
+  packages: write           # push to GHCR
+
+concurrency:
+  group: build-ansible-runner
+  cancel-in-progress: false
+
+env:
+  IMAGE: ghcr.io/seadogger-tech/ansible-runner
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Setup Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & Push (arm64)
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: deployments/ansible-runner/image
+          platforms: linux/arm64
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:ansible-core-2.21.4
+            ${{ env.IMAGE }}:sha-${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.description=Pinned ansible-core runner for in-cluster playbook runs
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Report immutable image digest
+        run: echo "Built ${{ env.IMAGE }}@${{ steps.build.outputs.digest }}"

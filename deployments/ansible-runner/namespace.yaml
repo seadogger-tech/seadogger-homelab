@@ -1,0 +1,7 @@
+---
+# Applied once by an operator. Intentionally NOT tracked by an ArgoCD Application:
+# runs are manual and must never be triggered by a sync.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ansible-runner
