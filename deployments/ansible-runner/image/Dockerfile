@@ -8,5 +8,10 @@ ARG ANSIBLE_CORE_VERSION=2.21.4
 RUN apt-get update -qq \
  && apt-get install -y -qq --no-install-recommends openssh-client git ca-certificates \
  && rm -rf /var/lib/apt/lists/*
-COPY requirements.txt /tmp/requirements.txt
+COPY requirements.txt collections.yml /tmp/
 RUN pip install --no-cache-dir "ansible-core==${ANSIBLE_CORE_VERSION}" -r /tmp/requirements.txt
+# Collections go in the system path so they resolve for any user/HOME the Job runs as.
+# Core also vendors an old community.kubernetes under ansible/ansible_collections; it is a
+# different collection name, so it does not shadow kubernetes.core 6.5.0 installed here.
+RUN ansible-galaxy collection install -p /usr/share/ansible/collections -r /tmp/collections.yml \
+ && ansible-galaxy collection list -p /usr/share/ansible/collections
