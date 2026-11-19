@@ -60,9 +60,13 @@ The Secret is a snapshot. **Re-run `refresh-secret.sh` after every change to `co
 ## Running
 
 1. The owner confirms in the task: Core SHA (and Pro SHA), exact `ansible-playbook` arguments, whether it mutates the cluster. AGENTS.md requires this for production runs.
-2. Prefer a no-change preflight first: `main.yml -i hosts.ini --syntax-check`, then `--check --diff --tags <tag>`.
+2. Prefer a no-change preflight first: `main.yml -i hosts.ini --syntax-check`. `--check --diff` reaches the nodes but has a known limit (below), so read it as a connectivity and dry-run signal, not a clean pass.
 3. Fill the template and create the Job. Record the exact command, SHAs and config hash in the task.
 4. Read the result: `kubectl -n ansible-runner logs job/ansible-run-<id>`. The PLAY RECAP must show `failed=0 unreachable=0` for all four nodes. Post only the recap and counts to the task; keep full logs in the cluster.
+
+### `--check` limit
+
+Check mode skips `shell`/`command` tasks, so any later task that uses their output can fail even though nothing is wrong. Known case: with `-e '{"enable_internal_pki": true}'`, `internal_pki_deploy.yml` "Create Kubernetes Secret for Intermediate CA" fails on yoda because the earlier "Read ... CA cert and key" shell tasks were skipped and returned nothing. Treat a `--check` failure at a task that consumes skipped shell output as a check-mode artifact; confirm in the log that the failing task's inputs were skipped. Fixing it would need `check_mode: false` on those read-only tasks, which is not done.
 
 ## Failures
 
@@ -85,6 +89,11 @@ ansible-playbook main.yml -e '{"enable_internal_pki": true}'   # example: the ve
 
 Post back the PLAY RECAP and the `git rev-parse HEAD`.
 
-## Not yet verified
+## Verification record
 
-The route has not been exercised: no image is built, no Secret exists, the pinned `requirements.txt` versions have not been build-tested, and the guard has not been run against real `config.yml`. Acceptance requires one owner-approved run (`--syntax-check` or `--check` is enough) with its command, revisions and recap recorded in the Paperclip task. The owner has put the first run on hold. The Secret is created last, after merge.
+Accepted by the owner on the Paperclip task OCE-130 (2026-11-19):
+
+- `--syntax-check`: Job `ansible-run-20261118-syntax3`, Core `800407866fff`, passed.
+- `--check --diff`: Job `ansible-run-20261119-check1`, Core `13d3b5748d713c83d92f6c278ced2833f68b622a`, image digest `sha256:3a3da79b401c518bc3c2f8cc29f13f1597e3aa53621414b39e04d32a392c8944`, arguments `main.yml -i hosts.ini --check --diff -e '{"enable_internal_pki": true}'`. The guard passed and SSH, host-key checking and collections worked on all 4 nodes. Recap: anakin, obiwan, rey `failed=0`; yoda `failed=1` from the `--check` limit above.
+
+Not yet exercised: Pro playbooks (needs Pro `config.yml`, `hosts.ini` and deploy key in the Secret), and a real (non-check) run through the runner.
