@@ -28,12 +28,10 @@ Note: Prefer exposing application UIs via Ingress + TLS (cert-manager) at the Tr
 | VIP            | Purpose            |
 |----------------|--------------------|
 | `192.168.1.241` | Traefik (ingress)  |
-| `192.168.1.242` | Bedrock Gateway    |
 | `192.168.1.250` | Pi-hole DNS        |
 
 ![accent-divider.svg](images/accent-divider.svg)
 ### Ingress Hosts (TLS terminates at Traefik `192.168.1.241`) via PiHole DNS
-- `openwebui.seadogger-homelab`
 - `argocd.seadogger-homelab`
 - `ceph.seadogger-homelab`
 - `pihole.seadogger-homelab`
@@ -90,12 +88,6 @@ graph TB
         Nextcloud[Nextcloud]
     end
 
-    subgraph Encryption["🔐 AWS Encryption"]
-        Secret[K8s Secret<br/>aws-credentials]
-        BG[Bedrock Gateway<br/>Proxy]
-        AWS[AWS Bedrock API]
-    end
-
     LAN -->|HTTPS:443| EntryPoint
     LAN -->|HTTP:80| Redirect
     Redirect -->|308 HTTPS:443| LAN
@@ -114,23 +106,17 @@ graph TB
     IntermediateCA --> RootCA
     CMController --> TLSStore
 
-    Apps -->|HTTP Internal| BG
-    BG -->|Reads| Secret
-    BG -->|HTTPS + TLS 1.3| AWS
-
     style UDM fill:#1e3a5f,stroke:#4a90e2,stroke-width:3px
     style MetalLB fill:#1e3a5f,stroke:#4a90e2,stroke-width:3px
     style Traefik fill:#1e3a5f,stroke:#4a90e2,stroke-width:3px
     style CertManager fill:#2d5016,stroke:#5a9216,stroke-width:3px
     style Apps fill:#2d5016,stroke:#5a9216,stroke-width:3px
-    style Encryption fill:#7b1fa2,stroke:#9c27b0,stroke-width:2px
     style Redirect fill:#2d5016,stroke:#5a9216,stroke-width:2px
 ```
 
 **Security Features:**
 - **External Access:** WireGuard VPN required for remote access
 - **TLS Everywhere:** All ingress traffic uses cert-manager certificates
-- **AWS Encryption:** Bedrock API calls use TLS 1.3 with AWS credentials from Kubernetes secrets
 - **HTTP to HTTPS:** Each application has a `web` IngressRoute that uses a namespace-local `redirectScheme` middleware to send its hostname permanently to port 443. Its `websecure` IngressRoute serves the application with TLS. Requests for unconfigured hostnames do not match an application route.
 
 To check an application from a network that can reach the Traefik VIP, replace the hostname and VIP below. The first response should be `308` with a `Location` header using the same hostname and path on `https://`. Check the HTTPS endpoint separately with a client that trusts the internal root CA.

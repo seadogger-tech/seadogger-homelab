@@ -387,7 +387,6 @@
   loop:
     - "ceph-dashboard-certificate.yml"
     - "argocd-certificate.yml"
-    - "openwebui-certificate.yml"
     - "nextcloud-certificate.yml"
     - "jellyfin-certificate.yml"
     - "pihole-certificate.yml"
@@ -405,7 +404,6 @@
   loop:
     - "ceph-dashboard-certificate.yml"
     - "argocd-certificate.yml"
-    - "openwebui-certificate.yml"
     - "nextcloud-certificate.yml"
     - "jellyfin-certificate.yml"
     - "pihole-certificate.yml"
@@ -422,7 +420,6 @@
   loop:
     - "ceph-dashboard-certificate.yml"
     - "argocd-certificate.yml"
-    - "openwebui-certificate.yml"
     - "nextcloud-certificate.yml"
     - "jellyfin-certificate.yml"
     - "pihole-certificate.yml"
