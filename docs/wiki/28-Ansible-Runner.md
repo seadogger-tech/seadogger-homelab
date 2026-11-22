@@ -7,13 +7,33 @@ A manual, in-cluster way to run the Core (and optionally Pro) playbooks without 
 | Item | Choice |
 | --- | --- |
 | Controller | One-shot Job (`deployments/ansible-runner/job.template.yaml`), ARM64, `backoffLimit: 0`, `activeDeadlineSeconds: 7200`, no service-account token, CPU/memory limits |
-| Image | `ghcr.io/seadogger-tech/ansible-runner`, built by `.github/workflows/build-ansible-runner.yaml` from `deployments/ansible-runner/image/`, pinned by digest. ansible-core 2.21.4 on Python 3.14 (base image pinned by digest), matching the owner's controller. Nothing is installed at run time |
+| Image | `ghcr.io/seadogger-tech/ansible-runner`, built by `.github/workflows/build-ansible-runner.yaml` from `deployments/ansible-runner/image/`, pinned by digest. ansible-core 2.21.4 on Python 3.14 (base image pinned by digest), matching the owner's controller, plus the pinned collections listed below. Nothing is installed at run time |
 | Repository revisions | Core (public) at an explicit 40-char SHA. Optional Pro (`seadogger-tech/seadogger-homelab-pro`, private) at its own SHA via a read-only deploy key, checked out with `--recurse-submodules` (Pro pins Core at `core/`). Never a branch |
 | Working directory | `/work/core/ansible` for Core. `/work/pro/ansible` for Pro (playbook `main.yml`, run with `-i hosts.ini`) |
 | Inventory and configuration | `hosts.ini` and `config.yml` from Secret `ansible-runner-private` |
 | Credentials | Secret `ansible-runner-private`: `config.yml`, `hosts.ini`, `id_ed25519` (SSH key for `pi`), `known_hosts` (nodes and github.com), optional `pro_deploy_key` (read-only deploy key on the Pro repo). Created by the owner; never in tasks, comments or git |
 | Invocation | Spock creates the Job through the granted Kubernetes connection, only after the owner confirms the exact run in the task |
 | Refused | `guard.py` evaluates the effective variables before every run and refuses if any destructive flag is true (below) |
+
+### Collections in the image
+
+The image installs exactly the collections the Core and Pro playbooks use, at the versions on the owner's controller (PR #73):
+
+| Collection | Version |
+| --- | --- |
+| `kubernetes.core` | 6.5.0 |
+| `community.general` | 13.4.0 |
+| `community.okd` | 5.0.0 |
+| `ansible.posix` | 2.2.2 |
+| `ansible.utils` | 6.1.0 |
+
+They install into the system collections path, `/usr/share/ansible/collections`. Core also vendors an old `community.kubernetes` at `ansible/ansible_collections/`. That is a different collection name, so it does not shadow `kubernetes.core` 6.5.0.
+
+**Collections path.** Core's `ansible/ansible.cfg` sets `collections_path = ./`, which hides the image's system path. The Job template therefore sets `ANSIBLE_COLLECTIONS_PATH=./:/usr/share/ansible/collections` (PR #74). If a run fails with `couldn't resolve module/action '...'` (for example `community.general.modprobe`), check that this variable is still set in the Job and that the collection is in the table above. Pro's `ansible.cfg` may set its own path; check it before the first Pro run.
+
+### Current image digest
+
+Verified runs used `ghcr.io/seadogger-tech/ansible-runner@sha256:3a3da79b401c518bc3c2f8cc29f13f1597e3aa53621414b39e04d32a392c8944` (built from the PR #73 merge, `821a4af`, with the collections). This is the current digest until the image changes. When the Dockerfile or its pins change, rebuild with the workflow, record the new digest here and use it in the Job. The earlier digest `sha256:c5541f9b...` has no collections and must not be used.
 
 ### Who can read the Secret
 
@@ -71,6 +91,7 @@ Check mode skips `shell`/`command` tasks, so any later task that uses their outp
 ## Failures
 
 - `Permission denied (publickey)` or host key error: the Secret key or `known_hosts` is wrong. Fix the Secret; do not disable host key checking.
+- `couldn't resolve module/action`: a collection is missing from the image, or `ANSIBLE_COLLECTIONS_PATH` is not set in the Job (see Collections path above).
 - Job fails partway: the playbook is idempotent but not transactional. Diagnose with [the recovery runbook](17-Runbooks#diagnose-before-recovery) before a rerun. `backoffLimit: 0` prevents automatic retries.
 - `ImagePullBackOff`: the GHCR package is still private, or the digest is wrong.
 - `DeadlineExceeded`: the run hit the 2-hour limit; check the log before rerunning.
@@ -93,7 +114,11 @@ Post back the PLAY RECAP and the `git rev-parse HEAD`.
 
 Accepted by the owner on the Paperclip task OCE-130 (2026-11-19):
 
-- `--syntax-check`: Job `ansible-run-20261118-syntax3`, Core `800407866fff`, passed.
+- `--syntax-check`: Job `ansible-run-20261118-syntax3`, Core `800407866fff`, passed. The first attempt (`-syntax`) failed on missing collections (bare image) and the second (`-syntax2`) on the hidden collections path; the third passed with `ANSIBLE_COLLECTIONS_PATH` set by hand, which PR #74 then made part of the Job template.
 - `--check --diff`: Job `ansible-run-20261119-check1`, Core `13d3b5748d713c83d92f6c278ced2833f68b622a`, image digest `sha256:3a3da79b401c518bc3c2f8cc29f13f1597e3aa53621414b39e04d32a392c8944`, arguments `main.yml -i hosts.ini --check --diff -e '{"enable_internal_pki": true}'`. The guard passed and SSH, host-key checking and collections worked on all 4 nodes. Recap: anakin, obiwan, rey `failed=0`; yoda `failed=1` from the `--check` limit above.
 
-Not yet exercised: Pro playbooks (needs Pro `config.yml`, `hosts.ini` and deploy key in the Secret), and a real (non-check) run through the runner.
+## Open follow-ups
+
+- `refresh-secret.sh` assumes a local `kubectl`, which the owner's Mac does not have. It should apply the Secret through yoda. Not done; until then, apply the Secret from a host that has cluster access.
+- Pro playbooks are not exercised: the Secret still needs Pro's `config.yml`, `hosts.ini` and the `pro_deploy_key`, and Pro's `ansible.cfg` collections path needs checking.
+- No real (non-check) run has gone through the runner yet.
