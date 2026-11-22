@@ -15,8 +15,6 @@ This document provides a comprehensive analysis of the Seadogger Homelab codebas
 3. 🟠 **HIGH:** Deployment Dependencies Refactor (Untangle spider web, GitOps everything)
 4. 🟡 **MEDIUM:** Ansible Architecture Improvements
 5. 🟡 **MEDIUM:** K3s Best Practices & GitOps Standardization
-6. 🟡 **MEDIUM:** Hermes profile config is hand-edited in-pod, not
-   reproducible from git (Priority 8)
 
 **⚠️ PRODUCTION STATUS:** Homelab is now in production use. Data loss prevention and safe testing environments are top priorities.
 
@@ -135,36 +133,6 @@ defence-in-depth on an already-gated path, not a missing guard.
 
 Flag set back to `false` on 2026-08-05.
 
-#### 0d. **HERMES CONFIG IS NOT REPRODUCIBLE FROM GIT** 🟡 **MEDIUM**
-
-**Issue:** Every behavioural setting for the Hermes agents lives only on
-the `hermes-data` PVC (`/opt/data`), hand-edited inside the running pod.
-The repos provision the pod but not what it does.
-
-**Discovered:** 2026-08-03, while wiring Signal routing, kanban
-orchestration and the Basic Memory MCP server.
-
-**Current State:**
-- ✅ Pod, PVC, ingress, cert and ArgoCD Application are declarative
-- ✅ Survives pod restarts and node moves (PVC-backed)
-- ✅ Settings are documented in [22-Hermes-Agents](22-Hermes-Agents#multi-profile-routing-kanban-orchestrator)
-- ❌ Toolsets, kanban wiring, MCP servers, profile role descriptions and
-  which profile owns Signal exist **nowhere in either repo**
-- ❌ A cold start yields a *functionally different* Hermes with no error
-
-**Impact:** No data loss (the PVC persists), but the failure mode is
-silent. A router profile missing the `kanban` toolset does not error —
-it just quietly stops routing and does all work itself. Two profiles
-sharing a Signal account produce a multi-hour `--replace` respawn storm
-with no alert. Both were live in this cluster and took a full debugging
-session to find.
-
-**Suggested Fix:** See
-[Priority 8](#priority-8-hermes-profile-config-is-not-declarative-medium-)
-— split secret from non-secret, ship the non-secret half as a ConfigMap
-from the pro repo, and add a post-deploy assertion for the router's
-`kanban` toolset.
-
 #### 1. **Secrets Management (MEDIUM PRIORITY)**
 
 **Issue:** Secrets stored in local `config.yml` files without encryption
@@ -176,7 +144,7 @@ from the pro repo, and add a post-deploy assertion for the router's
 
 **Locations:**
 - `ansible/config.yml:27` - GitHub Personal Access Token (local only)
-- `core/ansible/config.yml:34-36` - Dashboard passwords and AWS credentials (local only)
+- `core/ansible/config.yml:34-36` - Dashboard passwords (local only)
 
 **Impact:**
 - Risk if deployment machine is compromised
@@ -186,10 +154,8 @@ from the pro repo, and add a post-deploy assertion for the router's
 **Example (from local config.yml - NOT in Git):**
 ```yaml
 # Local config.yml files contain plaintext secrets
-argo_repo_token: "github_pat_..."
-dashboard_password: "your-password"
-aws_bedrock_api_key_id: "AKIA..."
-aws_bedrock_api_access_key: "secret-key"
+argo_repo_token: "<github-pat>"
+dashboard_password: "<dashboard-password>"
 ```
 
 **Note:** These are **not** committed to Git (proper `.gitignore` in place), but should still be encrypted using Ansible Vault for defense-in-depth.
@@ -253,7 +219,7 @@ aws_bedrock_api_access_key: "secret-key"
 Via ArgoCD:
 - Nextcloud ([nextcloud_deploy.yml](core/ansible/tasks/nextcloud_deploy.yml))
 - PiHole ([pihole_deploy.yml](core/ansible/tasks/pihole_deploy.yml))
-- OpenWebUI, N8N, Jellyfin
+- N8N, Jellyfin
 
 Via Direct Helm/Shell:
 - MetalLB ([metallb_native_deploy.yml](core/ansible/tasks/metallb_native_deploy.yml))
@@ -771,7 +737,7 @@ brew install gitlab-runner
 # Register runner for your project
 gitlab-runner register \
   --url https://gitlab.com/ \
-  --token YOUR_RUNNER_TOKEN \
+  --token <runner-registration-token> \
   --executor shell \
   --description "homelab-arm64-runner" \
   --tag-list "arm64,macos,k3s"
@@ -1842,8 +1808,7 @@ core/argocd/apps/
 ├── infrastructure-apps.yaml  (from Step 1)
 ├── pihole.yaml
 ├── nextcloud.yaml
-├── jellyfin.yaml
-└── openwebui.yaml
+└── jellyfin.yaml
 ```
 
 **Update Ansible to only deploy root app:**
@@ -2378,88 +2343,14 @@ benefit from an HA card and are expected to stay portal-linked
 indefinitely.
 
 ![accent-divider.svg](images/accent-divider.svg)
-### Priority 8: Hermes Profile Config is Not Declarative (MEDIUM) 🟡
+### Priority 8: Hermes Profile Config is Not Declarative — RETIRED 2026-11-22
 
-**Timeline:** Before the next cold start
-**Impact:** Medium — no data loss risk (PVC-backed), but a cold start
-silently produces a *functionally different* Hermes than the one running
-**Discovered:** 2026-08-03, while wiring Signal routing and Basic Memory
-
-#### Problem
-
-Everything that makes Hermes actually work lives in `/opt/data` on the
-`hermes-data` CephFS PVC and **is not represented in either repo**. The
-Ansible task and Kustomize overlays create the pod, PVC, ingress and
-ArgoCD Application — but every behavioural setting is hand-edited inside
-the running container.
-
-Currently unreproducible from git:
-
-| Setting | Location (in-pod) | Effect if lost |
-|---|---|---|
-| `toolsets: [hermes-cli, kanban]` | `/opt/data/config.yaml` | Router loses `kanban_create`; silently stops routing and does all work itself |
-| `kanban.auto_decompose: true` | `/opt/data/config.yaml` | Triage tasks never fan out to specialists |
-| `kanban.orchestrator_profile: default` | `/opt/data/config.yaml` | Falls back to "active profile", which `hermes profile use` mutates |
-| `mcp_servers.basic-memory` (+ `transport: sse`) | `/opt/data/config.yaml` | Loses the Basic Memory knowledge base |
-| `SIGNAL_*` present in exactly one profile | `/opt/data/.env`, `/opt/data/profiles/*/.env` | Profiles fight over the account → `--replace` respawn storm |
-| Profile role descriptions | `/opt/data/profiles/*/profile.yaml` | Kanban decomposer can't route by role |
-| Per-profile skills, SOUL.md, sessions | `/opt/data/profiles/*/` | Persona and learned skills gone |
-
-The whole set is documented in
-[22-Hermes-Agents](22-Hermes-Agents#multi-profile-routing-kanban-orchestrator),
-so it is recoverable **by hand** — but that is a runbook, not
-reproducibility.
-
-#### Why this is deliberate today (and where it breaks down)
-
-Per [22-Hermes-Agents](22-Hermes-Agents#secrets-model---important), the
-`.env` split is intentional: credentials are **user-owned**, so putting
-them in `config.yml` would force family members to share secrets with
-the operator, and a k8s Secret would expose them to anyone with
-`kubectl get secret` on the namespace. That reasoning is sound and
-should stand.
-
-It does **not** extend to the non-secret settings above. Toolsets,
-kanban wiring, MCP server URLs and profile role descriptions carry no
-credentials and are exactly the kind of thing GitOps should own. They
-are only hand-edited because there is no mechanism to declare them.
-
-#### Suggested approach
-
-1. **Split secret from non-secret.** Keep `ANTHROPIC_API_KEY`,
-   `SIGNAL_ACCOUNT`, gateway tokens and OAuth material in the
-   user-owned `.env`. Everything else becomes declarative.
-2. **Ship non-secret config as a ConfigMap** rendered from the pro repo
-   (`deployments/hermes/base/`), mounted into the pod, and merged into
-   `config.yaml` on start — or applied by an Ansible task that patches
-   only the managed keys and leaves user-owned ones alone.
-3. **Make "which profile owns Signal" explicit in the manifests**, since
-   getting it wrong is the failure mode with the worst symptom (silent
-   multi-hour respawn storm, no alert).
-4. **Treat profile role descriptions as config**, not runtime state —
-   they are load-bearing routing inputs for the kanban decomposer.
-5. **Add a post-deploy assertion** that fails loudly if the router
-   profile lacks the `kanban` toolset. Today that misconfiguration is
-   invisible: no error, the agent just quietly stops routing. Note that
-   `hermes doctor` reports it incorrectly (it only tests
-   `HERMES_KANBAN_TASK`), so the check must call
-   `tools.kanban_tools._check_kanban_mode()` directly.
-
-#### Acceptance
-
-A cold start followed by restoring only the **user-owned** `.env` files
-should yield a Hermes that routes Signal → `default` → specialist and
-has Basic Memory attached, with no further manual editing inside the
-pod.
-
-#### Related
-
-- Same "config lives outside GitOps" theme as
-  [Priority 1: Secrets Management](#priority-1-secrets-management-optional-)
-  and the GitOps Hybrid Anti-Pattern in
-  [Priority 1.5](#priority-15-deployment-dependencies-refactor-high-).
-- Attachment delivery is a separate, already-tracked defect:
-  [pro#13](https://github.com/seadogger-tech/seadogger-homelab-pro/issues/13).
+The Hermes agent, its signal-cli sidecar and the web terminal were retired
+from the cluster on 2026-11-22
+([#77](https://github.com/seadogger-tech/seadogger-homelab/pull/77),
+[pro#142](https://github.com/seadogger-tech/seadogger-homelab-pro/pull/142)),
+so this item no longer applies. The `hermes-data` PVC is retained until the
+owner decides on deletion.
 
 ![accent-divider.svg](images/accent-divider.svg)
 ### Priority 9: Cluster Nodes Depend on Pi-hole for DNS ✅ RESOLVED 2026-08-05
