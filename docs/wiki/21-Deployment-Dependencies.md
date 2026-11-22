@@ -22,9 +22,7 @@ This document analyzes the "spider web" of deployment dependencies in the Seadog
 7. Namespace Pre-cooking          ← Preparation
 8. Internal PKI + Cert-Manager    ← Certificate infrastructure
 9. Applications:
-    - Bedrock Gateway
     - PiHole
-    - OpenWebUI
     - N8N
     - Nextcloud
     - Jellyfin
@@ -71,9 +69,9 @@ Required by:                Required by:                Required by:
 
 ### Layer 3: Applications
 ```
-┌─────────┬─────────┬─────────┬─────────┬─────────┐
-│ PiHole  │Nextcloud│Jellyfin │OpenWebUI│   N8N   │
-└─────────┴─────────┴─────────┴─────────┴─────────┘
+┌─────────┬─────────┬─────────┬─────────┐
+│ PiHole  │Nextcloud│Jellyfin │   N8N   │
+└─────────┴─────────┴─────────┴─────────┘
 ```
 
 ![accent-divider.svg](images/accent-divider.svg)
@@ -105,7 +103,6 @@ Required by:                Required by:                Required by:
   - `jellyfin/static-pv.yaml` - Media library metadata
 
 - ✅ **N8N** - Workflow persistence
-- ✅ **OpenWebUI** - Chat history
 
 **What Rook-Ceph depends on:**
 - K3s cluster
@@ -131,7 +128,7 @@ Required by:                Required by:                Required by:
 
 **What depends on ArgoCD:**
 - ✅ **Most applications** - Deployed via ArgoCD Application CRDs
-  - Nextcloud, PiHole, OpenWebUI, N8N, Jellyfin
+  - Nextcloud, PiHole, N8N, Jellyfin
 
 **What ArgoCD depends on:**
 - K3s cluster
@@ -159,7 +156,6 @@ This creates inconsistency - no single source of truth!
   - `jellyfin-certificate.yml` - Jellyfin HTTPS
   - `pihole-certificate.yml` - PiHole admin HTTPS
   - `n8n-certificate.yml` - N8N HTTPS
-  - `openwebui-certificate.yml` - OpenWebUI HTTPS
   - `ceph-dashboard-certificate.yml` - Ceph dashboard HTTPS
 
 - ✅ **Traefik Ingress** - Consumes TLS secrets created by cert-manager

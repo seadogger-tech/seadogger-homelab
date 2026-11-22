@@ -60,7 +60,6 @@ ansible-playbook main.yml
 
 Applications (examples):
 - Pi-hole — `pihole_deploy.yml`
-- OpenWebUI — `openwebui_deploy.yml`
 - n8n — `n8n-deploy.yml`
 - Jellyfin — `jellyfin_deploy.yml`
 - Nextcloud — `nextcloud_deploy.yml`

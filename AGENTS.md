@@ -23,8 +23,7 @@ This is a **live production cluster** with real users and ~4TB of data
 | `ansible/ansible_collections/` | Vendored third-party collection. Don't edit it. |
 | `deployments/<app>/` | Helm values, Kustomize manifests and Dockerfiles for each app. |
 | `ingress/` | Traefik IngressRoutes. |
-| `.github/workflows/` | CI that rebuilds Hermes, signal-cli and Bedrock gateway images, runs checks and publishes the wiki. Mealie pulls a fixed upstream release pinned by digest; it has no image-build workflow. |
-| `.github/*_upstream_*` | Digest and SHA pins that CI writes. Its `ci(...)` commits land on `master` automatically. |
+| `.github/workflows/` | CI that builds the ansible-runner image, runs checks and publishes the wiki. Mealie pulls a fixed upstream release pinned by digest; it has no image-build workflow. |
 | `docs/wiki/` | Source for the GitHub wiki (`Home.md`, numbered pages, `_Sidebar.md`). CODEOWNERS requires review. |
 | `useful_scripts/` | NVMe partition and boot scripts for node bring-up. |
 
@@ -68,7 +67,7 @@ For deployment changes, read [Deployment and Validation](docs/wiki/27-Deployment
   gitignored. `.gitallowed` lists the placeholder names that are allowed.
 - Everything is ARM64. Images and binaries must support `linux/arm64`.
 - YAML must pass `yamllint` with the repo config (140-char line warning, truthy disabled).
-- The default branch is `master`. CI bots commit to it often, so `git pull --rebase` before you push.
+- The default branch is `master`. `git pull --rebase` before you push.
 
 ## Wiki
 

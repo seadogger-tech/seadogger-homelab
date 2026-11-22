@@ -51,7 +51,7 @@ Infrastructure services powering the homelab.
 | **[[06-Storage-Rook-Ceph]]** | Distributed storage with Rook-Ceph erasure coding |
 | **[[07-Networking-and-Ingress]]** | MetalLB, Traefik ingress, and internal routing |
 | **[[08-Security-and-Certificates]]** | Internal PKI, cert-manager, and TLS certificates |
-| **[[09-Apps]]** | Applications: Nextcloud, Jellyfin, OpenWebUI, N8N, PiHole |
+| **[[09-Apps]]** | Applications: Nextcloud, Jellyfin, N8N, PiHole |
 | **[[20-HDHomeRun-Guide]]** | HDHomeRun integration for live TV streaming |
 | **[[16-Pro-Overlays-and-SSO]]** | Pro features: Portal and Single Sign-On |
 
@@ -116,7 +116,6 @@ See **[[19-Refactoring-Roadmap]]** for complete roadmap and **[GitHub Issues](ht
 - **File Sharing:** Nextcloud (personal cloud storage)
 - **Media Server:** Jellyfin (movies, music, live TV via HDHomeRun)
 - **DNS/Ad Blocking:** PiHole (network-wide ad blocking)
-- **AI Assistant:** OpenWebUI + AWS Bedrock (Claude, Sonnet models)
 - **Workflow Automation:** N8N (automation and integrations)
 - **Dashboard:** Custom portal with SSO (Pro feature)
 

@@ -11,8 +11,7 @@ User facing applications that are applied thru ArgoCD on top of the k3s tech sta
 - All `*.seadogger-homelab` hostnames are static `dnsmasq` records defined in
   `core/deployments/pihole/pihole-values.yaml` (`dnsmasq.customDnsEntries`) —
   add a new app's hostname there, not through the Pi-hole UI, so it survives
-  a redeploy. The one exception is `hermes-<user>.seadogger-homelab`, which
-  `ansible/tasks/hermes_deploy.yml` (Pro repo) writes to Pi-hole's `dns.hosts`.
+  a redeploy.
 - **Allowlist and adlists in `pihole-values.yaml` are imported only on a
   fresh install** (empty `gravity.db` on the PVC). Changing them restarts the
   pod but leaves the live lists untouched, so apply every change in both
@@ -107,70 +106,16 @@ User facing applications that are applied thru ArgoCD on top of the k3s tech sta
   `POST /api/config/config_entries/entry/{entry_id}/reload`.
 
 ### AI Features (Recipe Import, Ingredient Parsing)
-Mealie's AI provider is wired to the in-cluster
-[AWS Bedrock Access Gateway](#aws-bedrock-access-gateway-websiterepo-httpsgithubcomaws-samplesbedrock-access-gateway),
-configured through Mealie's own **Group Settings → AI Providers** API
-(`/api/groups/ai-providers/*`) — not env vars (that changed as of
-Mealie v1.7+/v3.10+, which moved AI config out of `OPENAI_*` container
-env vars and into per-group UI/API settings).
+Mealie's AI provider is configured per group through **Group Settings → AI
+Providers** (`/api/groups/ai-providers/*`), not container env vars.
 
-- **Endpoint:** `http://bedrock-access-gateway-service.bedrock-gateway.svc.cluster.local:6880/api/v1`
-  (in-cluster Service DNS — same DNS caveat as above applies here too).
-- **Model:** `us.anthropic.claude-haiku-4-5-20251001-v1:0` — the only
-  model tested that produces clean, schema-conformant JSON through this
-  gateway. See "Model compatibility" below for why other models don't
-  work as-is.
-- **API key:** the gateway's own static key (`bedrock`), not a real
-  Anthropic/OpenAI key.
-
-#### Structured-output enforcement (gateway patch)
-Mealie's AI client uses the OpenAI Python SDK's structured-output helper
-(`client.chat.completions.parse()`), which sends a `response_format:
-json_schema` on every request and expects the model to return **only**
-raw JSON matching that schema — no markdown, no preamble. As of upstream
-commit `274b794e` (2026-06-18), the AWS Bedrock Access Gateway silently
-**dropped `response_format` entirely** — it was accepted by the request
-schema but never translated into anything Bedrock understands, so every
-model just free-texted its own natural style and Mealie's strict
-`json.loads()` broke unpredictably (Claude sometimes wrapped output in
-` ```json ` fences, sometimes didn't).
-
-This is a confirmed, tracked upstream gap
-([aws-samples/bedrock-access-gateway#162](https://github.com/aws-samples/bedrock-access-gateway/issues/162),
-[#255](https://github.com/aws-samples/bedrock-access-gateway/issues/255)) —
-not a config option we were missing. A complete, tested fix exists as an
-**open, unmerged PR** ([#255](https://github.com/aws-samples/bedrock-access-gateway/pull/255),
-branch `nijave:nv-response-format`) that maps `response_format.json_schema`
-to Bedrock's native `outputConfig.textFormat` — real schema enforcement
-at the AWS API level, not a prompt trick.
-
-`core/.github/workflows/upstream-rebuild.yaml` cherry-picks that PR's
-single commit on top of a fresh checkout of `aws-samples/main` on every
-scheduled rebuild (every 6h), so we still track all other upstream
-changes automatically and don't freeze at a stale fork. If the cherry-pick
-ever conflicts (upstream changed something the patch touches), the
-workflow fails loudly rather than silently building without the fix —
-check the Action run and rebase manually if that happens. **Remove the
-cherry-pick step once PR #255 actually merges upstream.**
-
-Verified post-patch: 5/5 consecutive real ingredient-parse calls through
-Mealie returned clean HTTP 200 JSON with no fences, no reasoning tags,
-correct schema shape.
-
-#### Model compatibility (why not gpt-oss or Nova?)
-Even with the gateway patch, only Claude is currently usable:
-
-| Model | Result |
-|---|---|
-| `us.anthropic.claude-haiku-4-5-20251001-v1:0` | Works — clean structured output via `outputConfig.textFormat` |
-| `openai.gpt-oss-20b-1:0` / `120b` | Still wraps output in `<think>...</think>` reasoning tags before the JSON, **even with structured output enabled** — confirmed via direct testing post-patch. This is the model's native "harmony format" output; the gateway's reasoning-separation feature (which cleanly splits `reasoning_content` for Claude/DeepSeek) is not implemented for gpt-oss — `reasoning_content` is always `null` for this model family regardless of `reasoning_effort`. This is a separate, gpt-oss-specific gap, not fixed by PR #255. |
-| `us.amazon.nova-lite-v1:0` | Not re-tested after the patch; previously ignored the schema's object wrapper (returned a bare list instead of `{"ingredients": [...]}`) |
-
-**Note:** AWS Bedrock does not host OpenAI's proprietary models (GPT-4o,
-GPT-5, etc.) in any region — verified directly against the Bedrock
-`list-foundation-models` API in 5 regions. Only OpenAI's open-weight
-`gpt-oss` line is available on Bedrock; the closed GPT models remain
-exclusive to OpenAI's own API / Azure OpenAI.
+The provider used to point at the in-cluster AWS Bedrock Access Gateway.
+That gateway was retired in 2026-11, so AI recipe import and ingredient
+parsing do not work until another OpenAI-compatible provider is set in
+those group settings. Core Mealie (recipes, meal plans, the Home Assistant
+integration) does not depend on it. The provider must support
+`response_format: json_schema` structured output; Mealie's client sends it
+on every AI request and expects raw JSON back.
 
 #### Custom prompts (runtime configuration)
 These files configure the stock upstream container through its prompt override
@@ -178,10 +123,9 @@ setting. They do not patch Mealie source or build a custom image.
 
 Custom prompt overrides also live in `deployments/mealie/prompts/recipes/`
 and are mounted into the pod via a Kustomize `configMapGenerator`. These
-predate the gateway patch above (added when prompt wording was the only
-lever available) and are kept as a second layer of protection — cheap
-insurance in case a future model or gateway regression stops enforcing
-the schema again:
+were added when prompt wording was the only lever for clean JSON from the
+former Bedrock provider. They are kept so a future provider starts with
+the same schema-only instructions:
 
 - ConfigMap `mealie-custom-prompts` mounted at
   `/app/custom-prompts/recipes/` (Mealie expects this exact subdirectory
@@ -201,7 +145,7 @@ the schema again:
 #### Meal-Planning Workflow
 1. **Add a recipe.** Either **+ Create → Import from URL** (Mealie tries
    its normal scraper first; if the page lacks clean recipe markup, it
-   automatically falls back to the AI provider above) or add one by hand.
+   falls back to the group's AI provider when one is configured) or add one by hand.
 2. **Assign it to a date.** Mealie → **Meal Plan** → click a date →
    choose an entry type (Breakfast/Lunch/Dinner/etc.) → search/select the
    recipe → Save.
@@ -226,97 +170,6 @@ support, and update the fixed tag and digest in the deployment manifest.
 Preserve a recoverable database backup before a database-changing upgrade.
 A rollback must pair the recorded previous image with a compatible database;
 changing an image tag alone does not undo database migrations.
-
-![accent-divider](images/accent-divider.svg)
-## OpenWebUI: **Website:** [https://open-webui.com](https://open-webui.com)
-- Self-hosted web UI for local/remote LLMs.
-- Works offline; supports multiple LLM runners; chat, RAG, and extensions.
-- Installable as a PWA for a smooth mobile experience.
-
-<p align="center">
-  <img src="images/WebUI-iPhone-UI.png" alt="OpenWebUI on iPhone" width="180">
-  &nbsp;&nbsp;&nbsp;
-  <img src="images/WebUI-Laptop-UI.png" alt="OpenWebUI on Laptop" width="1024">
-</p>
-
-![accent-divider](images/accent-divider.svg)
-## AWS Bedrock Access Gateway: **Website/Repo:** [https://github.com/aws-samples/bedrock-access-gateway](https://github.com/aws-samples/bedrock-access-gateway)
-- Open-source gateway that exposes **OpenAI-compatible REST APIs** for **Amazon Bedrock**.
-- Lets existing OpenAI SDKs/tools (e.g., OpenAI Python/JS, LangChain-OpenAI, AutoGen) work with Bedrock **without code changes**.
-- Supports **SSE streaming**, **Chat Completions**, **Embeddings**, **Tool/function calling**, **Multimodal**, **Models API**, **Cross-region inference**, and **Application Inference Profiles**.
-- **Easy deployment:** 1-click CloudFormation to **ALB + Lambda** or **ALB + Fargate**; also runs **locally** or in **containers/Kubernetes**.
-- Regions & models: follows **Bedrock-supported regions**; use the **Models API** to discover availability.
-
-### Deployment Architecture
-- **Automated Upstream Tracking:** GitHub Actions workflow rebuilds image every 6 hours from [aws-samples/bedrock-access-gateway](https://github.com/aws-samples/bedrock-access-gateway)
-- **Multi-arch Support:** Built for `linux/amd64` and `linux/arm64` (Raspberry Pi 5 compatible)
-- **Image Registry:** `ghcr.io/seadogger-tech/aws-bedrock-gateway:latest`
-- **Access:** MetalLB LoadBalancer at `192.168.1.242:6880`
-- **Integration:** Confirmed actively connected to OpenWebUI's chat
-  interface — verified via OpenWebUI's own stored connection config
-  (`openai.api_base_urls` in its `webui.db`), pointed at
-  `http://192.168.1.242:6880/api/v1` with the same static `bedrock` key.
-
-### Configuration Requirements
-1. **AWS Bedrock Model Access:**
-   - Enable models in AWS Bedrock console for the deployment region (us-west-2)
-   - Cross-region inference profiles (`us.*` prefix) require separate access grants
-   - Example: `us.anthropic.claude-opus-4-1-20250805-v1:0` requires both base model and inference profile access
-
-2. **IAM Permissions:**
-   - User must have `AmazonBedrockFullAccess` policy or equivalent
-   - Credentials stored as Kubernetes secret in `bedrock-gateway` namespace
-   - Environment variables: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`
-
-3. **Gateway Authentication:**
-   - **API_KEY:** `bedrock` (used by clients to authenticate to the gateway)
-   - Clients send the configured gateway API key in the Authorization header using the Bearer scheme.
-   - This is separate from AWS credentials (gateway → Bedrock authentication)
-
-4. **Container Configuration:**
-   - Container listens on port **8080** (upstream default as of 2025)
-   - Service exposes externally on port **6880** via MetalLB
-
-5. **Known Issues & Solutions:**
-   - **Model returns AccessDeniedException:** Enable the specific model in AWS Bedrock console for us-west-2
-   - **Requests hang without response:** Restart deployment to pull latest gateway image (`kubectl rollout restart deployment/bedrock-access-gateway -n bedrock-gateway`)
-   - **Parameter validation errors:** Upstream fixes auto-deployed (e.g., Claude Sonnet 4.5 temperature/top_p conflict fixed in latest)
-   - **Pod CrashLoopBackOff "API Key not configured":** Ensure `API_KEY` env var is set (upstream removed default in Feb 2025)
-   - **gpt-oss models leak `<think>...</think>` reasoning tags into `content`:** confirmed via direct testing (`reasoning_content` field always `null` for `openai.gpt-oss-20b-1:0`/`120b`, regardless of `reasoning_effort`), even with `response_format` structured output enabled (see below). The gateway's reasoning-separation feature only covers Claude and DeepSeek R1. Breaks any client (like Mealie) expecting strict JSON-only output. Use Claude instead until the gateway adds gpt-oss support.
-   - **`response_format`/`json_schema` was silently ignored (fixed as of 2026-07-25):** upstream never implemented OpenAI's structured-output contract — accepted the field, never enforced it, so every model free-texted its own JSON style (Claude sometimes fenced in ` ```json `, breaking strict clients like Mealie). Tracked upstream as [#162](https://github.com/aws-samples/bedrock-access-gateway/issues/162)/[#255](https://github.com/aws-samples/bedrock-access-gateway/issues/255), fixed here by cherry-picking the unmerged [PR #255](https://github.com/aws-samples/bedrock-access-gateway/pull/255) in `upstream-rebuild.yaml` — see [Mealie § Structured-output enforcement](#structured-output-enforcement-gateway-patch) for full details.
-
-### Adopted Unmerged Upstream PRs
-`upstream-rebuild.yaml` cherry-picks 6 open, unmerged PRs on top of a
-fresh checkout of `aws-samples/main` on every scheduled rebuild — see
-[ADR-011](13-ADR-Index.md#adr-011-adopting-unmerged-upstream-prs-reusable-pattern)
-for the full rationale and the reusable pattern this establishes.
-Verified working end-to-end against the live deployed image
-(2026-07-25):
-
-| PR | Fixes | Verified via |
-|---|---|---|
-| [#255](https://github.com/aws-samples/bedrock-access-gateway/pull/255) | `response_format`/`json_schema` → real Bedrock structured output | Direct `curl` test + 5/5 clean Mealie ingredient-parse calls |
-| [#246](https://github.com/aws-samples/bedrock-access-gateway/pull/246) | Drop orphan `tool_use`/`tool_result` pairs (OpenWebUI history-rewrite scenario) | `grep -n _sanitize_tool_pairs /app/api/models/bedrock.py` on the live pod |
-| [#247](https://github.com/aws-samples/bedrock-access-gateway/pull/247) | Non-negative tool-call indexes in streaming | Present in cherry-picked commit history |
-| [#239](https://github.com/aws-samples/bedrock-access-gateway/pull/239) | Replayed tool blocks without a `tools` array (conversation compaction) | Present in cherry-picked commit history |
-| [#198](https://github.com/aws-samples/bedrock-access-gateway/pull/198) | Return `tool_calls` instead of dropping them on `max_tokens` truncation | Present in cherry-picked commit history |
-| [#249](https://github.com/aws-samples/bedrock-access-gateway/pull/249) | Claude Opus 4.7 adaptive-thinking request format | `grep -n ADAPTIVE_THINKING_MODELS /app/api/models/bedrock.py` on the live pod |
-
-`#246`/`#247`/`#239`/`#198` protect OpenWebUI's tool/function-calling
-path, which isn't enabled today (0 Tools/Functions configured in its
-`webui.db` as of this writing) but would hit these exact bugs the
-moment it is. `#249` is a live gap regardless — Opus 4.7 is already
-selectable in OpenWebUI's model dropdown.
-
-Two of the six conflict with each other in small, known ways (both
-`#255` and `#239` add a branch in `_parse_request`; `#198` and `#239`
-touch the same log line). Resolved by
-`.github/scripts/resolve_bedrock_gateway_conflicts.py`, not inline in
-the workflow YAML — see the script's docstring for exactly what each
-resolver does and why.
-
-![Bedrock](images/bedrock.png)
-
 
 ![accent-divider](images/accent-divider.svg)
 ## NextCloud: **Website:** [https://nextcloud.com](https://nextcloud.com)
@@ -350,25 +203,6 @@ The script lives in `seadogger-homelab-pro/core/useful_scripts/fetch_hdhomerun_g
   repo), a small Python state server behind Caddy, not a third-party project.
 
 ![accent-divider](images/accent-divider.svg)
-## Signal-CLI
-- Headless Signal messenger client
-  ([AsamK/signal-cli](https://github.com/AsamK/signal-cli)) exposed as an
-  HTTP daemon, used by Hermes agents to send/receive Signal messages.
-- Built via `core/deployments/signal-cli/Dockerfile`, rebuilt automatically
-  every time upstream cuts a release (`core/.github/workflows/upstream-rebuild-signal-cli.yaml`).
-- The daemon's own HTTP server rejects requests carrying a Kubernetes
-  Service `Host` header (`421`), so an nginx sidecar rewrites the `Host`
-  header before proxying to it.
-
-![accent-divider](images/accent-divider.svg)
-## Terminal
-- Browser-accessible cluster shell:
-  [ttyd](https://github.com/tsl0922/ttyd) serving a terminal with `kubectl`
-  pre-installed (copied in from the `bitnami/kubectl` image at pod start),
-  bound to a `ServiceAccount` via RBAC (`deployments/terminal/rbac.yaml`)
-  rather than requiring a separate login.
-
-![accent-divider](images/accent-divider.svg)
 ## JellyFin: **Website:** [https://jellyfin.org](https://jellyfin.org)
 - Free, open-source, self-hosted media server.
 - Lets you organize and stream movies, TV, music, and photos to many devices.
@@ -389,7 +223,6 @@ The script lives in `seadogger-homelab-pro/core/useful_scripts/fetch_hdhomerun_g
 **Setup Guides:**
 - [#34 - Get passwords](https://github.com/seadogger-tech/seadogger-homelab/issues/34)
 - [#35 - PiHole whitelist](https://github.com/seadogger-tech/seadogger-homelab/issues/35)
-- [#36 - OpenWebUI Bedrock](https://github.com/seadogger-tech/seadogger-homelab/issues/36)
 - [#37 - Jellyfin XMLTV](https://github.com/seadogger-tech/seadogger-homelab/issues/37)
 - [#38 - Nextcloud setup](https://github.com/seadogger-tech/seadogger-homelab/issues/38)
 - [#39 - N8N workflows](https://github.com/seadogger-tech/seadogger-homelab/issues/39)

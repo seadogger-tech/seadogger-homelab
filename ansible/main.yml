@@ -99,10 +99,6 @@
     - config.yml
   tasks:
 
-    - name: Deploy Bedrock Gateway
-      import_tasks: tasks/bedrock_gateway_deploy.yml
-      when: enable_bedrock | default(true)
-
     - name: Deploy PiHole
       import_tasks: tasks/pihole_deploy.yml
       when: enable_pihole | default(true)
@@ -110,10 +106,6 @@
     - name: Deploy CoreDNS custom zone override for seadogger-homelab
       import_tasks: tasks/coredns_custom_deploy.yml
       when: enable_pihole | default(true)
-
-    - name: Deploy OpenWebUI
-      import_tasks: tasks/openwebui_deploy.yml
-      when: enable_openwebui | default(true)
 
     - name: Deploy dedicated Nextcloud PostgreSQL
       ansible.builtin.import_tasks: tasks/nextcloud_postgresql_deploy.yml

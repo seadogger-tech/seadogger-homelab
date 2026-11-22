@@ -53,7 +53,7 @@ The project provides a set of Ansible playbooks and Kubernetes and Helm manifest
 *   **Load Balancer & IP L2Advertisement:** MetalLB
 
 *   **DNS & Ad-Blocking:** PiHole
-*   **User Apps/Services:** Nextcloud, Jellyfin, OpenwebUI, N8N
+*   **User Apps/Services:** Nextcloud, Jellyfin, N8N
 *   **Hardware:** Raspberry Pi 5 nodes. While it may be adaptable to other hardware, the documentation and scripts are tailored to this platform.
 *   **Networking:** The project assumes a specific networking setup including static IP assignments, designated IP range for MetalLB, and Traefik routing 
 *   **Storage:** Rook-Ceph
@@ -70,7 +70,6 @@ The project provides a set of Ansible playbooks and Kubernetes and Helm manifest
 
 *   **Ansible:** Must be installed on the machine used to manage the cluster.
 *   **kubectl:** Required for interacting with the Kubernetes cluster.
-*   **AWS Account:** An AWS account with Bedrock API tokens is needed for the Bedrock Access Gateway service.
 
 ![accent-divider.svg](images/accent-divider.svg)
 # Project Status
@@ -91,7 +90,7 @@ The homelab is fully functional and serving production workloads. Core infrastru
 *   **Storage System:** Rook-Ceph is deployed and providing distributed storage with both erasure-coded and replicated pools.
 *   **Network Configuration:** MetalLB and Traefik are functioning, providing load balancing and ingress for deployed services.
 *   **GitOps:** ArgoCD is successfully managing the deployment of most applications.
-*   **User Apps & Services:** PiHole, OpenWebUI, Bedrock Access Gateway, N8N, JellyFin, and Nextcloud are deployed and operational.
+*   **User Apps & Services:** PiHole, N8N, JellyFin, and Nextcloud are deployed and operational.
 *   **Portal (Pro):** Single pane of glass to access applications and monitor tech stack.
 
 ![accent-divider.svg](images/accent-divider.svg)
@@ -143,12 +142,11 @@ The homelab is fully functional and serving production workloads. Core infrastru
   - If you use a different subnet, set the network variables in `ansible/config.yml` (`ipv4_subnet_prefix`, `ipv4_gateway`, `dns4_servers`) and update MetalLB `IPAddressPool` and VIPs to match.
 - WireGuard (optional)
   - Required only for remote access
-  - Provides encrypted tunnels for services like OpenWebUI, PiHole when you are not on your network
+  - Provides encrypted tunnels for services like Nextcloud and PiHole when you are not on your network
 
 ![accent-divider.svg](images/accent-divider.svg)
 ## Software Requirements
 - SSH enabled on all Raspberry Pis
-- AWS account with [Bedrock](https://jrpospos.blog/posts/2024/08/using-amazon-bedrock-with-openwebui-when-working-with-sensitive-data/) API tokens
 - Working knowledge of:
   - Docker containers and orchestration
   - Basic AWS services

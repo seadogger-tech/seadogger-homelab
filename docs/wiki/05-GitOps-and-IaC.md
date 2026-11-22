@@ -29,7 +29,7 @@ For CI/CD automation and repo workflows, see [[15-CI-CD-and-GitHub-Actions]].
 
 - ArgoCD manages desired state for apps and some infra components via Git:
   - Sources from `core/deployments/**` (Helm values and manifests)
-  - Reconciles Kubernetes resources for apps like Pi-hole, OpenWebUI, n8n, Jellyfin, Nextcloud
+  - Reconciles Kubernetes resources for apps like Pi-hole, n8n, Jellyfin, Nextcloud
 
 - Domains & certificates:
   - Services: `*.seadogger-homelab`
@@ -325,37 +325,9 @@ Developer → Git Push → GitHub → ArgoCD (polls) → Kubernetes → Running 
 ## Test Plan
 
 ![accent-divider.svg](images/accent-divider.svg)
-### Test Case 1: Single Non-Stateful Application (Bedrock)
+### Test Cases 1 and 2: Single Application (retired examples)
 
-1) Deploy
-   - In `config.yml`, set `cold_start_stage_3_install_applications: true` and `manual_install_bedrock: true` (others `false`)
-   - Run `ansible-playbook main.yml`
-2) Verify
-   - `bedrock-access-gateway` pods running in `bedrock-gateway`
-3) Cleanup
-   - Set `run_pod_cleanup: true` and keep only `bedrock-access-gateway` in `pod_cleanup_list`
-   - Run `ansible-playbook cleanup.yml`
-4) Verify
-   - `bedrock-gateway` namespace and pods removed
-
-![accent-divider.svg](images/accent-divider.svg)
-### Test Case 2: Single Stateful Application (OpenWebUI)
-
-1) Deploy
-   - Set `manual_install_bedrock: false`, `manual_install_openwebui: true`
-   - Run `ansible-playbook main.yml`
-2) Verify
-   - `openwebui` pods running and PVC bound
-3) Cleanup (preserve data)
-   - Set `run_pod_cleanup: true`, configure `pod_cleanup_list` with `openwebui` and `delete_pvc: false`
-   - Run `ansible-playbook cleanup.yml`
-4) Verify & redeploy
-   - Pods removed, PVC remains; rerun deploy and confirm re‑attach
-5) Cleanup (destroy data)
-   - Set `delete_pvc: true` for `openwebui`
-   - Run `ansible-playbook cleanup.yml`
-6) Verify
-   - Pods and PVC are deleted
+These cases used the Bedrock gateway (non-stateful) and OpenWebUI (stateful), both retired in 2026-11. Repeat them with a current application whose pods, and PVC for the stateful case, can be removed safely: deploy with only its `manual_install_*` flag on, remove it with `run_pod_cleanup` and `delete_pvc: false`, confirm the PVC re-attaches on redeploy, then repeat with `delete_pvc: true`. Do not use Pi-hole; it serves the home network's DNS.
 
 ![accent-divider.svg](images/accent-divider.svg)
 ### Test Case 3: All Applications
@@ -418,7 +390,7 @@ graph TD
     end
 
     subgraph Wave2["🌊 Wave 2: Applications"]
-        Apps[Nextcloud, Jellyfin<br/>OpenWebUI, N8N<br/>PiHole]
+        Apps[Nextcloud, Jellyfin<br/>N8N, PiHole]
     end
 
     subgraph WavePro["🌊 Wave 3: Pro Features"]

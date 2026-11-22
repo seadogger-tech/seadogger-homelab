@@ -22,9 +22,7 @@ cold_start_stage_3_install_applications: true
 
 # --- Manual Install Toggles ---
 # Use these flags to deploy services individually when the Stage 3 master switch is false.
-manual_install_bedrock: true
 manual_install_pihole: true
-manual_install_openwebui: true
 manual_install_nextcloud: true
 # Opt-in dedicated target; staging does not convert or switch Nextcloud.
 manual_install_nextcloud_postgresql: false
@@ -77,8 +75,6 @@ kubelet_image_gc_low: 50
 
 # --- Secrets ---
 dashboard_password: "YourSecurePasswordHere"
-aws_bedrock_api_key_id: "YOUR_AWS_ACCESS_KEY_ID_HERE"
-aws_bedrock_api_access_key: "YOUR_AWS_SECRET_ACCESS_KEY_HERE"
 
 # --- Nextcloud S3 Backup ---
 nextcloud_s3_backup_key_id: "YOUR_AWS_ACCESS_KEY_ID_HERE"
@@ -140,9 +136,7 @@ hdhomerun_device_ids: "YOUR_DEVICE_ID_HERE"
 # --- POD / APPLICATION CLEANUP ---
 run_pod_cleanup: true
 pod_cleanup_list:
-  - {name: "bedrock-access-gateway", namespace: "bedrock-gateway", selector: "app=bedrock-access-gateway", delete_pvc: true}
   - {name: "pihole", namespace: "pihole", selector: "app.kubernetes.io/name=pihole", delete_pvc: true}
-  - {name: "openwebui", namespace: "openwebui", selector: "app.kubernetes.io/instance=openwebui", delete_pvc: true}
   - {name: "nextcloud", namespace: "nextcloud", selector: "app=nextcloud", delete_pvc: true}
   - {name: "jellyfin", namespace: "jellyfin", selector: "app=jellyfin", delete_pvc: true}
 
@@ -155,11 +149,9 @@ infrastructure_cleanup_list:
 
 # --- Namespace Pre-cooking Configuration ---
 precook_namespaces:
-  - {name: "openwebui"}
   - {name: "argocd"}
   - {name: "rook-ceph"}
   - {name: "pihole"}
-  - {name: "bedrock-gateway"}
   - {name: "nextcloud"}
   - {name: "jellyfin"}
 
@@ -189,9 +181,7 @@ enable_internal_pki: "{{ cold_start_stage_2_install_infrastructure | bool }}"
 enable_nextcloud_postgresql: "{{ cold_start_stage_3_install_applications | bool and manual_install_nextcloud_postgresql | bool }}"
 enable_nextcloud_redis: "{{ cold_start_stage_3_install_applications | bool and manual_install_nextcloud_redis | bool }}"
 # An application is enabled if the STAGE 3 master switch is ON, AND if its individual MANUAL switch is ON.
-enable_bedrock: "{{ cold_start_stage_3_install_applications | bool and manual_install_bedrock | bool }}"
 enable_pihole: "{{ cold_start_stage_3_install_applications | bool and manual_install_pihole | bool }}"
-enable_openwebui: "{{ cold_start_stage_3_install_applications | bool and manual_install_openwebui | bool }}"
 enable_nextcloud: "{{ cold_start_stage_3_install_applications | bool and manual_install_nextcloud | bool }}"
 enable_jellyfin: "{{ cold_start_stage_3_install_applications | bool and manual_install_jellyfin | bool }}"
 enable_jellyfin_secrets: "{{ cold_start_stage_3_install_applications | bool and manual_install_jellyfin | bool }}"

@@ -3,8 +3,8 @@ fullnameOverride: home-assistant
 image:
   repository: ghcr.io/home-assistant/home-assistant
   # Chart appVersion tracks upstream HA releases; pin explicitly rather than
-  # trailing "latest" (see hermes-agent in deployments/hermes for what that
-  # costs when an upstream image quietly changes behavior underneath you).
+  # trailing "latest" (an upstream image can quietly change behavior
+  # underneath you).
   tag: "2026.7.0"
 
 replicaCount: 1

@@ -91,11 +91,9 @@ data:
         const APPS = [
           { name: "JellyFin", url: "https://jellyfin.seadogger-homelab/web", logo: "https://raw.githubusercontent.com/seadogger-tech/seadogger-homelab/refs/heads/master/assets/logos/jellyfin.svg" },
           { name: "Nextcloud", url: "https://nextcloud.seadogger-homelab/login", logo: "https://raw.githubusercontent.com/seadogger-tech/seadogger-homelab/refs/heads/master/assets/logos/nextcloud.svg" },
-          { name: "OpenWebUI", url: "https://openwebui.seadogger-homelab/auth", logo: "https://raw.githubusercontent.com/seadogger-tech/seadogger-homelab/refs/heads/master/assets/logos/openwebui.svg" },
           { name: "Pi‑hole", url: "https://pihole.seadogger-homelab/admin/login", logo: "https://raw.githubusercontent.com/seadogger-tech/seadogger-homelab/refs/heads/master/assets/logos/pi-hole.svg" },
           { name: "Ceph Dashboard", url: "https://ceph.seadogger-homelab/#/login", logo: "https://raw.githubusercontent.com/seadogger-tech/seadogger-homelab/refs/heads/master/assets/logos/ceph.svg" },
           { name: "Argo CD", url: "https://argocd.seadogger-homelab/login", logo: "https://raw.githubusercontent.com/seadogger-tech/seadogger-homelab/refs/heads/master/assets/logos/argocd.svg" },
-          { name: "Bedrock API", url: "http://192.168.1.242:6880/docs", logo: "https://raw.githubusercontent.com/seadogger-tech/seadogger-homelab/refs/heads/master/assets/logos/bedrock-color.svg" },
           { name: "Ubiquiti DM", url: "http://192.168.1.1", logo: "https://raw.githubusercontent.com/seadogger-tech/seadogger-homelab/refs/heads/master/assets/logos/ubiquiti.svg" }
         ];
 

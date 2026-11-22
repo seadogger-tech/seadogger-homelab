@@ -245,8 +245,8 @@ dnsmasq:
     - address=/ember-trail.seadogger-homelab/192.168.1.241
     # No ingress route serves this name (2026-10-04); kept because it is live.
     - address=/jason.seadogger-homelab/192.168.1.241
-    # hermes-<user>.seadogger-homelab names are NOT declared here: they live in
-    # Pi-hole's dns.hosts, managed by ansible/tasks/hermes_deploy.yml (Pro repo).
+    # openwebui and terminal above serve retired apps (2026-11). They are left in
+    # place until a planned Pi-hole change, so this cleanup does not restart DNS.
     - address=/octoprint.seadogger-homelab/192.168.1.77
     - address=/hdhomerun.seadogger-homelab/192.168.1.70
     - address=/stellarmate.seadogger-homelab/192.168.1.206

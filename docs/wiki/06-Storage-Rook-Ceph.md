@@ -51,7 +51,6 @@ graph TB
         NextcloudApp[Nextcloud<br/>→ ceph-fs-data-ec]
         JellyfinApp[Jellyfin<br/>→ ceph-fs-data-ec]
         N8NApp[N8N<br/>→ ceph-block-data]
-        OpenWebUIApp[OpenWebUI<br/>→ ceph-block-data]
         JellyfinMedia[Jellyfin Media<br/>Read-Only]
     end
 
@@ -73,7 +72,6 @@ graph TB
     NextcloudApp --> FSEC
     JellyfinApp --> FSEC
     N8NApp --> Default
-    OpenWebUIApp --> Default
 
     style RookCeph fill:#1e3a5f,stroke:#4a90e2,stroke-width:3px
     style Storage fill:#7b1fa2,stroke:#9c27b0,stroke-width:3px
@@ -85,7 +83,7 @@ graph TB
 
 ## Storage Classes
 - **ceph-block-data** (DEFAULT): Block storage with replication (RBD)
-  - Used by: N8N (n8n-main-persistence), OpenWebUI (open-webui)
+  - Used by: N8N (n8n-main-persistence)
 - **ceph-bucket**: S3-compatible object storage for backups
 - **ceph-fs-data-ec**: CephFS with erasure coding (2+1 EC) for large files
   - Used by: Nextcloud (nextcloud-nextcloud), Jellyfin config/cache (jellyfin-config, jellyfin-cache)

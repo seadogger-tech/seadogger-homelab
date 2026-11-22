@@ -17,7 +17,6 @@ This page explains how the Pro layer adds Single Sign-On (SSO), middleware, and 
 - Traefik VIP: `192.168.1.241`
 - Protected hosts (examples):
   - `n8n.seadogger-homelab`
-  - `openwebui.seadogger-homelab`
   - `argocd.seadogger-homelab`
   - `ceph.seadogger-homelab`
   - `jellyfin.seadogger-homelab`

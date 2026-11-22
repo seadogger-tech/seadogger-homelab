@@ -43,7 +43,6 @@
 - **Ansible Automation** - One-command deployment
 
 ### 📦 **Applications**
-- **🤖 OpenWebUI + AWS Bedrock** - AI chat with Claude/Sonnet models
 - **☁️ Nextcloud** - Personal cloud storage (4TB+)
 - **🎬 Jellyfin** - Media server with live TV (HDHomeRun)
 - **⚙️ N8N** - Workflow automation and integrations
@@ -65,7 +64,7 @@
   - Control plane: 500GB NVMe storage
   - Workers: 4TB NVMe storage each (for Rook-Ceph)
 - **Network:** Static IPs, MetalLB range (192.168.1.240-254)
-- **Software:** Ansible, kubectl, AWS account (for Bedrock)
+- **Software:** Ansible, kubectl
 
 ### Deploy in 3 Steps
 
@@ -125,7 +124,7 @@ Comprehensive guides available in the **[GitHub Wiki](https://github.com/seadogg
 
 **Applications**
 - Nextcloud • Jellyfin
-- OpenWebUI • N8N
+- N8N
 - PiHole • Portal (Pro)
 
 </td>
@@ -201,7 +200,6 @@ This project is licensed under the MIT License - see [LICENSE](LICENSE) for deta
 Originally forked from [Jeff Geerling's Pi Cluster](https://www.jeffgeerling.com) project and extensively modified for production homelab deployment.
 
 **Built with:**
-- AWS Bedrock Gateway from [aws-samples](https://github.com/aws-samples/bedrock-access-gateway)
 - Rook-Ceph storage from [Rook Project](https://rook.io)
 - ArgoCD from [Argo Project](https://argoproj.github.io)
 
