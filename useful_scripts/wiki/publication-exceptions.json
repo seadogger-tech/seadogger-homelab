@@ -1,1 +1,17 @@
-{}
+{
+  "22-Hermes-Agents.md": {
+    "published_sha256": "65c29bdcb3d9cc36d5d58528e288acf0e1e030c35479c7d55a334b1ff2037ec8",
+    "source_sha256": null,
+    "reason": "Hermes agent retired 2026-11 (OCE-101); page removed with the service."
+  },
+  "24-Hermes-Container-Architecture.md": {
+    "published_sha256": "4bdcecee6a5935158d2b38fd235011e23b719b613c5b784921a8135c17976ce5",
+    "source_sha256": null,
+    "reason": "Hermes agent retired 2026-11 (OCE-101); page removed with the service."
+  },
+  "25-Hermes-Dev-Environment-Setup.md": {
+    "published_sha256": "2498346b85cd9febb5907d4866e3159c24aa4b891f8ee03fe56b63dcdb8774f2",
+    "source_sha256": null,
+    "reason": "Hermes agent retired 2026-11 (OCE-101); page removed with the service."
+  }
+}

@@ -1,5 +1,3 @@
 # Allow example/dummy secrets in deployment files
 plex_access_key
 plex-claim-secret
-aws_bedrock_api_key_id
-aws_bedrock_api_access_key
