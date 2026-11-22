@@ -38,7 +38,6 @@ graph TB
     end
 
     subgraph AWS_Cloud["☁️ AWS"]
-        Bedrock[Bedrock API<br/>Claude/Sonnet Models]
         S3[S3 Glacier<br/>Disaster Recovery]
     end
 
@@ -51,7 +50,6 @@ graph TB
     Firewall -->|HTTPS| K3s
     Admin -->|kubectl/Ansible| K3s
 
-    K3s -->|API + TLS| Bedrock
     K3s -->|GitOps Sync| GitHub
     K3s -->|Encrypted Backup| S3
     K3s -->|Stream TV| HDHomeRun
@@ -61,7 +59,6 @@ graph TB
     style Homelab fill:#2d5016,stroke:#5a9216,stroke-width:3px
     style K3s fill:#2c5aa0,stroke:#4a90e2,stroke-width:2px,color:#fff
     style AWS_Cloud fill:#ff9900,stroke:#ff9900,stroke-width:3px
-    style Bedrock fill:#2c5aa0,stroke:#4a90e2,stroke-width:2px,color:#fff
     style S3 fill:#2c5aa0,stroke:#4a90e2,stroke-width:2px,color:#fff
     style GitHub fill:#24292e,stroke:#ffffff,stroke-width:2px,color:#fff
 ```
@@ -94,9 +91,7 @@ graph TB
         subgraph Apps["📦 Open Source Apps"]
             Nextcloud[Nextcloud<br/>File Storage]
             Jellyfin[Jellyfin<br/>Media Server]
-            OpenWebUI[OpenWebUI<br/>AI Chat]
             N8N[N8N<br/>Automation]
-            Bedrock_GW[Bedrock Gateway<br/>AWS Proxy]
         end
 
         subgraph Pro["💼 Pro Features"]
@@ -105,12 +100,7 @@ graph TB
         end
     end
 
-    subgraph Secrets["🔐 Encrypted Secrets"]
-        AWS_Secret[aws-credentials<br/>K8s Secret]
-    end
-
     GitHub[🔧 GitHub]
-    AWS[☁️ AWS Bedrock]
     S3[💾 S3 Glacier]
 
     User -->|HTTPS:443| Traefik
@@ -118,10 +108,8 @@ graph TB
 
     Traefik --> Nextcloud
     Traefik --> Jellyfin
-    Traefik --> OpenWebUI
     Traefik --> N8N
     Traefik --> Portal
-    Traefik --> Bedrock_GW
 
     ArgoCD -->|Deploys| Apps
     ArgoCD -->|Deploys| Pro
@@ -129,43 +117,27 @@ graph TB
 
     MetalLB -->|192.168.1.241| Traefik
     MetalLB -->|192.168.1.250| PiHole
-    MetalLB -->|192.168.1.242| Bedrock_GW
 
     CertMgr -->|TLS Certs| Traefik
 
     Nextcloud --> Ceph
     Jellyfin --> Ceph
 
-    Bedrock_GW --> AWS_Secret
-    AWS_Secret -.->|Encrypted| Bedrock_GW
-
-    OpenWebUI -->|HTTP:6880| Bedrock_GW
-    Bedrock_GW -->|HTTPS + TLS 1.3| AWS
     Nextcloud -->|Encrypted| S3
 
     style Infrastructure fill:#1e3a5f,stroke:#4a90e2,stroke-width:3px
     style Apps fill:#2d5016,stroke:#5a9216,stroke-width:3px
     style Pro fill:#7b1fa2,stroke:#9c27b0,stroke-width:3px,stroke-dasharray: 5 5
     style K3s fill:#1e3a5f,stroke:#4a90e2,stroke-width:3px
-    style Secrets fill:#7b1fa2,stroke:#9c27b0,stroke-width:2px
 ```
 
 **Legend:**
 - 🏗️ Infrastructure - Core cluster services
 - 📦 Open Source - Community applications
 - 💼 Pro Features - Commercial/premium (dashed border)
-- 🔐 Secrets - Kubernetes secrets (encrypted at rest)
-
-**AWS Bedrock Integration:**
-- **OpenWebUI** → HTTP requests to **Bedrock Gateway** (192.168.1.242:6880)
-- **Bedrock Gateway** → Authenticates using Kubernetes secrets (aws-credentials)
-- **Bedrock Gateway** → HTTPS + TLS 1.3 to AWS Bedrock API (Claude/Sonnet models)
-- Gateway built from [aws-samples/bedrock-access-gateway](https://github.com/aws-samples/bedrock-access-gateway)
-- Auto-rebuilds via GitHub Actions when upstream changes (every 6 hours check)
 
 **Security Notes:**
-- AWS credentials stored as Kubernetes secrets (encrypted at rest)
-- Bedrock Gateway proxies requests with TLS 1.3 encryption to AWS
+- Cloud credentials (such as the S3 backup keys) are stored as Kubernetes secrets (encrypted at rest)
 - All ingress traffic uses TLS certificates from cert-manager
 - External access requires WireGuard VPN authentication
 
