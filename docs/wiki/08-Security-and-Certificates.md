@@ -25,7 +25,6 @@ A two-tier trust chain will be established. The Intermediate CA will sign leaf c
 ```mermaid
 graph TD
     A["Root CA<br>(Offline, Highly Secure)"] --> B{"Intermediate CA<br>(Online, in k8s Secret)"};
-    B --> openwebui["openwebui.seadogger-homelab"];
     B --> argocd["argocd.seadogger-homelab"];
     B --> ceph["ceph.seadogger-homelab"];
     B --> pihole["pihole.seadogger-homelab"];
@@ -113,9 +112,9 @@ sequenceDiagram
 
     Note over CM,ING: Process is triggered by Ingress annotations for all *.seadogger-homelab services.
 
-    CM->>CI: Request sign(openwebui.seadogger-homelab)
-    CI-->>CM: Cert for openwebui.seadogger-homelab
-    CM->>ING: Store cert in secret 'openwebui-local-tls'
+    CM->>CI: Request sign(nextcloud.seadogger-homelab)
+    CI-->>CM: Cert for nextcloud.seadogger-homelab
+    CM->>ING: Store cert in secret 'nextcloud-local-tls'
 
 
 
@@ -187,7 +186,7 @@ Centralize login with Keycloak, enforce it uniformly at the edge with `oauth2-pr
 *   **Keycloak (IdP):** `idp.seadogger-homelab` (will be assigned a new VIP, e.g., 192.168.1.253)
 *   **oauth2-proxy:** `auth.seadogger-homelab` (internal service, no dedicated VIP)
 *   **Traefik (Ingress):** `192.168.1.241` (existing VIP)
-*   **Protected Applications:** `n8n.seadogger-homelab`, `openwebui.seadogger-homelab`, `argocd.seadogger-homelab`, `ceph.seadogger-homelab`.
+*   **Protected Applications:** `n8n.seadogger-homelab`, `argocd.seadogger-homelab`, `ceph.seadogger-homelab`.
 
 ![accent-divider.svg](images/accent-divider.svg)
 ## Secrets & Credentials
@@ -247,7 +246,6 @@ graph LR
         K[Keycloak]
         subgraph "SSO-Protected Apps"
             A2[n8n.seadogger-homelab]
-            A3[openwebui.seadogger-homelab]
             A6[argocd.seadogger-homelab]
             A7[ceph.seadogger-homelab]
         end
@@ -263,7 +261,6 @@ graph LR
     U -- "Authenticated Request" --> T
     
     T -- "Forwards to" --> A2
-    T -- "Forwards to" --> A3
     T -- "Forwards to" --> A6
     T -- "Forwards to" --> A7
 
