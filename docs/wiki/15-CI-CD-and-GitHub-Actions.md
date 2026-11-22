@@ -2,7 +2,7 @@
 ![accent-divider](images/accent-divider.svg)
 # CI/CD and GitHub Actions
 
-GitHub Actions publishes the wiki, runs repository checks, and builds the Bedrock gateway, Hermes and signal-cli images. Mealie is deployed directly from a fixed upstream release pinned by digest; it has no custom image-build pipeline. The Bedrock gateway still uses the adopted-upstream-PR pattern described in [ADR-011](13-ADR-Index.md#adr-011-adopting-unmerged-upstream-prs-reusable-pattern).
+GitHub Actions publishes the wiki, runs repository checks, and builds the Ansible runner image ([[28-Ansible-Runner]]). Mealie is deployed directly from a fixed upstream release pinned by digest; it has no custom image-build pipeline. The Bedrock gateway still uses the adopted-upstream-PR pattern described in [ADR-011](13-ADR-Index.md#adr-011-adopting-unmerged-upstream-prs-reusable-pattern).
 
 ![accent-divider](images/accent-divider.svg)
 
@@ -23,7 +23,6 @@ graph TB
     subgraph Triggers["🔔 Workflow Triggers"]
         Push[Git Push to master]
         PR[Pull Request]
-        Schedule[Cron: Every 6 hours]
         Manual[Manual Trigger]
     end
 
@@ -37,27 +36,9 @@ graph TB
         CommitWiki[Commit & Push to Wiki]
     end
 
-    subgraph BedrockFlow["🐋 Bedrock Gateway Rebuild"]
-        BedrockTrigger[Every 6 hours / Manual]
-        Checkout2[Checkout This Repo]
-        CheckUpstream[Checkout Upstream main<br/>aws-samples/bedrock-access-gateway]
-        PRStatus{Any adopted PR<br/>merged/closed?}
-        WarnPR[⚠️ Emit warning annotation<br/>does not stop build]
-        CherryPick[Cherry-pick 6 unmerged PRs<br/>#255 #246 #247 #239 #198 #249]
-        ResolveConflicts[Resolve 2 known conflicts via<br/>resolve_bedrock_gateway_conflicts.py]
-        SyntaxCheck{Valid Python<br/>syntax?}
-        CompareSSHA{Build identity<br/>changed?}
-        SetupBuildx[Setup QEMU + Buildx]
-        BuildPush[Build Multi-Arch<br/>linux/amd64,arm64]
-        PushGHCR[Push to ghcr.io]
-        UpdateSHA[Commit New Identity<br/>to .github/upstream_sha]
-    end
-
     Push --> WikiTrigger
     PR --> WikiTrigger
     Manual --> WikiTrigger
-    Schedule --> BedrockTrigger
-    Manual --> BedrockTrigger
 
     WikiTrigger --> Checkout1
     Checkout1 --> Preflight
@@ -67,24 +48,7 @@ graph TB
     CloneWiki --> Rsync
     Rsync --> CommitWiki
 
-    BedrockTrigger --> Checkout2
-    Checkout2 --> CheckUpstream
-    CheckUpstream --> PRStatus
-    PRStatus -->|Yes| WarnPR
-    PRStatus -->|No| CherryPick
-    WarnPR --> CherryPick
-    CherryPick --> ResolveConflicts
-    ResolveConflicts --> SyntaxCheck
-    SyntaxCheck -->|Fail| BuildFail1[❌ Fail build loudly]
-    SyntaxCheck -->|Pass| CompareSSHA
-    CompareSSHA -->|Changed| SetupBuildx
-    CompareSSHA -->|No Change| End1[Skip Build]
-    SetupBuildx --> BuildPush
-    BuildPush --> PushGHCR
-    PushGHCR --> UpdateSHA
-
     style WikiFlow fill:#2d5016,stroke:#5a9216,stroke-width:3px
-    style BedrockFlow fill:#1e3a5f,stroke:#4a90e2,stroke-width:3px
     style Triggers fill:#ff9900,stroke:#ff9900,stroke-width:3px
 ```
 
@@ -167,108 +131,6 @@ file contents with SHA-256; use `null` for the new hash when deleting a page:
 **Files synced:** Root `docs/wiki/*.md` pages, `docs/wiki/memory_bank/**/*.md`, and rendered images under `docs/wiki/images/` with `.png`, `.jpg`, `.jpeg`, or `.svg` extensions. Finder metadata, editable artwork (`images/Logo.key`), and generator scripts (`tools/`) stay in Core. The preflight rejects other unexpected files before sync.
 
 ![accent-divider](images/accent-divider.svg)
-## Upstream Bedrock Gateway Rebuild
-
-**Purpose:** Monitor AWS Bedrock Gateway upstream repository, cherry-pick 6 real-but-unmerged upstream PRs on top, and automatically rebuild our multi-arch container image when anything changes.
-
-**File Location:** `core/.github/workflows/upstream-rebuild.yaml`
-
-**Why cherry-picks at all:** the plain upstream image is missing fixes two active clients of this gateway actually need — Mealie (AI recipe import/parsing) needs schema-enforced structured output, and OpenWebUI (confirmed connected at `192.168.1.242:6880`) needs tool-calling reliability fixes and Claude Opus 4.7 support. All 6 are real, currently-open, community PRs — not something we wrote from scratch. See [ADR-011](13-ADR-Index.md#adr-011-adopting-unmerged-upstream-prs-reusable-pattern) for the full list and rationale, and [09-Apps.md § Adopted Unmerged Upstream PRs](09-Apps.md#adopted-unmerged-upstream-prs) for verification details.
-
-### Workflow Details
-
-```mermaid
-sequenceDiagram
-    participant Cron as GitHub Cron
-    participant GH as GitHub Actions
-    participant This as This Repo
-    participant Upstream as aws-samples/bedrock-access-gateway
-    participant PRs as 6 Contributor Forks<br/>(unmerged PR branches)
-    participant GHCR as ghcr.io Registry
-    participant K8s as K3s Cluster
-
-    Cron->>GH: Trigger (every 6 hours)
-    GH->>This: Checkout master branch
-    GH->>This: Read .github/upstream_sha
-    Note over GH: Last known build identity
-
-    GH->>Upstream: Checkout default branch (main)
-    Note over GH: Always the LATEST main —<br/>this is not pinned
-
-    GH->>Upstream: Check status of #255,#246,#247,#239,#198,#249
-    alt Any PR no longer OPEN
-        GH-->>GH: ⚠️ Warning annotation<br/>(does not stop the build)
-    end
-
-    GH->>PRs: Fetch + cherry-pick each PR's commit(s)
-    Note over GH: #255,#246,#247 apply cleanly
-    GH->>GH: #239 conflicts with #255 (adjacent branches)<br/>→ resolved by resolve_bedrock_gateway_conflicts.py
-    GH->>GH: #198 conflicts with #239 (same log line)<br/>→ resolved by resolve_bedrock_gateway_conflicts.py
-    GH->>PRs: Cherry-pick #249 (Opus 4.7)
-    GH->>GH: Validate Python syntax (ast.parse)
-    Note over GH: Fails loudly if a cherry-pick<br/>left the file broken
-
-    GH->>GH: Compute build identity (upstream SHA + patches)
-
-    alt Build identity changed
-        GH->>GH: Setup QEMU (ARM64 emulation)
-        GH->>GH: Setup Docker Buildx
-        GH->>GHCR: Login (GITHUB_TOKEN)
-
-        GH->>GH: Build multi-arch image
-        Note over GH: Platforms: linux/amd64, linux/arm64
-
-        GH->>GHCR: Push images
-        Note over GHCR: Tags: latest, sha-<short>
-
-        GH->>This: Update .github/upstream_sha
-        GH->>This: git commit + push
-
-        GHCR-->>K8s: ✅ New image available
-        Note over K8s: kubectl rollout restart<br/>deployment/bedrock-access-gateway
-    else Build identity unchanged
-        GH-->>Cron: ℹ️ No changes, skip build
-    end
-```
-
-### Configuration
-
-**Trigger Events:**
-- **Automatic:** Every 6 hours (cron: `0 */6 * * *`)
-- **Manual:** `workflow_dispatch` for immediate rebuild
-
-**Container Registry:**
-- **Registry:** `ghcr.io/seadogger-tech/aws-bedrock-gateway`
-- **Tags:**
-  - `latest` - Always points to most recent build
-  - `sha-<short>` - Specific commit from upstream (e.g., `sha-a1b2c3d`)
-- **Architectures:** `linux/amd64`, `linux/arm64`
-
-**Change Detection:**
-- Stores last built identity (upstream SHA + patch state) in `.github/upstream_sha`
-- Skips build if unchanged (saves CI minutes and resources)
-- Because upstream `main` is checked out fresh every run, the identity changes whenever *either* upstream advances *or* any adopted PR's branch changes — both trigger a rebuild
-
-**Steps:**
-1. **Checkout this repo** (branch `master`) to read/write `.github/upstream_sha` and load `.github/scripts/resolve_bedrock_gateway_conflicts.py`
-2. **Checkout upstream repo** (default branch, always latest — not pinned)
-3. **Check adopted-PR status** — warns (doesn't fail) if any of the 6 cherry-picked PRs has merged/closed upstream
-4. **Cherry-pick all 6 PRs**, resolving 2 known conflicts via the committed Python script rather than inline shell/Python (more testable, avoids YAML-escaping fragility)
-5. **Validate syntax** — `ast.parse()` on the patched file; fails the build loudly rather than shipping broken code
-6. **Compare build identity** - Skip remaining steps if unchanged
-7. **Setup build environment** - QEMU for ARM64 emulation, Buildx for multi-arch
-8. **Login to GHCR** - Use `GITHUB_TOKEN` for authentication
-9. **Build & push** - Multi-arch build for AMD64 and ARM64
-10. **Update tracking file** - Commit new build identity to `.github/upstream_sha`
-
-**Why This Matters:**
-- AWS Bedrock Gateway is actively developed by AWS samples team, but real, useful fixes often sit unreviewed for weeks — waiting on maintainer bandwidth isn't a substitute for having a working gateway today
-- Automatic rebuilds keep our deployment current with both upstream security patches AND our adopted fixes
-- ARM64 support critical for Raspberry Pi 5 cluster
-- Build-identity tracking prevents unnecessary rebuilds (cost optimization)
-- The merge-status warning step means adopted PRs don't silently rot forever once they land upstream for real
-
-![accent-divider](images/accent-divider.svg)
 ## Mealie Upstream Image
 
 Mealie pulls the stock `ghcr.io/mealie-recipes/mealie:v3.30.0` image,
@@ -299,47 +161,35 @@ mounted into the stock image, not a custom image build.
 graph LR
     subgraph Developer["👨‍💻 Developer Workflow"]
         EditWiki[Edit docs/wiki/]
-        EditCode[Update Bedrock Config]
         EditMealie[Update pinned Mealie tag and digest]
-        AdoptPR[Adopt a new unmerged<br/>upstream PR]
         Commit[git commit + push]
     end
 
     subgraph GitHub["🔄 GitHub Actions"]
         WikiAction[publish-wiki.yml]
-        BedrockAction[upstream-rebuild.yaml<br/>cron: every 6h]
     end
 
     subgraph Outputs["📦 Outputs"]
         WikiSite[GitHub Wiki<br/>Updated Docs]
-        GHCRBedrock[ghcr.io<br/>aws-bedrock-gateway image]
         GHCRMealie[Upstream GHCR<br/>mealie v3.30.0 pinned by digest]
     end
 
     subgraph Deployment["🚀 Deployment"]
         ArgoCD[ArgoCD]
         K3sCluster[K3s Cluster]
-        BedrockPod[Bedrock Gateway Pod<br/>serves Mealie + OpenWebUI]
         MealiePod[Mealie Pod]
     end
 
     EditWiki --> Commit
-    EditCode --> Commit
     EditMealie --> Commit
     Commit -->|Reviewed manifests| ArgoCD
-    AdoptPR --> Commit
     Commit --> WikiAction
-    Commit -.->|Indirectly| BedrockAction
 
     WikiAction --> WikiSite
-    BedrockAction --> GHCRBedrock
 
-    GHCRBedrock --> ArgoCD
     GHCRMealie -->|Pull pinned upstream image| MealiePod
     ArgoCD --> K3sCluster
-    K3sCluster --> BedrockPod
     K3sCluster --> MealiePod
-    BedrockPod -.->|API calls| MealiePod
 
     style Developer fill:#2d5016,stroke:#5a9216,stroke-width:3px
     style GitHub fill:#1e3a5f,stroke:#4a90e2,stroke-width:3px
@@ -356,13 +206,6 @@ graph LR
   - Permission: `contents: read` for the check job; `contents: write` for the publish job
   - Target: The wiki's default `master` branch
   - Setup: No repository PAT is required
-
-### Bedrock Gateway Rebuild
-- **Token:** `GITHUB_TOKEN` (automatic)
-  - Type: Workflow-scoped token (provided by GitHub Actions)
-  - Permissions: `packages:write`, `contents:write` (declared in workflow)
-  - Why: Push container images to GHCR, commit `.github/upstream_sha`, and query adopted-PR merge status via `gh pr view`
-  - Setup: No action required (automatic)
 
 ### Mealie Upstream Pull
 Mealie has no build or package-publishing token requirement. The cluster pulls
@@ -382,45 +225,6 @@ manifest changes and ArgoCD reads.
 3. Give the publish job `contents: write` and configure Git with `gh auth setup-git`
 4. Update `useful_scripts/wiki/preflight.py` with the destination wiki URL
 5. Ensure reviewed wiki content is in `docs/wiki/` and publish to the wiki's default branch
-
-### Customize Bedrock Gateway Rebuild
-
-**Change Build Schedule:**
-```yaml
-schedule:
-  - cron: '0 */12 * * *'  # Every 12 hours instead of 6
-```
-
-**Change Image Registry:**
-```yaml
-env:
-  IMAGE: ghcr.io/your-org/your-image-name
-```
-
-**Add Additional Platforms:**
-```yaml
-platforms: linux/amd64,linux/arm64,linux/arm/v7
-```
-
-**Requirements:**
-- Workflow must have `packages: write` permission
-- Repository must enable GitHub Container Registry
-- QEMU/Buildx required for cross-platform builds
-
-### Adopt a New Unmerged Upstream PR (either workflow)
-
-Follow this checklist — established as ADR-011 — before adding a new cherry-pick to either workflow:
-
-1. **Verify the PR is real and current.** Check `gh pr view <N> --repo <upstream> --json mergeable,updatedAt` — `MERGEABLE` and recently updated is a good sign; `CONFLICTING` means it's already stale against current upstream and needs its own rebase first.
-2. **Test the cherry-pick locally first**, against a fresh clone, using the exact commands you intend to put in the workflow — not an approximation. `git clone` the upstream repo, add the contributor's fork as a remote, `git fetch` their branch, `git cherry-pick` the commit(s).
-3. **If it conflicts** with another already-adopted PR, resolve it and write the resolution as a **separate, committed, testable Python script** (see `.github/scripts/resolve_bedrock_gateway_conflicts.py` for the pattern) — do not embed the fix as an inline Python heredoc inside the workflow's YAML `run:` block; that approach is fragile and broke silently once already during this pattern's development.
-4. **Check for merge commits.** If `git log <branch>` shows the PR branch's tip is a merge commit (upstream was merged into the feature branch mid-review), `git cherry-pick` will refuse it (`is a merge but no -m option was given`). Cherry-pick the actual feature commit(s) directly instead — find them via `git log <branch>`.
-5. **Add a merge-status check** for the new PR number in the "Check adopted-PR status" step, so its eventual merge gets flagged.
-6. **Add an explanatory comment** at the cherry-pick step: which PR, why, which real client/use-case needs it, and what to do once it merges.
-7. **Add a syntax/sanity check** after all cherry-picks apply (e.g. `python3 -c "import ast; ast.parse(...)"` for Python targets).
-8. **Document it** in the relevant app's wiki section and in the ADR-011 table.
-
-![accent-divider](images/accent-divider.svg)
 
 ```bash
 # View specific run details
@@ -447,25 +251,9 @@ gh api repos/seadogger-tech/seadogger-homelab/actions/jobs/<job-id> \
 - **Fix:** Move live evidence to private storage or repair the Markdown structure. For an intentional rewrite, record a reviewed exact-hash exception
 - **Verify:** Rerun `python3 -B useful_scripts/wiki/preflight.py` from the Core root
 
-**Bedrock Rebuild Fails on Docker build:**
-- **Symptom:** "buildx failed with: ERROR: failed to solve"
-- **Fix:** Check Dockerfile in upstream repo is valid
-- **Common cause:** Upstream introduced ARM64-incompatible dependencies
-
-**Bedrock Rebuild Fails on a Cherry-Pick Step:**
-- **Symptom:** `::error::Cherry-pick of PR #N (<sha>) failed — likely diverged from upstream main`
-- **Cause:** Upstream has changed the same lines the adopted PR touches, since the last time the cherry-pick was verified
-- **Fix:** Re-run the cherry-pick locally against current upstream, resolve the new conflict, update `.github/scripts/resolve_bedrock_gateway_conflicts.py` (or the workflow's inline logic for a one-off conflict) accordingly
-- **Also check:** whether the PR's own branch was rebased/force-pushed — if so, the hardcoded commit SHA in the workflow is stale; get the current SHA from `git log <branch>` on the contributor's fork
-
-**Adopted-PR Merge Warning Appears:**
-- **Symptom:** `::warning::...#N is now MERGED/CLOSED upstream. The cherry-pick step below is likely no longer needed`
-- **Expected:** This is not a failure — it's the intended signal from the pattern in [ADR-011](13-ADR-Index.md#adr-011-adopting-unmerged-upstream-prs-reusable-pattern)
-- **Action:** Remove that PR's cherry-pick step from the workflow (and its entry from the ADR-011 table), then verify the next build still produces a working image
-
 **No Changes Detected:**
 - **Symptom:** Workflow runs but commits nothing
-- **Expected:** When no actual changes exist in wiki, upstream, or the adopted-PR branches
+- **Expected:** When no actual changes exist in the wiki
 - **Action:** No action needed - this is normal behavior
 
 ![accent-divider](images/accent-divider.svg)
@@ -473,8 +261,8 @@ gh api repos/seadogger-tech/seadogger-homelab/actions/jobs/<job-id> \
 
 - **[[02-Architecture]]** - System architecture showing CI/CD integration
 - **[[05-GitOps-and-IaC]]** - ArgoCD deployment workflow
-- **[[09-Apps]]** - Bedrock Gateway and Mealie application details, including the full adopted-PR table and text-to-image/image-to-text capability status
-- **[[13-ADR-Index]]** - ADR-011: the "Adopting Unmerged Upstream PRs" reusable pattern
+- **[[09-Apps]]** - Mealie and other application details
+- **[[13-ADR-Index]]** - ADR-011: the "Adopting Unmerged Upstream PRs" pattern (historical)
 - **[[21-Deployment-Dependencies]]** - Understanding deployment order
 
 **Related Issues:**
