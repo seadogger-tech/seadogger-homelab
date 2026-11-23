@@ -35,7 +35,6 @@ graph TB
     subgraph Storage["💾 Storage Classes"]
         direction TB
         Default[ceph-block-data<br/>RBD Replicated<br/>DEFAULT]
-        Bucket[ceph-bucket<br/>S3-compatible<br/>Object Storage]
         FSEC[ceph-fs-data-ec<br/>CephFS Erasure Coded<br/>2+1 EC]
         FSRep[ceph-fs-data-replicated<br/>CephFS Replicated<br/>3× Replica]
         LocalPath[local-path<br/>K3s Local Storage<br/>Single Node]
@@ -64,7 +63,6 @@ graph TB
     OSD --> NVMe3
 
     Default --> OSD
-    Bucket --> OSD
     FSEC --> MDS
     FSRep --> MDS
     MDS --> OSD
@@ -84,7 +82,6 @@ graph TB
 ## Storage Classes
 - **ceph-block-data** (DEFAULT): Block storage with replication (RBD)
   - Used by: N8N (n8n-main-persistence)
-- **ceph-bucket**: S3-compatible object storage for backups
 - **ceph-fs-data-ec**: CephFS with erasure coding (2+1 EC) for large files
   - Used by: Nextcloud (nextcloud-nextcloud), Jellyfin config/cache (jellyfin-config, jellyfin-cache)
 - **ceph-fs-data-replicated**: CephFS with 3× replication for high availability
@@ -92,6 +89,8 @@ graph TB
 - **No storage class**: Read-only volume mounts (e.g., Jellyfin media library)
 
 **Reclaim Policy:** All Ceph storage classes use `Retain` policy to prevent accidental data loss
+
+**No object storage:** The chart's default object store (RGW and the `ceph-bucket` StorageClass) was removed on purpose in October 2026 because nothing used it. `rook-ceph-cluster-values.yaml` sets `cephObjectStores: []`; add an entry there if S3-compatible storage is ever needed. Velero backs up to external S3, not to Ceph.
 
 ![accent-divider.svg](images/accent-divider.svg)
 
@@ -122,7 +121,6 @@ graph TB
 | `ceph-block-data`          | Ceph **RBD Block**          | `rook-ceph.rbd.csi.ceph.com`    | Retain        | Immediate              | ✅         | ✅      | General/critical workloads needing block volumes (DBs, app data).            | Replicated pool (e.g., 3×) ⇒ tolerate up to (replicas-1) OSD/node failures. |
 | `ceph-fs-data-ec`          | **CephFS (Erasure-Coded)**  | `rook-ceph.cephfs.csi.ceph.com` | Retain        | Immediate              | ✅         | —       | Large media & read-heavy files (e.g., Plex libraries) to maximize capacity.  | EC profile (e.g., 2+1) ⇒ tolerates ≥1 OSD/node failure.                    |
 | `ceph-fs-data-replicated`  | **CephFS (Replicated)**     | `rook-ceph.cephfs.csi.ceph.com` | Retain        | Immediate              | ✅         | —       | Shared files where extra redundancy is preferred over raw capacity.          | Replicated pool (e.g., 3×) ⇒ tolerate up to (replicas-1) OSD/node failures. |
-| `ceph-bucket`              | **S3-compatible Object**    | `rook-ceph.ceph.rook.io/bucket` | Delete        | Immediate              | ❌         | —       | Apps needing object storage via S3 API.                                       | Depends on RGW/RADOS pool replication; node-resilient if replicated.        |
 | `local-path`               | **HostPath (Local)**        | `rancher.io/local-path`         | Delete        | WaitForFirstConsumer   | ❌         | —       | Ephemeral/dev workloads tied to a single node.                                | None (single-node; no redundancy).                                         |
 
 \* Failure tolerance is indicative; exact resilience depends on your Ceph pool replica/EC settings.
