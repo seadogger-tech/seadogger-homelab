@@ -69,6 +69,23 @@ For deployment changes, read [Deployment and Validation](docs/wiki/27-Deployment
 - YAML must pass `yamllint` with the repo config (140-char line warning, truthy disabled).
 - The default branch is `master`. `git pull --rebase` before you push.
 
+## Merge model
+
+- `master` takes changes only through a PR. The ruleset needs 0 approvals, and only
+  the owner's account (`seadogger`) can merge. Don't push to `master` directly.
+- OCE pipeline work runs on a Map branch, `map/<OCE-id>-<slug>`. Build ticket PRs
+  target the Map branch. When the Map closes, Kirk approves and the VP merges the Map
+  branch to `master`. Merged branches are deleted.
+- Engineers push as `seadogger-agent-dev` and can't merge. VPs merge through the
+  owner's account.
+- Kirk's approval replaces the owner's per-PR CCB approval, except for the
+  always-escalate categories: spend, credentials or security exposure, data deletion,
+  irreversible actions, production-impacting stages (cold start, infrastructure,
+  cleanup), and product taste or priorities. The VP labels those PRs, and they go to
+  the owner as Escalation cards.
+- Every merge comment names the agent that merged and cites Kirk's approval (or the
+  owner's Escalation answer).
+
 ## Wiki
 
 `docs/wiki/` is published to the GitHub wiki by `publish-wiki.yml`. When you change how
