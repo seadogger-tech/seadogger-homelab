@@ -173,6 +173,7 @@ The `main.yml` playbook is now solely responsible for installation and idempoten
 
 ## Known Issues
 
+- **Startup DNS dependency on Pi-hole.** Every node resolves DNS through the Pi-hole LoadBalancer (`192.168.1.250`), which runs on this cluster. On any cold start or power recovery, Pi-hole must come up before anything can pull images, and before NTP can fix clocks (the Pis have no RTC, so Ceph mons skew). `pihole_deploy.yml` sets a `1.1.1.1` fallback in the NetworkManager profile so nodes can self-heal; never edit `/etc/resolv.conf` directly, because NM rewrites it. Apps that authenticate at startup (Home Assistant) gate on a `wait-for-dns` initContainer. Full write-up and current status: [Troubleshooting](12-Troubleshooting#power-failure--cluster-wide-dns-deadlock-2026-08-04).
 - The initial installation of Rook-Ceph can sometimes be slow or require a second run if the OSDs take a long time to initialize. The playbook has been made more robust, but this remains an area for observation.
 
 

@@ -112,6 +112,7 @@ The homelab is fully functional and serving production workloads. Core infrastru
 ![accent-divider.svg](images/accent-divider.svg)
 ## Known Issues & Limitations
 
+*   **Pi-hole / k3s DNS circular dependency:** nodes resolve DNS through Pi-hole, which runs on the cluster. After a power failure this deadlocked the whole house on 2026-08-04 (no DNS → no image pull → no Pi-hole). Resolved with pinned images, a node-level fallback resolver and CoreDNS pinned to Pi-hole; the dependency itself is by design. See [[12-Troubleshooting#power-failure--cluster-wide-dns-deadlock-2026-08-04]] and [#59](https://github.com/seadogger-tech/seadogger-homelab/issues/59)
 *   **NFS Compatibility:** Ganesha NFS (via CephFS) has compatibility issues with macOS clients - using Nextcloud instead
 *   **Image Versions:** Some deployments use "latest" tag - see [#43](https://github.com/seadogger-tech/seadogger-homelab/issues/43)
 *   **Subnet Hardcoding:** Network subnet scattered across multiple files - see [#41](https://github.com/seadogger-tech/seadogger-homelab/issues/41)

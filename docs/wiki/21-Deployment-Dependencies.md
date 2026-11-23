@@ -226,6 +226,7 @@ This creates inconsistency - no single source of truth!
 - **CRITICAL:** MetalLB (DNS needs LoadBalancer IP)
 - **CRITICAL:** ArgoCD (deployed via Application CRD)
 - Optional: Rook-Ceph (persistence disabled in current config)
+- ⚠️ **Reverse dependency:** every node and pod depends on Pi-hole for DNS, including the image pulls Pi-hole itself needs. This is a known circular dependency; see [Troubleshooting](12-Troubleshooting#power-failure--cluster-wide-dns-deadlock-2026-08-04)
 
 **Jellyfin:**
 - **CRITICAL:** Rook-Ceph (static PV for metadata)

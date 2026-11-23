@@ -377,6 +377,18 @@ incident and the chart-pinning fix.
 ![accent-divider.svg](images/accent-divider.svg)
 ## Power Failure → Cluster-Wide DNS Deadlock (2026-08-04)
 
+> ⚠️ **KNOWN ISSUE: resolved, but inherent to the design.** Pi-hole runs
+> *on* the cluster that depends on it for DNS. The fixes below (pinned
+> images, node fallback resolver, CoreDNS pinned to Pi-hole, TCP-only
+> cloudflared probes, three DoH providers, Home Assistant `wait-for-dns`)
+> break the deadlock. The dependency itself remains, though, so changes to
+> node DNS, CoreDNS, or the Pi-hole/cloudflared images can re-arm it.
+> Tracked in [core#59](https://github.com/seadogger-tech/seadogger-homelab/issues/59).
+>
+> **If it happens again:** run the [recovery procedure](#recovery-procedure)
+> below, after first checking the node resolver order:
+> `ssh pi@<node> grep ^nameserver /etc/resolv.conf` (Pi-hole first, `1.1.1.1` second).
+
 **Symptom:** After a house power failure, "every wired interface is
 down." Nothing resolves — but the network is actually fine. Nodes ping,
 the gateway responds, k3s is `Ready` on all four nodes. Nearly every pod
