@@ -1,0 +1,589 @@
+---
+# HDHomeRun HLS restream (dormant).
+#
+# Adopted into Git from the hand-applied live objects (OCE-164, 2026-11-23).
+# The Deployment has been scaled to 0 since 2025-12. Jellyfin does not use it:
+# Live TV reads the tuner directly (http://192.168.1.70) and gets its guide
+# from xmltv-proxy. Keep replicas at 0 unless you mean to restart it.
+#
+# The HDHomeRun CONNECT DUO has 2 tuners, but each ffmpeg container below holds
+# one tuner stream open permanently. Scaling to 1 starts 24 streams, so at most
+# 2 channels can work and the rest retry every 2s. Trim the channel list before
+# re-enabling.
+#
+# Images are pinned by digest. ffmpeg 9.0.2-cli-ls90 is the build `latest`
+# pointed to on 2026-11-23 (multi-arch, includes arm64). It was tested on the
+# cluster with a 20s capture of channel 2.1 served through this nginx config.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: hdhomerun-hls-nginx-conf
+  namespace: jellyfin
+data:
+  default.conf: |
+    server {
+        listen 80;
+        server_name localhost;
+
+        location / {
+            root /usr/share/nginx/html;
+            add_header Cache-Control "no-cache, no-store, must-revalidate";
+            add_header Access-Control-Allow-Origin "*";
+            types {
+                application/vnd.apple.mpegurl m3u8;
+                video/mp2t ts;
+            }
+        }
+    }
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hdhomerun-hls
+  namespace: jellyfin
+spec:
+  replicas: 0
+  selector:
+    matchLabels:
+      app: hdhomerun-hls
+  template:
+    metadata:
+      labels:
+        app: hdhomerun-hls
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:1.31.9-alpine@sha256:fb4658584bd9a916ffb6f6e365f97c25cfdb2923801f551ea08356e695f14ff7
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 80
+          volumeMounts:
+            - name: hls-storage
+              mountPath: /usr/share/nginx/html
+            - name: nginx-conf
+              mountPath: /etc/nginx/conf.d/default.conf
+              subPath: default.conf
+        - name: ffmpeg-2-1
+          image: linuxserver/ffmpeg:9.0.2-cli-ls90@sha256:66fa8e2351fb78f9dad2c59c946be2658edcc529339320da3f2cf788312368af
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              mkdir -p /hls/2_1
+              while true; do
+                ffmpeg -hide_banner -loglevel warning \
+                  -i "http://192.168.1.70:5004/auto/v2.1" \
+                  -c copy \
+                  -f hls \
+                  -hls_time 8 \
+                  -hls_list_size 40 \
+                  -hls_flags delete_segments+independent_segments \
+                  -hls_segment_filename "/hls/2_1/segment_%03d.ts" \
+                  /hls/2_1/index.m3u8 || sleep 2
+              done
+          volumeMounts:
+            - name: hls-storage
+              mountPath: /hls
+        - name: ffmpeg-2-2
+          image: linuxserver/ffmpeg:9.0.2-cli-ls90@sha256:66fa8e2351fb78f9dad2c59c946be2658edcc529339320da3f2cf788312368af
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              mkdir -p /hls/2_2
+              while true; do
+                ffmpeg -hide_banner -loglevel warning \
+                  -i "http://192.168.1.70:5004/auto/v2.2" \
+                  -c copy \
+                  -f hls \
+                  -hls_time 8 \
+                  -hls_list_size 40 \
+                  -hls_flags delete_segments+independent_segments \
+                  -hls_segment_filename "/hls/2_2/segment_%03d.ts" \
+                  /hls/2_2/index.m3u8 || sleep 2
+              done
+          volumeMounts:
+            - name: hls-storage
+              mountPath: /hls
+        - name: ffmpeg-2-3
+          image: linuxserver/ffmpeg:9.0.2-cli-ls90@sha256:66fa8e2351fb78f9dad2c59c946be2658edcc529339320da3f2cf788312368af
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              mkdir -p /hls/2_3
+              while true; do
+                ffmpeg -hide_banner -loglevel warning \
+                  -i "http://192.168.1.70:5004/auto/v2.3" \
+                  -c copy \
+                  -f hls \
+                  -hls_time 8 \
+                  -hls_list_size 40 \
+                  -hls_flags delete_segments+independent_segments \
+                  -hls_segment_filename "/hls/2_3/segment_%03d.ts" \
+                  /hls/2_3/index.m3u8 || sleep 2
+              done
+          volumeMounts:
+            - name: hls-storage
+              mountPath: /hls
+        - name: ffmpeg-6-1
+          image: linuxserver/ffmpeg:9.0.2-cli-ls90@sha256:66fa8e2351fb78f9dad2c59c946be2658edcc529339320da3f2cf788312368af
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              mkdir -p /hls/6_1
+              while true; do
+                ffmpeg -hide_banner -loglevel warning \
+                  -i "http://192.168.1.70:5004/auto/v6.1" \
+                  -c copy \
+                  -f hls \
+                  -hls_time 8 \
+                  -hls_list_size 40 \
+                  -hls_flags delete_segments+independent_segments \
+                  -hls_segment_filename "/hls/6_1/segment_%03d.ts" \
+                  /hls/6_1/index.m3u8 || sleep 2
+              done
+          volumeMounts:
+            - name: hls-storage
+              mountPath: /hls
+        - name: ffmpeg-6-2
+          image: linuxserver/ffmpeg:9.0.2-cli-ls90@sha256:66fa8e2351fb78f9dad2c59c946be2658edcc529339320da3f2cf788312368af
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              mkdir -p /hls/6_2
+              while true; do
+                ffmpeg -hide_banner -loglevel warning \
+                  -i "http://192.168.1.70:5004/auto/v6.2" \
+                  -c copy \
+                  -f hls \
+                  -hls_time 8 \
+                  -hls_list_size 40 \
+                  -hls_flags delete_segments+independent_segments \
+                  -hls_segment_filename "/hls/6_2/segment_%03d.ts" \
+                  /hls/6_2/index.m3u8 || sleep 2
+              done
+          volumeMounts:
+            - name: hls-storage
+              mountPath: /hls
+        - name: ffmpeg-6-3
+          image: linuxserver/ffmpeg:9.0.2-cli-ls90@sha256:66fa8e2351fb78f9dad2c59c946be2658edcc529339320da3f2cf788312368af
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              mkdir -p /hls/6_3
+              while true; do
+                ffmpeg -hide_banner -loglevel warning \
+                  -i "http://192.168.1.70:5004/auto/v6.3" \
+                  -c copy \
+                  -f hls \
+                  -hls_time 8 \
+                  -hls_list_size 40 \
+                  -hls_flags delete_segments+independent_segments \
+                  -hls_segment_filename "/hls/6_3/segment_%03d.ts" \
+                  /hls/6_3/index.m3u8 || sleep 2
+              done
+          volumeMounts:
+            - name: hls-storage
+              mountPath: /hls
+        - name: ffmpeg-6-4
+          image: linuxserver/ffmpeg:9.0.2-cli-ls90@sha256:66fa8e2351fb78f9dad2c59c946be2658edcc529339320da3f2cf788312368af
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              mkdir -p /hls/6_4
+              while true; do
+                ffmpeg -hide_banner -loglevel warning \
+                  -i "http://192.168.1.70:5004/auto/v6.4" \
+                  -c copy \
+                  -f hls \
+                  -hls_time 8 \
+                  -hls_list_size 40 \
+                  -hls_flags delete_segments+independent_segments \
+                  -hls_segment_filename "/hls/6_4/segment_%03d.ts" \
+                  /hls/6_4/index.m3u8 || sleep 2
+              done
+          volumeMounts:
+            - name: hls-storage
+              mountPath: /hls
+        - name: ffmpeg-6-5
+          image: linuxserver/ffmpeg:9.0.2-cli-ls90@sha256:66fa8e2351fb78f9dad2c59c946be2658edcc529339320da3f2cf788312368af
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              mkdir -p /hls/6_5
+              while true; do
+                ffmpeg -hide_banner -loglevel warning \
+                  -i "http://192.168.1.70:5004/auto/v6.5" \
+                  -c copy \
+                  -f hls \
+                  -hls_time 8 \
+                  -hls_list_size 40 \
+                  -hls_flags delete_segments+independent_segments \
+                  -hls_segment_filename "/hls/6_5/segment_%03d.ts" \
+                  /hls/6_5/index.m3u8 || sleep 2
+              done
+          volumeMounts:
+            - name: hls-storage
+              mountPath: /hls
+        - name: ffmpeg-6-6
+          image: linuxserver/ffmpeg:9.0.2-cli-ls90@sha256:66fa8e2351fb78f9dad2c59c946be2658edcc529339320da3f2cf788312368af
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              mkdir -p /hls/6_6
+              while true; do
+                ffmpeg -hide_banner -loglevel warning \
+                  -i "http://192.168.1.70:5004/auto/v6.6" \
+                  -c copy \
+                  -f hls \
+                  -hls_time 8 \
+                  -hls_list_size 40 \
+                  -hls_flags delete_segments+independent_segments \
+                  -hls_segment_filename "/hls/6_6/segment_%03d.ts" \
+                  /hls/6_6/index.m3u8 || sleep 2
+              done
+          volumeMounts:
+            - name: hls-storage
+              mountPath: /hls
+        - name: ffmpeg-9-1
+          image: linuxserver/ffmpeg:9.0.2-cli-ls90@sha256:66fa8e2351fb78f9dad2c59c946be2658edcc529339320da3f2cf788312368af
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              mkdir -p /hls/9_1
+              while true; do
+                ffmpeg -hide_banner -loglevel warning \
+                  -i "http://192.168.1.70:5004/auto/v9.1" \
+                  -c copy \
+                  -f hls \
+                  -hls_time 8 \
+                  -hls_list_size 40 \
+                  -hls_flags delete_segments+independent_segments \
+                  -hls_segment_filename "/hls/9_1/segment_%03d.ts" \
+                  /hls/9_1/index.m3u8 || sleep 2
+              done
+          volumeMounts:
+            - name: hls-storage
+              mountPath: /hls
+        - name: ffmpeg-9-2
+          image: linuxserver/ffmpeg:9.0.2-cli-ls90@sha256:66fa8e2351fb78f9dad2c59c946be2658edcc529339320da3f2cf788312368af
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              mkdir -p /hls/9_2
+              while true; do
+                ffmpeg -hide_banner -loglevel warning \
+                  -i "http://192.168.1.70:5004/auto/v9.2" \
+                  -c copy \
+                  -f hls \
+                  -hls_time 8 \
+                  -hls_list_size 40 \
+                  -hls_flags delete_segments+independent_segments \
+                  -hls_segment_filename "/hls/9_2/segment_%03d.ts" \
+                  /hls/9_2/index.m3u8 || sleep 2
+              done
+          volumeMounts:
+            - name: hls-storage
+              mountPath: /hls
+        - name: ffmpeg-9-3
+          image: linuxserver/ffmpeg:9.0.2-cli-ls90@sha256:66fa8e2351fb78f9dad2c59c946be2658edcc529339320da3f2cf788312368af
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              mkdir -p /hls/9_3
+              while true; do
+                ffmpeg -hide_banner -loglevel warning \
+                  -i "http://192.168.1.70:5004/auto/v9.3" \
+                  -c copy \
+                  -f hls \
+                  -hls_time 8 \
+                  -hls_list_size 40 \
+                  -hls_flags delete_segments+independent_segments \
+                  -hls_segment_filename "/hls/9_3/segment_%03d.ts" \
+                  /hls/9_3/index.m3u8 || sleep 2
+              done
+          volumeMounts:
+            - name: hls-storage
+              mountPath: /hls
+        - name: ffmpeg-9-4
+          image: linuxserver/ffmpeg:9.0.2-cli-ls90@sha256:66fa8e2351fb78f9dad2c59c946be2658edcc529339320da3f2cf788312368af
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              mkdir -p /hls/9_4
+              while true; do
+                ffmpeg -hide_banner -loglevel warning \
+                  -i "http://192.168.1.70:5004/auto/v9.4" \
+                  -c copy \
+                  -f hls \
+                  -hls_time 8 \
+                  -hls_list_size 40 \
+                  -hls_flags delete_segments+independent_segments \
+                  -hls_segment_filename "/hls/9_4/segment_%03d.ts" \
+                  /hls/9_4/index.m3u8 || sleep 2
+              done
+          volumeMounts:
+            - name: hls-storage
+              mountPath: /hls
+        - name: ffmpeg-18-1
+          image: linuxserver/ffmpeg:9.0.2-cli-ls90@sha256:66fa8e2351fb78f9dad2c59c946be2658edcc529339320da3f2cf788312368af
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              mkdir -p /hls/18_1
+              while true; do
+                ffmpeg -hide_banner -loglevel warning \
+                  -i "http://192.168.1.70:5004/auto/v18.1" \
+                  -c copy \
+                  -f hls \
+                  -hls_time 8 \
+                  -hls_list_size 40 \
+                  -hls_flags delete_segments+independent_segments \
+                  -hls_segment_filename "/hls/18_1/segment_%03d.ts" \
+                  /hls/18_1/index.m3u8 || sleep 2
+              done
+          volumeMounts:
+            - name: hls-storage
+              mountPath: /hls
+        - name: ffmpeg-24-3
+          image: linuxserver/ffmpeg:9.0.2-cli-ls90@sha256:66fa8e2351fb78f9dad2c59c946be2658edcc529339320da3f2cf788312368af
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              mkdir -p /hls/24_3
+              while true; do
+                ffmpeg -hide_banner -loglevel warning \
+                  -i "http://192.168.1.70:5004/auto/v24.3" \
+                  -c copy \
+                  -f hls \
+                  -hls_time 8 \
+                  -hls_list_size 40 \
+                  -hls_flags delete_segments+independent_segments \
+                  -hls_segment_filename "/hls/24_3/segment_%03d.ts" \
+                  /hls/24_3/index.m3u8 || sleep 2
+              done
+          volumeMounts:
+            - name: hls-storage
+              mountPath: /hls
+        - name: ffmpeg-27-1
+          image: linuxserver/ffmpeg:9.0.2-cli-ls90@sha256:66fa8e2351fb78f9dad2c59c946be2658edcc529339320da3f2cf788312368af
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              mkdir -p /hls/27_1
+              while true; do
+                ffmpeg -hide_banner -loglevel warning \
+                  -i "http://192.168.1.70:5004/auto/v27.1" \
+                  -c copy \
+                  -f hls \
+                  -hls_time 8 \
+                  -hls_list_size 40 \
+                  -hls_flags delete_segments+independent_segments \
+                  -hls_segment_filename "/hls/27_1/segment_%03d.ts" \
+                  /hls/27_1/index.m3u8 || sleep 2
+              done
+          volumeMounts:
+            - name: hls-storage
+              mountPath: /hls
+        - name: ffmpeg-35-1
+          image: linuxserver/ffmpeg:9.0.2-cli-ls90@sha256:66fa8e2351fb78f9dad2c59c946be2658edcc529339320da3f2cf788312368af
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              mkdir -p /hls/35_1
+              while true; do
+                ffmpeg -hide_banner -loglevel warning \
+                  -i "http://192.168.1.70:5004/auto/v35.1" \
+                  -c copy \
+                  -f hls \
+                  -hls_time 8 \
+                  -hls_list_size 40 \
+                  -hls_flags delete_segments+independent_segments \
+                  -hls_segment_filename "/hls/35_1/segment_%03d.ts" \
+                  /hls/35_1/index.m3u8 || sleep 2
+              done
+          volumeMounts:
+            - name: hls-storage
+              mountPath: /hls
+        - name: ffmpeg-35-3
+          image: linuxserver/ffmpeg:9.0.2-cli-ls90@sha256:66fa8e2351fb78f9dad2c59c946be2658edcc529339320da3f2cf788312368af
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              mkdir -p /hls/35_3
+              while true; do
+                ffmpeg -hide_banner -loglevel warning \
+                  -i "http://192.168.1.70:5004/auto/v35.3" \
+                  -c copy \
+                  -f hls \
+                  -hls_time 8 \
+                  -hls_list_size 40 \
+                  -hls_flags delete_segments+independent_segments \
+                  -hls_segment_filename "/hls/35_3/segment_%03d.ts" \
+                  /hls/35_3/index.m3u8 || sleep 2
+              done
+          volumeMounts:
+            - name: hls-storage
+              mountPath: /hls
+        - name: ffmpeg-43-2
+          image: linuxserver/ffmpeg:9.0.2-cli-ls90@sha256:66fa8e2351fb78f9dad2c59c946be2658edcc529339320da3f2cf788312368af
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              mkdir -p /hls/43_2
+              while true; do
+                ffmpeg -hide_banner -loglevel warning \
+                  -i "http://192.168.1.70:5004/auto/v43.2" \
+                  -c copy \
+                  -f hls \
+                  -hls_time 8 \
+                  -hls_list_size 40 \
+                  -hls_flags delete_segments+independent_segments \
+                  -hls_segment_filename "/hls/43_2/segment_%03d.ts" \
+                  /hls/43_2/index.m3u8 || sleep 2
+              done
+          volumeMounts:
+            - name: hls-storage
+              mountPath: /hls
+        - name: ffmpeg-43-4
+          image: linuxserver/ffmpeg:9.0.2-cli-ls90@sha256:66fa8e2351fb78f9dad2c59c946be2658edcc529339320da3f2cf788312368af
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              mkdir -p /hls/43_4
+              while true; do
+                ffmpeg -hide_banner -loglevel warning \
+                  -i "http://192.168.1.70:5004/auto/v43.4" \
+                  -c copy \
+                  -f hls \
+                  -hls_time 8 \
+                  -hls_list_size 40 \
+                  -hls_flags delete_segments+independent_segments \
+                  -hls_segment_filename "/hls/43_4/segment_%03d.ts" \
+                  /hls/43_4/index.m3u8 || sleep 2
+              done
+          volumeMounts:
+            - name: hls-storage
+              mountPath: /hls
+        - name: ffmpeg-43-5
+          image: linuxserver/ffmpeg:9.0.2-cli-ls90@sha256:66fa8e2351fb78f9dad2c59c946be2658edcc529339320da3f2cf788312368af
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              mkdir -p /hls/43_5
+              while true; do
+                ffmpeg -hide_banner -loglevel warning \
+                  -i "http://192.168.1.70:5004/auto/v43.5" \
+                  -c copy \
+                  -f hls \
+                  -hls_time 8 \
+                  -hls_list_size 40 \
+                  -hls_flags delete_segments+independent_segments \
+                  -hls_segment_filename "/hls/43_5/segment_%03d.ts" \
+                  /hls/43_5/index.m3u8 || sleep 2
+              done
+          volumeMounts:
+            - name: hls-storage
+              mountPath: /hls
+        - name: ffmpeg-65-1
+          image: linuxserver/ffmpeg:9.0.2-cli-ls90@sha256:66fa8e2351fb78f9dad2c59c946be2658edcc529339320da3f2cf788312368af
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              mkdir -p /hls/65_1
+              while true; do
+                ffmpeg -hide_banner -loglevel warning \
+                  -i "http://192.168.1.70:5004/auto/v65.1" \
+                  -c copy \
+                  -f hls \
+                  -hls_time 8 \
+                  -hls_list_size 40 \
+                  -hls_flags delete_segments+independent_segments \
+                  -hls_segment_filename "/hls/65_1/segment_%03d.ts" \
+                  /hls/65_1/index.m3u8 || sleep 2
+              done
+          volumeMounts:
+            - name: hls-storage
+              mountPath: /hls
+        - name: ffmpeg-65-2
+          image: linuxserver/ffmpeg:9.0.2-cli-ls90@sha256:66fa8e2351fb78f9dad2c59c946be2658edcc529339320da3f2cf788312368af
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              mkdir -p /hls/65_2
+              while true; do
+                ffmpeg -hide_banner -loglevel warning \
+                  -i "http://192.168.1.70:5004/auto/v65.2" \
+                  -c copy \
+                  -f hls \
+                  -hls_time 8 \
+                  -hls_list_size 40 \
+                  -hls_flags delete_segments+independent_segments \
+                  -hls_segment_filename "/hls/65_2/segment_%03d.ts" \
+                  /hls/65_2/index.m3u8 || sleep 2
+              done
+          volumeMounts:
+            - name: hls-storage
+              mountPath: /hls
+        - name: ffmpeg-65-3
+          image: linuxserver/ffmpeg:9.0.2-cli-ls90@sha256:66fa8e2351fb78f9dad2c59c946be2658edcc529339320da3f2cf788312368af
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              mkdir -p /hls/65_3
+              while true; do
+                ffmpeg -hide_banner -loglevel warning \
+                  -i "http://192.168.1.70:5004/auto/v65.3" \
+                  -c copy \
+                  -f hls \
+                  -hls_time 8 \
+                  -hls_list_size 40 \
+                  -hls_flags delete_segments+independent_segments \
+                  -hls_segment_filename "/hls/65_3/segment_%03d.ts" \
+                  /hls/65_3/index.m3u8 || sleep 2
+              done
+          volumeMounts:
+            - name: hls-storage
+              mountPath: /hls
+      volumes:
+        - name: hls-storage
+          emptyDir: {}
+        - name: nginx-conf
+          configMap:
+            name: hdhomerun-hls-nginx-conf
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hdhomerun-hls
+  namespace: jellyfin
+spec:
+  selector:
+    app: hdhomerun-hls
+  ports:
+    - port: 80
+      targetPort: 80
