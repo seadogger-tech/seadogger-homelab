@@ -87,9 +87,13 @@ Assistant Dashboard Migration."
 > removed the Mealie build workflow, patch helpers and build-identity file.
 > Mealie now uses stock upstream `v3.30.0`, pinned by digest. The Mealie
 > examples below describe the historical decision, not the current deployment.
-> The Bedrock gateway portion is unaffected.
+>
+> **Bedrock gateway portion retired (2026-11-22):** [PR #77](https://github.com/seadogger-tech/seadogger-homelab/pull/77)
+> removed the AWS Bedrock Access Gateway, its `upstream-rebuild.yaml` workflow and
+> conflict-resolution script, and its OpenWebUI client. Mealie's AI features no
+> longer have a provider. This ADR is now a historical record of the pattern only.
 
-- **Status:** Implemented & Verified
+- **Status:** Retired (pattern kept for reference)
 - **Date:** 2026-07-25
 
 #### Context
