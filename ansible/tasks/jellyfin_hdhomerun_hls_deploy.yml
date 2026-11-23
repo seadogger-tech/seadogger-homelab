@@ -1,0 +1,30 @@
+---
+- name: Deploy Jellyfin HDHomeRun HLS restream
+  vars:
+    kubeconfig_path: /etc/rancher/k3s/k3s.yaml
+    jellyfin_namespace: jellyfin
+    hls_manifest_url: "https://raw.githubusercontent.com/seadogger-tech/seadogger-homelab/master/deployments/jellyfin/hdhomerun-hls.yaml"
+  block:
+    - name: Ensure jellyfin namespace exists
+      kubernetes.core.k8s:
+        state: present
+        kubeconfig: "{{ kubeconfig_path }}"
+        definition:
+          apiVersion: v1
+          kind: Namespace
+          metadata:
+            name: "{{ jellyfin_namespace }}"
+
+    - name: Fetch HDHomeRun HLS manifest from GitHub
+      ansible.builtin.get_url:
+        url: "{{ hls_manifest_url }}"
+        dest: "/tmp/hdhomerun-hls.yaml"
+        mode: "0644"
+
+    # The Deployment is kept at replicas 0 (see the manifest header), so there
+    # is no readiness wait here.
+    - name: Apply HDHomeRun HLS manifest
+      kubernetes.core.k8s:
+        state: present
+        kubeconfig: "{{ kubeconfig_path }}"
+        src: "/tmp/hdhomerun-hls.yaml"
