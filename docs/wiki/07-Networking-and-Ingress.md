@@ -34,9 +34,16 @@ Note: Prefer exposing application UIs via Ingress + TLS (cert-manager) at the Tr
 ### Ingress Hosts (TLS terminates at Traefik `192.168.1.241`) via PiHole DNS
 - `argocd.seadogger-homelab`
 - `ceph.seadogger-homelab`
-- `pihole.seadogger-homelab`
+- `home-assistant.seadogger-homelab`
 - `jellyfin.seadogger-homelab`
-- `n8n.seadogger-homelab`
+- `mealie.seadogger-homelab`
+- `nextcloud.seadogger-homelab`
+- `pihole.seadogger-homelab`
+- `traefik.seadogger-homelab`
+
+Pro adds its own hosts (for example `portal.seadogger-homelab` and `velero.seadogger-homelab`). Every hostname needs a `dnsmasq.customDnsEntries` record in `deployments/pihole/pihole-values.yaml`.
+
+Pods resolve `*.seadogger-homelab` through CoreDNS, which forwards that zone to Pi-hole (`deployments/coredns/coredns-custom.yaml`).
 
 ![accent-divider.svg](images/accent-divider.svg)
 ## See Also
@@ -48,7 +55,7 @@ Note: Prefer exposing application UIs via Ingress + TLS (cert-manager) at the Tr
 
 **Related Issues:**
 - [#41 - Centralize subnet config](https://github.com/seadogger-tech/seadogger-homelab/issues/41) - Network configuration management
-- [#4 (Pro) - HTTP to HTTPS redirect](https://github.com/seadogger-tech/seadogger-homelab-pro/issues/4) - redirect implementation
+- [#4 (Pro) - HTTP to HTTPS redirect](https://github.com/seadogger-tech/seadogger-homelab-pro/issues/4) - redirect implementation (done)
 
 ![accent-divider.svg](images/accent-divider.svg)
 ### Level 3: Network & Security

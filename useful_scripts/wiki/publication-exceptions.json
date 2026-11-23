@@ -13,5 +13,10 @@
     "published_sha256": "2498346b85cd9febb5907d4866e3159c24aa4b891f8ee03fe56b63dcdb8774f2",
     "source_sha256": null,
     "reason": "Hermes agent retired 2026-11 (OCE-101); page removed with the service."
+  },
+  "18-Setting-Up-n8n-Connections.md": {
+    "published_sha256": "ffe3d759f5553148468d441a7279816240544610e5ce45773ac900b170c17e1e",
+    "source_sha256": null,
+    "reason": "n8n was removed from the cluster; setup guide no longer applies."
   }
 }

@@ -69,14 +69,14 @@ Run the Ansible playbook to create the Secret in the jellyfin namespace:
 
 ```bash
 cd ansible
-ansible-playbook -i hosts.ini main.yml --tags jellyfin
+ansible-playbook main.yml   # with manual_install_jellyfin: true
 ```
 
 This creates the `hdhomerun-credentials` Secret with your email and device IDs.
 
 ### Step 3: Deploy XMLTV Proxy
 
-The proxy deployment is managed by ArgoCD from the repository:
+The same run applies the proxy with `ansible/tasks/jellyfin_xmltv_proxy_deploy.yml` (it is not an ArgoCD Application):
 
 ```bash
 # Check if deployment exists
@@ -165,7 +165,7 @@ Proxying: https://api.hdhomerun.com/api/xmltv?Email=...&DeviceIDs=...
 **Solution:** Create the Secret via Ansible:
 ```bash
 cd ansible
-ansible-playbook -i hosts.ini main.yml --tags jellyfin
+ansible-playbook main.yml   # with manual_install_jellyfin: true
 ```
 
 **Verify Secret exists:**

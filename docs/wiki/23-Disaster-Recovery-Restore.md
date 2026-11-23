@@ -12,7 +12,7 @@ has been verified.
 | --- | --- | --- | --- |
 | Velero with Kopia | Pro `deployments/velero/schedule.yaml` | Daily backup of application namespaces except Nextcloud; separate weekly Nextcloud backup | Backup, PodVolumeBackup and storage-location status; matching objects in the configured S3 destination |
 | Nextcloud file mirror | Core `deployments/nextcloud/s3-backup-cronjob.yaml` | Nightly copy of included Nextcloud data files | Recent Job result and destination comparison; the mirror excludes cache, temporary files, appdata, trash, versions and logs |
-| Nextcloud PostgreSQL native dump | Core `deployments/nextcloud/postgresql/backup-cronjob.yaml` | 03:15 America/New_York after activation; initially suspended during staging | Job and both container results, archive validation, and three nonempty objects for the same attempt |
+| Nextcloud PostgreSQL native dump | Core `deployments/nextcloud/postgresql/backup-cronjob.yaml` | Daily at 03:15 America/New_York | Job and both container results, archive validation, and three nonempty objects for the same attempt |
 
 Read the manifests and live Schedule/CronJob objects for the selected revision.
 A configured schedule does not prove that a backup ran or that its data can be

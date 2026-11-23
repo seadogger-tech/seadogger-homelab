@@ -24,7 +24,7 @@ A streamlined, playbook-aligned path to stand up (or reset) the cluster.
 
 4) Optional — NVMe boot prep on Raspberry Pi 5
 - Hardware mount NVMe (POE HAT w/ PCIe); see photos in [[03-Hardware-and-Network]].
-- On each node, run the appropriate script from `seadogger-homelab/useful-scripts`:
+- On each node, run the appropriate script from `useful_scripts/`:
   - `partition_and_boot_NVMe_master_node.sh` (control plane)
   - `partition_and_boot_NVMe_worker_node.sh` (workers)
 - Set boot order to NVMe in `raspi-config` and verify with `lsblk`.
@@ -58,11 +58,17 @@ Run:
 ansible-playbook main.yml
 ```
 
-Applications (examples):
-- Pi-hole — `pihole_deploy.yml`
-- n8n — `n8n-deploy.yml`
-- Jellyfin — `jellyfin_deploy.yml`
-- Nextcloud — `nextcloud_deploy.yml`
+Applications, in `main.yml` order:
+- Pi-hole and node DNS — `pihole_deploy.yml`, then the CoreDNS `*.seadogger-homelab` zone — `coredns_custom_deploy.yml`
+- Nextcloud PostgreSQL and Redis — `nextcloud_postgresql_deploy.yml`, `nextcloud_redis_deploy.yml`
+- Nextcloud — `nextcloud_deploy.yml`, with the S3 file mirror — `nextcloud_s3_backup_deploy.yml`
+- Jellyfin — `jellyfin_secrets.yml`, `jellyfin_deploy.yml`, `jellyfin_xmltv_proxy_deploy.yml`
+- Traefik dashboard — `traefik_dashboard_deploy.yml`
+- NUT UPS monitoring — `nut_ups_deploy.yml`
+- Home Assistant — `ha_deploy.yml`
+- Mealie — `mealie_deploy.yml`
+
+Pro applications (portal, Velero, and the other Pro services) are deployed by the Pro playbook: `ansible-playbook -i ansible/hosts.ini ansible/main.yml` from the Pro checkout.
 
 > ArgoCD reconciles the app state from `core/deployments/**`. Ingress hosts use `*.seadogger-homelab`; TLS keys are issued by `internal-local-issuer` into `*-local-tls` secrets.
 
@@ -180,6 +186,8 @@ The `main.yml` playbook is now solely responsible for installation and idempoten
 
 # Ansible Deployment Idempotency Refactor Plan
 
+> Historical record from 2025-08. Application names (Plex, n8n) reflect the cluster at that time.
+
 - **Date:** 2025-08-16
 - **Service:** Cold Start
 - **Type** Refactor
@@ -241,6 +249,8 @@ This plan ensures a transition to a robust, safe, and idempotent deployment syst
 
 
 # Summary of Cluster Recovery and Playbook Hardening Session
+
+> Historical record from 2025-08.
 
 - **Date:** 2025-08-16
 - **Service:** Cold Start

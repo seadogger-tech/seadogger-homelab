@@ -53,6 +53,15 @@ graph TB
 ```
 
 ![accent-divider](images/accent-divider.svg)
+## Workflows
+
+| Workflow | Runs on | What it does |
+|---|---|---|
+| `publish-wiki.yml` | Pull requests, pushes, manual | Checks the wiki payload; publishes it from `master` |
+| `nextcloud-checks.yml` | Pull requests, pushes, manual | Nextcloud migration checks (see [[27-Deployment-and-Validation]]) |
+| `build-ansible-runner.yaml` | Pushes to `master` that touch the runner image, manual | Builds the in-cluster Ansible runner image (see [[28-Ansible-Runner]]) |
+
+![accent-divider](images/accent-divider.svg)
 ## Publish Wiki Workflow
 
 **Purpose:** Validate the exact public wiki payload on pull requests and pushes, then sync checked-in source from `master` to the GitHub Wiki.

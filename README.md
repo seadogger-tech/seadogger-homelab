@@ -37,7 +37,7 @@
 ### 🏗️ **Core Infrastructure**
 - **K3s Kubernetes** - Lightweight, production-ready orchestration
 - **ArgoCD GitOps** - Declarative, automated deployments
-- **Rook-Ceph Storage** - Distributed storage with erasure coding (4+2 EC)
+- **Rook-Ceph Storage** - Distributed storage with erasure coding (2+1 EC)
 - **MetalLB** - Bare-metal load balancing
 - **Traefik Ingress** - Automatic HTTPS with internal PKI
 - **Ansible Automation** - One-command deployment
@@ -45,15 +45,16 @@
 ### 📦 **Applications**
 - **☁️ Nextcloud** - Personal cloud storage (4TB+)
 - **🎬 Jellyfin** - Media server with live TV (HDHomeRun)
-- **⚙️ N8N** - Workflow automation and integrations
+- **🏠 Home Assistant** - Home automation and family dashboard
+- **🍲 Mealie** - Recipes and meal planning
 - **🛡️ PiHole** - Network-wide DNS and ad-blocking
 
 ### 🔐 **Security & Reliability**
 - Internal PKI with cert-manager
 - WireGuard VPN for remote access
 - Kubernetes secrets encryption
-- S3 Glacier disaster recovery (planned)
-- 24/7 uptime with HA storage
+- Off-site backups to AWS S3 (Velero with Kopia, plus a nightly Nextcloud file mirror and database dump)
+- Replicated and erasure-coded Ceph storage that tolerates one worker failure
 
 ---
 
@@ -124,7 +125,7 @@ Comprehensive guides available in the **[GitHub Wiki](https://github.com/seadogg
 
 **Applications**
 - Nextcloud • Jellyfin
-- N8N
+- Home Assistant • Mealie
 - PiHole • Portal (Pro)
 
 </td>
@@ -135,13 +136,14 @@ Comprehensive guides available in the **[GitHub Wiki](https://github.com/seadogg
 
 ## 📊 Project Status
 
-**Current Version:** Production (September 2025)
+**Current Version:** Production since September 2025
 **Cluster Uptime:** Running 24/7 with active users
 **Data Managed:** ~4TB (Nextcloud, Jellyfin media)
 
 ### ✅ What Works
 - K3s cluster (1 control plane + 3 workers)
-- Rook-Ceph distributed storage (3-node, erasure coding 4+2 EC + replication)
+- Rook-Ceph distributed storage (3 OSD nodes, erasure coding 2+1 EC + replication)
+- Off-site backups to AWS S3
 - ArgoCD GitOps deployment pipeline
 - All applications deployed and operational
 - Internal PKI with automatic TLS certificates
@@ -151,16 +153,15 @@ Comprehensive guides available in the **[GitHub Wiki](https://github.com/seadogg
 See **[Refactoring Roadmap](https://github.com/seadogger-tech/seadogger-homelab/wiki/19-Refactoring-Roadmap)** and **[GitHub Issues](https://github.com/seadogger-tech/seadogger-homelab/issues)**
 
 **Priority 0:**
-- [#24](https://github.com/seadogger-tech/seadogger-homelab/issues/24) S3 Glacier disaster recovery (4TB backup)
 - [#47](https://github.com/seadogger-tech/seadogger-homelab/issues/47) ARM64 staging environment
 
 **Priority 1:**
 - [#48](https://github.com/seadogger-tech/seadogger-homelab/issues/48) Pure GitOps refactor (eliminate deployment dependencies)
-- [Pro #6](https://github.com/seadogger-tech/seadogger-homelab-pro/issues/6) OAuth2 improvements for private systems ([current workaround](https://github.com/seadogger-tech/seadogger-homelab/wiki/18-Setting-Up-n8n-Connections))
+- [#58](https://github.com/seadogger-tech/seadogger-homelab/issues/58) Kopia index blobs in Deep Archive
 - Keycloak SSO integration (Pro)
 
 **Future Enhancements:**
-- [Pro #5](https://github.com/seadogger-tech/seadogger-homelab-pro/issues/5) K3s HA control plane (3 control plane nodes)
+- [#52](https://github.com/seadogger-tech/seadogger-homelab/issues/52) K3s HA control plane (3 control plane nodes)
 
 ---
 

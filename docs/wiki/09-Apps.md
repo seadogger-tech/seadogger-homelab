@@ -20,10 +20,13 @@ User facing applications that are applied thru ArgoCD on top of the k3s tech sta
   Allow-type subscribed lists can't be declared there at all (the chart
   imports `adlists` as block lists); the values file records the one in use
   and the command to restore it.
-- **30-Minute Pause button** on the portal calls a small backend
-  (`deployments/pihole-toggle`, Pro repo) that holds the Pi-hole admin
-  password server-side and calls Pi-hole's v6 API
-  (`POST /api/dns/blocking`) — the password never reaches the browser.
+- **Pausing ad blocking** is done from the Home Assistant family
+  dashboard (core `pi_hole` integration + HACS `pi-hole-card`). The old
+  portal pause button and its `pihole-toggle` backend were removed; see
+  ADR-012 in [[13-ADR-Index]].
+- **Pi-hole is the DNS server for the cluster nodes too.** That makes it a
+  startup dependency for the whole cluster; see the known issue in
+  [[12-Troubleshooting#power-failure--cluster-wide-dns-deadlock-2026-08-04]].
 ![PiHole](images/PiHole-Dashboard.png)
 
 ![accent-divider](images/accent-divider.svg)
@@ -35,10 +38,14 @@ User facing applications that are applied thru ArgoCD on top of the k3s tech sta
 - **Container mode, no Supervisor:** Core + HACS only. There is no
   add-on store — anything you'd install as a Supervisor add-on
   (Mosquitto, Zigbee2MQTT, ESPHome) needs to run as its own pod instead.
-- **No `hostNetwork`, no node-pinning:** standard pod networking, since
-  no USB Zigbee/Z-Wave radio is attached. mDNS-based discovery (HomeKit,
-  Chromecast, local device auto-discovery) will not work without
-  `hostNetwork: true` — revisit if that's ever needed.
+- **`hostNetwork: true`** with `dnsPolicy: ClusterFirstWithHostNet`, so
+  mDNS/SSDP discovery (Apple TV, UniFi, Chromecast) reaches the pod while
+  it can still resolve in-cluster Service names. No node-pinning: no USB
+  Zigbee/Z-Wave radio is attached.
+- **Waits for DNS before starting:** a `wait-for-dns` initContainer polls
+  for external resolution (up to ~5 minutes) because integrations that
+  authenticate at startup, such as ecobee, give up for good if DNS is not
+  ready after a power event.
 - **Reverse-proxy trust required:** HA rejects requests from a reverse
   proxy it doesn't recognize (`400 Bad Request`, "not set-up for reverse
   proxies"). Since we route via our own Traefik `IngressRoute` rather
@@ -87,11 +94,10 @@ User facing applications that are applied thru ArgoCD on top of the k3s tech sta
 ### Home Assistant Integration
 - HA's built-in `mealie` integration (core since 2024.7) connects directly
   to Mealie's API — no HACS plugin needed.
-- **Use the in-cluster Service DNS, not the Pi-hole hostname.** HA/Mealie
-  pods resolve DNS through k3s's CoreDNS, which has no record for
-  `mealie.seadogger-homelab` (that name only exists in Pi-hole's
-  `dnsmasq.customDnsEntries`, used by browsers/LAN clients). Configure the
-  integration's host as
+- **Use the in-cluster Service DNS, not the Pi-hole hostname.** CoreDNS
+  forwards `*.seadogger-homelab` to Pi-hole, so `mealie.seadogger-homelab`
+  does resolve from a pod, but it goes out through Traefik and needs the
+  internal CA trusted. Configure the integration's host as
   `http://mealie.mealie.svc.cluster.local:9000` instead.
 - Exposes one `calendar.mealie_<type>` entity per meal-plan entry type
   (breakfast/lunch/dinner/side/snack/drink/dessert) plus stat sensors
@@ -178,23 +184,11 @@ changing an image tag alone does not undo database migrations.
 - Desktop & mobile clients; extensible via a large app ecosystem.
 ![NextCloud](images/nextcloud-dashboard.png)
 
-## HDHomeRun Guide Utility
+## HDHomeRun Live TV Guide
 
-A tiny Python utility that pulls the HDHomeRun XMLTV guide and stores it locally.  
-It can be run with:
-
-```bash
-# Default (no target, saves to xmltv.xml in current directory)
-./fetch_hdhomerun_guide.py \
-    --discover-url http://192.168.1.70/discover.json
-
-# Save to a specific location
-./fetch_hdhomerun_guide.py \
-    --discover-url http://192.168.1.70/discover.json \
-    --target /media/data/HomeMedia/files/Live_TV_Guide/xmltv.xml
-```
-
-The script lives in `seadogger-homelab-pro/core/useful_scripts/fetch_hdhomerun_guide.py` and is documented in the wiki page **[HDHomeRun Guide Utility](20-HDHomeRun-Guide.md)**.
+Jellyfin reads the HDHomeRun XMLTV guide through the in-cluster
+`xmltv-proxy` (`deployments/jellyfin/xmltv-proxy.yaml`), which works around
+Jellyfin's gzip handling. Setup and troubleshooting are in **[[20-HDHomeRun-Guide]]**.
 
 
 ![accent-divider](images/accent-divider.svg)
@@ -215,7 +209,6 @@ The script lives in `seadogger-homelab-pro/core/useful_scripts/fetch_hdhomerun_g
 ![accent-divider](images/accent-divider.svg)
 ## See Also
 
-- **[[18-Setting-Up-n8n-Connections]]** - N8N configuration guide
 - **[[20-HDHomeRun-Guide]]** - Jellyfin live TV setup
 - **[[06-Storage-Rook-Ceph]]** - Application storage backends
 - **[[08-Security-and-Certificates]]** - Application TLS certificates
@@ -225,4 +218,4 @@ The script lives in `seadogger-homelab-pro/core/useful_scripts/fetch_hdhomerun_g
 - [#35 - PiHole whitelist](https://github.com/seadogger-tech/seadogger-homelab/issues/35)
 - [#37 - Jellyfin XMLTV](https://github.com/seadogger-tech/seadogger-homelab/issues/37)
 - [#38 - Nextcloud setup](https://github.com/seadogger-tech/seadogger-homelab/issues/38)
-- [#39 - N8N workflows](https://github.com/seadogger-tech/seadogger-homelab/issues/39)
+

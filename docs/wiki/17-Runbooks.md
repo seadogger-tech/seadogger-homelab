@@ -36,7 +36,7 @@ Use only after diagnosis and explicit approval of the selected application and P
 
 ![accent-divider](images/accent-divider.svg)
 ## Rotate Internal CA
-1) Create a new Intermediate CA signed by the offline Root CA.
+1) Create a new Intermediate CA signed by the Root CA (its key pair is archived in `internal-root-ca-secret`).
 2) Update cert-manager `ClusterIssuer` to reference the new Intermediate.
 3) Trigger re-issuance of app certificates.
 4) Distribute (or ensure trust of) the Root CA on client devices.
@@ -55,8 +55,15 @@ Use only after diagnosis and explicit approval of the selected application and P
 
 ![accent-divider](images/accent-divider.svg)
 ## Observability Quick-Checks
+- The Prometheus/Grafana/Alertmanager stack was retired in 2026-10; there is no in-cluster metrics UI.
+- Use `kubectl top nodes` / `kubectl top pods -A` (metrics-server) and `ceph -s` from the `rook-ceph-tools` pod.
 - Prefer accessing UIs via Ingress + TLS at Traefik VIP.
-- Check node-exporter and kube-state-metrics.
+
+![accent-divider](images/accent-divider.svg)
+## After a Power Failure
+1) Check node DNS order on each node: `ssh pi@<node> grep ^nameserver /etc/resolv.conf` (Pi-hole first, `1.1.1.1` second).
+2) Check clocks are synchronized (`timedatectl`); Ceph mons report clock skew otherwise.
+3) If pods are stuck in `ImagePullBackOff` on DNS errors, follow the recovery procedure in [[12-Troubleshooting#power-failure--cluster-wide-dns-deadlock-2026-08-04]].
 
 ![accent-divider](images/accent-divider.svg)
 ## Secrets & Credentials

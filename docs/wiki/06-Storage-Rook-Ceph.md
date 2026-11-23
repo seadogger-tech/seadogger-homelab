@@ -26,31 +26,30 @@ graph TB
 
         subgraph Daemons["Ceph Daemons"]
             MON[MON × 3<br/>Cluster Monitors]
-            MGR[MGR × 1<br/>Management]
+            MGR[MGR × 2<br/>Active + Standby]
             OSD[OSD × 3<br/>Storage Daemons]
-            MDS[MDS × 2<br/>Metadata Servers]
+            MDS[MDS × 2<br/>Active + Hot Standby]
         end
     end
 
     subgraph Storage["💾 Storage Classes"]
         direction TB
         Default[ceph-block-data<br/>RBD Replicated<br/>DEFAULT]
-        Bucket[ceph-bucket<br/>S3-compatible<br/>Object Storage]
         FSEC[ceph-fs-data-ec<br/>CephFS Erasure Coded<br/>2+1 EC]
         FSRep[ceph-fs-data-replicated<br/>CephFS Replicated<br/>3× Replica]
         LocalPath[local-path<br/>K3s Local Storage<br/>Single Node]
     end
 
     subgraph Hardware["🖥️ Physical Hardware"]
-        NVMe1[yoda:/dev/nvme0n1<br/>4TB NVMe]
-        NVMe2[anakin:/dev/nvme0n1<br/>4TB NVMe]
-        NVMe3[obiwan:/dev/nvme0n1<br/>4TB NVMe]
+        NVMe1[anakin:/dev/nvme0n1<br/>4TB NVMe]
+        NVMe2[obiwan:/dev/nvme0n1<br/>4TB NVMe]
+        NVMe3[rey:/dev/nvme0n1<br/>4TB NVMe]
     end
 
     subgraph AppsLayer["📦 Application Usage"]
         NextcloudApp[Nextcloud<br/>→ ceph-fs-data-ec]
         JellyfinApp[Jellyfin<br/>→ ceph-fs-data-ec]
-        N8NApp[N8N<br/>→ ceph-block-data]
+        BlockApps[Home Assistant, Mealie,<br/>Pi-hole, Nextcloud DB<br/>→ ceph-block-data]
         JellyfinMedia[Jellyfin Media<br/>Read-Only]
     end
 
@@ -64,14 +63,13 @@ graph TB
     OSD --> NVMe3
 
     Default --> OSD
-    Bucket --> OSD
     FSEC --> MDS
     FSRep --> MDS
     MDS --> OSD
 
     NextcloudApp --> FSEC
     JellyfinApp --> FSEC
-    N8NApp --> Default
+    BlockApps --> Default
 
     style RookCeph fill:#1e3a5f,stroke:#4a90e2,stroke-width:3px
     style Storage fill:#7b1fa2,stroke:#9c27b0,stroke-width:3px
@@ -83,15 +81,17 @@ graph TB
 
 ## Storage Classes
 - **ceph-block-data** (DEFAULT): Block storage with replication (RBD)
-  - Used by: N8N (n8n-main-persistence)
-- **ceph-bucket**: S3-compatible object storage for backups
+  - Used by: Home Assistant, Mealie, Pi-hole, Nextcloud PostgreSQL, and Pro services
 - **ceph-fs-data-ec**: CephFS with erasure coding (2+1 EC) for large files
   - Used by: Nextcloud (nextcloud-nextcloud), Jellyfin config/cache (jellyfin-config, jellyfin-cache)
 - **ceph-fs-data-replicated**: CephFS with 3× replication for high availability
+  - Used by: small shared state for Pro services
 - **local-path**: K3s built-in, single-node local storage
 - **No storage class**: Read-only volume mounts (e.g., Jellyfin media library)
 
 **Reclaim Policy:** All Ceph storage classes use `Retain` policy to prevent accidental data loss
+
+**No object storage:** the chart's default object store (RGW and the `ceph-bucket` StorageClass) was never used and was removed on 2026-10-31. Re-add a `cephObjectStores` entry in `rook-ceph-cluster-values.yaml` if S3 inside the cluster is ever needed. Off-site backups go to AWS S3 instead.
 
 ![accent-divider.svg](images/accent-divider.svg)
 
@@ -120,18 +120,17 @@ graph TB
 | StorageClass               | Type                         | Provisioner                     | ReclaimPolicy | BindingMode            | Expandable | Default | Suggested Use                                                                 | Failure Tolerance*                                   |
 |--------------------------- |-----------------------------|---------------------------------|---------------|------------------------|------------|---------|--------------------------------------------------------------------------------|------------------------------------------------------|
 | `ceph-block-data`          | Ceph **RBD Block**          | `rook-ceph.rbd.csi.ceph.com`    | Retain        | Immediate              | ✅         | ✅      | General/critical workloads needing block volumes (DBs, app data).            | Replicated pool (e.g., 3×) ⇒ tolerate up to (replicas-1) OSD/node failures. |
-| `ceph-fs-data-ec`          | **CephFS (Erasure-Coded)**  | `rook-ceph.cephfs.csi.ceph.com` | Retain        | Immediate              | ✅         | —       | Large media & read-heavy files (e.g., Plex libraries) to maximize capacity.  | EC profile (e.g., 2+1) ⇒ tolerates ≥1 OSD/node failure.                    |
+| `ceph-fs-data-ec`          | **CephFS (Erasure-Coded)**  | `rook-ceph.cephfs.csi.ceph.com` | Retain        | Immediate              | ✅         | —       | Large media & read-heavy files (e.g., Nextcloud data, Jellyfin libraries) to maximize capacity.  | EC profile (e.g., 2+1) ⇒ tolerates ≥1 OSD/node failure.                    |
 | `ceph-fs-data-replicated`  | **CephFS (Replicated)**     | `rook-ceph.cephfs.csi.ceph.com` | Retain        | Immediate              | ✅         | —       | Shared files where extra redundancy is preferred over raw capacity.          | Replicated pool (e.g., 3×) ⇒ tolerate up to (replicas-1) OSD/node failures. |
-| `ceph-bucket`              | **S3-compatible Object**    | `rook-ceph.ceph.rook.io/bucket` | Delete        | Immediate              | ❌         | —       | Apps needing object storage via S3 API.                                       | Depends on RGW/RADOS pool replication; node-resilient if replicated.        |
 | `local-path`               | **HostPath (Local)**        | `rancher.io/local-path`         | Delete        | WaitForFirstConsumer   | ❌         | —       | Ephemeral/dev workloads tied to a single node.                                | None (single-node; no redundancy).                                         |
 
 \* Failure tolerance is indicative; exact resilience depends on your Ceph pool replica/EC settings.
 ![accent-divider.svg](images/accent-divider.svg)
 ## Storage System (Rook-Ceph)
-   - Status: HEALTH_OK
-   - Capacity: 11 TiB total available
-   - Capacity: 3.8TB in replicated pools
-   - Capacity: 6.8TB in EC pools
+   - Three OSDs, one 4 TB NVMe on each worker (anakin, obiwan, rey); yoda holds no Ceph data
+   - About 11 TiB raw capacity in total
+   - Three monitors, two managers (active + standby), and one active MDS with a hot standby
+   - Check current health and usage with `ceph -s` and `ceph df` from the `rook-ceph-tools` pod
    - Configuration:
 
 ![accent-divider.svg](images/accent-divider.svg)
@@ -162,7 +161,7 @@ This comprehensive update ensures the entire storage infrastructure is now corre
 ![accent-divider.svg](images/accent-divider.svg)
 ## Backup and Disaster Recovery Strategy
 
-- [Disaster and Backup Recovery](./23-Disaster_Recovery-Restore.md) - Backup architecture and strategy
+- [[23-Disaster-Recovery-Restore]] - Backup architecture and strategy
 
 
 ![accent-divider.svg](images/accent-divider.svg)

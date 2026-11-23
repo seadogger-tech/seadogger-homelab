@@ -29,7 +29,7 @@ For CI/CD automation and repo workflows, see [[15-CI-CD-and-GitHub-Actions]].
 
 - ArgoCD manages desired state for apps and some infra components via Git:
   - Sources from `core/deployments/**` (Helm values and manifests)
-  - Reconciles Kubernetes resources for apps like Pi-hole, n8n, Jellyfin, Nextcloud
+  - Reconciles Kubernetes resources for apps like Pi-hole, Jellyfin, Nextcloud, Home Assistant and Mealie
 
 - Domains & certificates:
   - Services: `*.seadogger-homelab`
@@ -198,7 +198,7 @@ spec:
 | **K3s Cluster** | Ansible | Direct install | Ansible (manual upgrades) |
 | **MetalLB** | Ansible | Helm (native) | Ansible + Helm (manual upgrades) |
 | **Rook-Ceph** | Ansible | Helm (native) | Ansible + Helm (manual upgrades) |
-| **ArgoCD** | Ansible | Helm (native) | ArgoCD (self-managed) |
+| **ArgoCD** | Ansible | Helm (native) | Ansible + Helm (no ArgoCD Application for itself) |
 | **Cert-Manager** | ArgoCD | Application CRD | ArgoCD (GitOps) |
 | **Internal PKI** | Ansible | OpenSSL + kubectl | Manual (CA rotation runbook) |
 | **Applications** | ArgoCD | Application CRD | ArgoCD (GitOps) |
@@ -234,7 +234,7 @@ git add core && git commit -m "Update core: Nextcloud storage" && git push
 
 ```bash
 # 1. Update Helm chart version in Ansible
-vim core/ansible/tasks/metallb_deploy.yml  # Change chart version
+vim core/ansible/tasks/metallb_native_deploy.yml  # Change chart version
 
 # 2. Run Ansible playbook
 ansible-playbook main.yml  # With appropriate flags
@@ -390,11 +390,11 @@ graph TD
     end
 
     subgraph Wave2["🌊 Wave 2: Applications"]
-        Apps[Nextcloud, Jellyfin<br/>N8N, PiHole]
+        Apps[Nextcloud, Jellyfin, PiHole<br/>Home Assistant, Mealie]
     end
 
     subgraph WavePro["🌊 Wave 3: Pro Features"]
-        Pro[Portal<br/>Keycloak Future]
+        Pro[Portal, Velero<br/>Pro services]
     end
 
     Wave0 --> Wave1

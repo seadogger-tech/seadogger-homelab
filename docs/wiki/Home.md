@@ -4,7 +4,7 @@
 
 > **Production-Ready Kubernetes Homelab on Raspberry Pi 5 Cluster**
 >
-> A modern, enterprise-grade homelab deployment featuring K3s, ArgoCD, Rook-Ceph, and AI-powered applications running on ARM64 hardware.
+> A modern, enterprise-grade homelab deployment featuring K3s, ArgoCD, Rook-Ceph, and self-hosted applications running on ARM64 hardware.
 
 ![accent-divider.svg](images/accent-divider.svg)
 
@@ -51,16 +51,9 @@ Infrastructure services powering the homelab.
 | **[[06-Storage-Rook-Ceph]]** | Distributed storage with Rook-Ceph erasure coding |
 | **[[07-Networking-and-Ingress]]** | MetalLB, Traefik ingress, and internal routing |
 | **[[08-Security-and-Certificates]]** | Internal PKI, cert-manager, and TLS certificates |
-| **[[09-Apps]]** | Applications: Nextcloud, Jellyfin, N8N, PiHole |
+| **[[09-Apps]]** | Applications: Nextcloud, Jellyfin, Home Assistant, Mealie, Pi-hole |
 | **[[20-HDHomeRun-Guide]]** | HDHomeRun integration for live TV streaming |
-| **[[16-Pro-Overlays-and-SSO]]** | Pro features: Portal and Single Sign-On |
-
-### 🧩 Setting Up Apps
-Configuration guides for specific applications.
-
-| Document | Description |
-|----------|-------------|
-| **[[18-Setting-Up-n8n-Connections]]** | Configure N8N workflow automation connections |
+| **[[16-Pro-Overlays-and-SSO]]** | Pro features: Portal, Velero backups; Single Sign-On planned |
 
 ### 📊 Operations
 Monitor, maintain, and troubleshoot your homelab.
@@ -71,6 +64,10 @@ Monitor, maintain, and troubleshoot your homelab.
 | **[[12-Troubleshooting]]** | Common problems and debugging procedures |
 | **[[15-CI-CD-and-GitHub-Actions]]** | Continuous integration and deployment |
 | **[[17-Runbooks]]** | Operational runbooks and procedures |
+| **[[23-Disaster-Recovery-Restore]]** | Backup sources and recovery procedure |
+| **[[26-Nextcloud-PostgreSQL-Migration]]** | Nextcloud PostgreSQL migration runbook |
+| **[[27-Deployment-and-Validation]]** | Where each deployment lives and how to validate it |
+| **[[28-Ansible-Runner]]** | In-cluster Ansible runner |
 
 ### 🧠 Knowledge
 Deep dives, design decisions, and planning.
@@ -86,13 +83,12 @@ Deep dives, design decisions, and planning.
 
 ## 🎯 Current Focus
 
-### 🔴 Critical Priorities
-1. **Disaster Recovery** - S3 Glacier backup for 4TB+ production data ([#24](https://github.com/seadogger-tech/seadogger-homelab/issues/24))
-2. **Staging Environment** - Safe ARM64 testing without production risk ([#47](https://github.com/seadogger-tech/seadogger-homelab/issues/47))
-
-### 🟠 High Priorities
-3. **Deployment Dependencies Refactor** - Pure GitOps with ArgoCD + Kustomize ([#48](https://github.com/seadogger-tech/seadogger-homelab/issues/48))
+1. **Staging Environment** - Safe ARM64 testing without production risk ([#47](https://github.com/seadogger-tech/seadogger-homelab/issues/47))
+2. **Deployment Dependencies Refactor** - Pure GitOps with ArgoCD + Kustomize ([#48](https://github.com/seadogger-tech/seadogger-homelab/issues/48))
    - Move all infrastructure to ArgoCD ([#50](https://github.com/seadogger-tech/seadogger-homelab/issues/50))
+3. **Kopia index blobs in Deep Archive** - Backup repository maintenance ([#58](https://github.com/seadogger-tech/seadogger-homelab/issues/58))
+
+Disaster recovery ([#24](https://github.com/seadogger-tech/seadogger-homelab/issues/24)) is in place: Velero with Kopia to S3, plus a nightly Nextcloud file mirror and PostgreSQL dump. See [[23-Disaster-Recovery-Restore]].
 
 See **[[19-Refactoring-Roadmap]]** for complete roadmap and **[GitHub Issues](https://github.com/seadogger-tech/seadogger-homelab/issues)** for tracking.
 
@@ -107,7 +103,7 @@ See **[[19-Refactoring-Roadmap]]** for complete roadmap and **[GitHub Issues](ht
 
 **Infrastructure:**
 - **GitOps:** ArgoCD for declarative deployments
-- **Storage:** Rook-Ceph with erasure coding (3-node cluster)
+- **Storage:** Rook-Ceph with erasure coding (one OSD on each of the 3 workers)
 - **Load Balancer:** MetalLB (bare-metal LoadBalancer)
 - **Ingress:** Traefik with automatic TLS
 - **Certificates:** cert-manager with internal PKI
@@ -115,9 +111,10 @@ See **[[19-Refactoring-Roadmap]]** for complete roadmap and **[GitHub Issues](ht
 **Applications:**
 - **File Sharing:** Nextcloud (personal cloud storage)
 - **Media Server:** Jellyfin (movies, music, live TV via HDHomeRun)
-- **DNS/Ad Blocking:** PiHole (network-wide ad blocking)
-- **Workflow Automation:** N8N (automation and integrations)
-- **Dashboard:** Custom portal with SSO (Pro feature)
+- **Home Automation:** Home Assistant (family dashboard, cameras, integrations)
+- **Recipes:** Mealie (recipes and meal planning)
+- **DNS/Ad Blocking:** Pi-hole (network-wide ad blocking)
+- **Dashboard and Backups:** Portal and Velero (Pro features)
 
 ![accent-divider.svg](images/accent-divider.svg)
 
@@ -149,7 +146,7 @@ This is a personal homelab project, but contributions are welcome!
 
 ## 📊 Project Status
 
-**Current Version:** Production (September 2025)
+**Current Version:** Production since September 2025
 **Cluster Uptime:** Running 24/7 with active users
 **Data Under Management:** ~4TB (Nextcloud, Jellyfin, media)
 **Active Development:** See [[19-Refactoring-Roadmap]] for current priorities

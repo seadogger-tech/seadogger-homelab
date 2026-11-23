@@ -169,7 +169,11 @@ The definitive plan is to manage the `CephNFS` resource declaratively within the
 - **Service:** ArgoCD
 - **Type:** Authentication / GitOps
 - **Status:** Known Issue - GitHub App migration needed
-- **Update (2026-07-21):** `portal` and `velero-ui` both synced cleanly
+- **Update (2026-11-23):** still a known issue. The Pro repository
+  credential (`repo-credentials`) is still a personal access token, not
+  a GitHub App; all Pro applications are currently syncing. Tracked in
+  [Pro #8](https://github.com/seadogger-tech/seadogger-homelab-pro/issues/8).
+- **Earlier update (2026-07-21):** `portal` and `velero-ui` both synced cleanly
   throughout a long session of frequent pushes (dozens of commits across
   both repos). Whether this means the PAT was rotated, GitHub App auth
   was already migrated, or the token simply hasn't hit its expiry yet
