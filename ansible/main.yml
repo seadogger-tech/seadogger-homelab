@@ -137,6 +137,10 @@
       import_tasks: tasks/jellyfin_xmltv_proxy_deploy.yml
       when: enable_jellyfin_xmltv_proxy | default(true)
 
+    - name: Deploy JellyFin HDHomeRun HLS restream
+      import_tasks: tasks/jellyfin_hdhomerun_hls_deploy.yml
+      when: enable_jellyfin_hdhomerun_hls | default(true)
+
     - name: Deploy Traefik Dashboard
       import_tasks: tasks/traefik_dashboard_deploy.yml
       when: enable_traefik_dashboard | default(true)

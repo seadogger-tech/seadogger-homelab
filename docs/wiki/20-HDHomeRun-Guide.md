@@ -234,6 +234,13 @@ kubectl rollout restart deployment/xmltv-proxy -n jellyfin
 ```
 
 ![accent-divider.svg](images/accent-divider.svg)
+## HLS restream (dormant)
+
+`deployments/jellyfin/hdhomerun-hls.yaml` holds an nginx + ffmpeg Deployment that restreams tuner channels as HLS at `http://hdhomerun-hls.jellyfin/<channel>/index.m3u8` (for example `2_1`). Ansible applies it with `tasks/jellyfin_hdhomerun_hls_deploy.yml` (`enable_jellyfin_hdhomerun_hls`, default on), in the same way as the XMLTV proxy.
+
+It is kept at `replicas: 0`. Jellyfin does not use it: Live TV talks to the tuner directly at `http://192.168.1.70`. Each ffmpeg container holds one tuner stream open permanently, and the CONNECT DUO has only 2 tuners, so trim the channel list to 2 or fewer before scaling it up. The ffmpeg and nginx images are pinned by digest; bump them deliberately.
+
+![accent-divider.svg](images/accent-divider.svg)
 ## Technical Details
 
 ### How It Works
