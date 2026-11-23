@@ -53,7 +53,7 @@ The project provides a set of Ansible playbooks and Kubernetes and Helm manifest
 *   **Load Balancer & IP L2Advertisement:** MetalLB
 
 *   **DNS & Ad-Blocking:** PiHole
-*   **User Apps/Services:** Nextcloud, Jellyfin, N8N
+*   **User Apps/Services:** Nextcloud, Jellyfin, Home Assistant, Mealie
 *   **Hardware:** Raspberry Pi 5 nodes. While it may be adaptable to other hardware, the documentation and scripts are tailored to this platform.
 *   **Networking:** The project assumes a specific networking setup including static IP assignments, designated IP range for MetalLB, and Traefik routing 
 *   **Storage:** Rook-Ceph
@@ -74,11 +74,11 @@ The project provides a set of Ansible playbooks and Kubernetes and Helm manifest
 ![accent-divider.svg](images/accent-divider.svg)
 # Project Status
 
-**Status:** Production (September 2025)
+**Status:** Production since September 2025
 **Deployment Time:** ~30 minutes (fully automated)
 **Cluster State:** Running 24/7 with active users and ~4TB of production data
 
-The homelab is fully functional and serving production workloads. Core infrastructure is stable and reliable. Current development focuses on operational excellence, disaster recovery, and pure GitOps conversion.
+The homelab is fully functional and serving production workloads. Core infrastructure is stable and reliable. Current development focuses on operational excellence, a staging environment, and pure GitOps conversion.
 
 **See [[19-Refactoring-Roadmap]] for current priorities and [GitHub Issues](https://github.com/seadogger-tech/seadogger-homelab/issues) for active development.**
 
@@ -90,33 +90,36 @@ The homelab is fully functional and serving production workloads. Core infrastru
 *   **Storage System:** Rook-Ceph is deployed and providing distributed storage with both erasure-coded and replicated pools.
 *   **Network Configuration:** MetalLB and Traefik are functioning, providing load balancing and ingress for deployed services.
 *   **GitOps:** ArgoCD is successfully managing the deployment of most applications.
-*   **User Apps & Services:** PiHole, N8N, JellyFin, and Nextcloud are deployed and operational.
+*   **User Apps & Services:** Pi-hole, Jellyfin, Nextcloud, Home Assistant and Mealie are deployed and operational.
+*   **Backups:** Velero with Kopia backs up application volumes to S3; Nextcloud also has a nightly file mirror and PostgreSQL dump. See [[23-Disaster-Recovery-Restore]].
 *   **Portal (Pro):** Single pane of glass to access applications and monitor tech stack.
 
 ![accent-divider.svg](images/accent-divider.svg)
 ## Current Development Priorities
 
 ### 🔴 Critical
-1. **Disaster Recovery** ([#24](https://github.com/seadogger-tech/seadogger-homelab/issues/24)) - S3 Glacier backup for production data
-2. **Staging Environment** ([#47](https://github.com/seadogger-tech/seadogger-homelab/issues/47)) - Safe ARM64 testing without production risk
+1. **Staging Environment** ([#47](https://github.com/seadogger-tech/seadogger-homelab/issues/47)) - Safe ARM64 testing without production risk
 
 ### 🟠 High Priority
-3. **Deployment Dependencies Refactor** ([#48](https://github.com/seadogger-tech/seadogger-homelab/issues/48)) - Pure GitOps with ArgoCD + Kustomize
-4. **Ansible Restructure** ([#32](https://github.com/seadogger-tech/seadogger-homelab/issues/32)) - Convert to role-based structure
+2. **Deployment Dependencies Refactor** ([#48](https://github.com/seadogger-tech/seadogger-homelab/issues/48)) - Pure GitOps with ArgoCD + Kustomize
+3. **Ansible Restructure** ([#32](https://github.com/seadogger-tech/seadogger-homelab/issues/32)) - Convert to role-based structure
+4. **HA Control Plane** ([#52](https://github.com/seadogger-tech/seadogger-homelab/issues/52)) - The cluster has a single control-plane node (yoda)
 
 ### 🟡 Medium Priority
-5. **Single Sign On (Pro)** ([#3](https://github.com/seadogger-tech/seadogger-homelab-pro/issues/3)) - SSO integration for unified authentication
+5. **Single Sign On (Pro, not yet deployed)** ([#3](https://github.com/seadogger-tech/seadogger-homelab-pro/issues/3)) - SSO integration for unified authentication
 
 **Full details:** [[19-Refactoring-Roadmap]] | **Dependency Analysis:** [[21-Deployment-Dependencies]]
 
 ![accent-divider.svg](images/accent-divider.svg)
 ## Known Issues & Limitations
 
+*   **Pi-hole / k3s DNS circular dependency:** nodes resolve DNS through Pi-hole, which runs on the cluster. After a power failure this deadlocked the whole house on 2026-08-04 (no DNS → no image pull → no Pi-hole). Resolved with pinned images, a node-level fallback resolver and CoreDNS pinned to Pi-hole; the dependency itself is by design. See [[12-Troubleshooting#power-failure--cluster-wide-dns-deadlock-2026-08-04]] and [#59](https://github.com/seadogger-tech/seadogger-homelab/issues/59)
 *   **NFS Compatibility:** Ganesha NFS (via CephFS) has compatibility issues with macOS clients - using Nextcloud instead
 *   **Image Versions:** Some deployments use "latest" tag - see [#43](https://github.com/seadogger-tech/seadogger-homelab/issues/43)
 *   **Subnet Hardcoding:** Network subnet scattered across multiple files - see [#41](https://github.com/seadogger-tech/seadogger-homelab/issues/41)
 *   **Mixed Deployment Methods:** Infrastructure split between Ansible and ArgoCD - migration in progress
-*   **Plex Media Server:** Plex states support for k3s but Plex Pass is a PITA to deploy locally w/o Plex supervision.  Replaced media capabilities with JellyFin
+*   **Single control plane:** yoda is the only control-plane node; losing it stops the Kubernetes API until it is restored - see [#52](https://github.com/seadogger-tech/seadogger-homelab/issues/52)
+*   **ArgoCD repository credentials:** the Pro repository is read with a GitHub personal access token that must be rotated before it expires - see [[12-Troubleshooting#argocd-github-authentication-failures]]
 
 ![accent-divider.svg](images/accent-divider.svg)
 # Prerequisites

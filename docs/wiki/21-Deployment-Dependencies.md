@@ -22,10 +22,14 @@ This document analyzes the "spider web" of deployment dependencies in the Seadog
 7. Namespace Pre-cooking          ← Preparation
 8. Internal PKI + Cert-Manager    ← Certificate infrastructure
 9. Applications:
-    - PiHole
-    - N8N
-    - Nextcloud
-    - Jellyfin
+    - PiHole (+ node DNS) and the CoreDNS custom zone
+    - Nextcloud PostgreSQL and Redis
+    - Nextcloud (+ S3 file mirror)
+    - Jellyfin (+ secrets, XMLTV proxy)
+    - Traefik dashboard
+    - NUT UPS monitoring
+    - Home Assistant
+    - Mealie
 ```
 
 ![accent-divider.svg](images/accent-divider.svg)
@@ -69,9 +73,9 @@ Required by:                Required by:                Required by:
 
 ### Layer 3: Applications
 ```
-┌─────────┬─────────┬─────────┬─────────┐
-│ PiHole  │Nextcloud│Jellyfin │   N8N   │
-└─────────┴─────────┴─────────┴─────────┘
+┌─────────┬─────────┬─────────┬────────────┐
+│ PiHole  │Nextcloud│Jellyfin │ HA, Mealie │
+└─────────┴─────────┴─────────┴────────────┘
 ```
 
 ![accent-divider.svg](images/accent-divider.svg)
@@ -102,7 +106,7 @@ Required by:                Required by:                Required by:
 - ✅ **Jellyfin** - Uses static PV backed by Ceph
   - `jellyfin/static-pv.yaml` - Media library metadata
 
-- ✅ **N8N** - Workflow persistence
+- ✅ **Home Assistant, Mealie, Pi-hole, Nextcloud PostgreSQL** - RBD volumes on `ceph-block-data`
 
 **What Rook-Ceph depends on:**
 - K3s cluster
@@ -128,7 +132,7 @@ Required by:                Required by:                Required by:
 
 **What depends on ArgoCD:**
 - ✅ **Most applications** - Deployed via ArgoCD Application CRDs
-  - Nextcloud, PiHole, N8N, Jellyfin
+  - Nextcloud, PiHole, Jellyfin, Home Assistant, Mealie
 
 **What ArgoCD depends on:**
 - K3s cluster
@@ -155,7 +159,8 @@ This creates inconsistency - no single source of truth!
   - `nextcloud-certificate.yml` - Nextcloud HTTPS
   - `jellyfin-certificate.yml` - Jellyfin HTTPS
   - `pihole-certificate.yml` - PiHole admin HTTPS
-  - `n8n-certificate.yml` - N8N HTTPS
+  - `home-assistant-certificate.yml` - Home Assistant HTTPS
+  - `traefik-dashboard-certificate.yml` - Traefik dashboard HTTPS
   - `ceph-dashboard-certificate.yml` - Ceph dashboard HTTPS
 
 - ✅ **Traefik Ingress** - Consumes TLS secrets created by cert-manager
@@ -226,6 +231,7 @@ This creates inconsistency - no single source of truth!
 - **CRITICAL:** MetalLB (DNS needs LoadBalancer IP)
 - **CRITICAL:** ArgoCD (deployed via Application CRD)
 - Optional: Rook-Ceph (persistence disabled in current config)
+- ⚠️ **Reverse dependency:** every node and pod depends on Pi-hole for DNS, including the image pulls Pi-hole itself needs. This is a known circular dependency; see [Troubleshooting](12-Troubleshooting#power-failure--cluster-wide-dns-deadlock-2026-08-04)
 
 **Jellyfin:**
 - **CRITICAL:** Rook-Ceph (static PV for metadata)

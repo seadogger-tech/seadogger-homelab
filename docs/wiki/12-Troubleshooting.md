@@ -169,7 +169,11 @@ The definitive plan is to manage the `CephNFS` resource declaratively within the
 - **Service:** ArgoCD
 - **Type:** Authentication / GitOps
 - **Status:** Known Issue - GitHub App migration needed
-- **Update (2026-07-21):** `portal` and `velero-ui` both synced cleanly
+- **Update (2026-11-23):** still a known issue. The Pro repository
+  credential (`repo-credentials`) is still a personal access token, not
+  a GitHub App; all Pro applications are currently syncing. Tracked in
+  [Pro #8](https://github.com/seadogger-tech/seadogger-homelab-pro/issues/8).
+- **Earlier update (2026-07-21):** `portal` and `velero-ui` both synced cleanly
   throughout a long session of frequent pushes (dozens of commits across
   both repos). Whether this means the PAT was rotated, GitHub App auth
   was already migrated, or the token simply hasn't hit its expiry yet
@@ -376,6 +380,18 @@ incident and the chart-pinning fix.
 
 ![accent-divider.svg](images/accent-divider.svg)
 ## Power Failure → Cluster-Wide DNS Deadlock (2026-08-04)
+
+> ⚠️ **KNOWN ISSUE: resolved, but inherent to the design.** Pi-hole runs
+> *on* the cluster that depends on it for DNS. The fixes below (pinned
+> images, node fallback resolver, CoreDNS pinned to Pi-hole, TCP-only
+> cloudflared probes, three DoH providers, Home Assistant `wait-for-dns`)
+> break the deadlock. The dependency itself remains, though, so changes to
+> node DNS, CoreDNS, or the Pi-hole/cloudflared images can re-arm it.
+> Tracked in [core#59](https://github.com/seadogger-tech/seadogger-homelab/issues/59).
+>
+> **If it happens again:** run the [recovery procedure](#recovery-procedure)
+> below, after first checking the node resolver order:
+> `ssh pi@<node> grep ^nameserver /etc/resolv.conf` (Pi-hole first, `1.1.1.1` second).
 
 **Symptom:** After a house power failure, "every wired interface is
 down." Nothing resolves — but the network is actually fine. Nodes ping,

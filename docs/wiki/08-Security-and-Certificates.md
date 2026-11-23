@@ -15,21 +15,24 @@
 ![accent-divider.svg](images/accent-divider.svg)
 # Internal PKI and HTTPS Data Flow Architecture
 
-This document outlines the definitive architecture for issuing and using TLS certificates for all internal services within the Kubernetes cluster. It follows the best practice of using a dedicated **Intermediate Certificate Authority (CA)** to sign service certificates, keeping the Root CA offline and secure. All internal services use the `*.seadogger-homelab` internal domain.
+This document outlines the definitive architecture for issuing and using TLS certificates for all internal services within the Kubernetes cluster. It follows the best practice of using a dedicated **Intermediate Certificate Authority (CA)** to sign service certificates. cert-manager only holds the Intermediate CA; the Root CA key pair is archived in the `internal-root-ca-secret` Secret and is not used for day-to-day signing. All internal services use the `*.seadogger-homelab` internal domain.
 
 ![accent-divider.svg](images/accent-divider.svg)
 ### 1. The CA Hierarchy and Full Service List
 
-A two-tier trust chain will be established. The Intermediate CA will sign leaf certificates for the following exhaustive list of services:
+A two-tier trust chain. The Intermediate CA signs a leaf certificate for each service (Core services shown; Pro adds its own, such as `portal` and `velero`):
 
 ```mermaid
 graph TD
-    A["Root CA<br>(Offline, Highly Secure)"] --> B{"Intermediate CA<br>(Online, in k8s Secret)"};
+    A["Root CA<br>(archived Secret, not used by cert-manager)"] --> B{"Intermediate CA<br>(Online, in k8s Secret)"};
     B --> argocd["argocd.seadogger-homelab"];
     B --> ceph["ceph.seadogger-homelab"];
     B --> pihole["pihole.seadogger-homelab"];
     B --> jellyfin["jellyfin.seadogger-homelab"];
-    B --> n8n["n8n.seadogger-homelab"];
+    B --> nextcloud["nextcloud.seadogger-homelab"];
+    B --> ha["home-assistant.seadogger-homelab"];
+    B --> mealie["mealie.seadogger-homelab"];
+    B --> traefik["traefik.seadogger-homelab"];
 
     style A fill:#7b1fa2,stroke:#9c27b0,stroke-width:2px
     style B fill:#1e3a5f,stroke:#4a90e2,stroke-width:2px
@@ -68,7 +71,7 @@ To ensure broad compatibility and security, the following certificate generation
 3. **Leaf Certificates**
    - Key Type: RSA
    - Key Length: 2048 bits
-   - Validity Period: 1 year
+   - Validity Period: 90 days, renewed by cert-manager 15 days before expiry
    - Signature Algorithm: SHA-256
    - Secret Name Pattern: `{service-name}-local-tls`
 
@@ -87,7 +90,7 @@ sequenceDiagram
     participant CI as ClusterIssuer
 
     Admin->>RootCA: Generate Root Keypair (root-ca.key, root-ca.crt)
-    Note right of RootCA: The root-ca.key is now stored offline securely.
+    Note right of RootCA: root-ca.key is archived in internal-root-ca-secret.
 
     Admin->>IntCA: Generate Intermediate Keypair (intermediate-ca.key, intermediate-ca.csr)
     Admin->>RootCA: Sign Intermediate CSR with Root Key
@@ -110,7 +113,7 @@ sequenceDiagram
     participant CI as ClusterIssuer(internal-local-issuer)
     participant ING as Ingress (Traefik)
 
-    Note over CM,ING: Process is triggered by Ingress annotations for all *.seadogger-homelab services.
+    Note over CM,ING: Each service has an explicit Certificate manifest (core/certificates/ or the app's deployment folder).
 
     CM->>CI: Request sign(nextcloud.seadogger-homelab)
     CI-->>CM: Cert for nextcloud.seadogger-homelab
@@ -135,9 +138,9 @@ sequenceDiagram
     CI-->>CM: Cert for jellyfin.seadogger-homelab
     CM->>ING: Store cert in secret 'jellyfin-local-tls'
 
-    CM->>CI: Request sign(n8n.seadogger-homelab)
-    CI-->>CM: Cert for n8n.seadogger-homelab
-    CM->>ING: Store cert in secret 'n8n-local-tls'
+    CM->>CI: Request sign(home-assistant.seadogger-homelab)
+    CI-->>CM: Cert for home-assistant.seadogger-homelab
+    CM->>ING: Store cert in secret 'home-assistant-local-tls'
 ```
 
 ![accent-divider.svg](images/accent-divider.svg)
@@ -165,13 +168,15 @@ sequenceDiagram
     TR-->>U: ServerHello + Certificate
     U-->>U: Verify certificate chain up to the trusted Root CA
     U->>TR: Encrypted GET /
-    TR->>POD: Decrypted HTTP request to Plex Service
+    TR->>POD: Decrypted HTTP request to Jellyfin Service
     POD-->>TR: HTTP response
     TR-->>U: Encrypted HTTPS response
 ```
 
 ![accent-divider.svg](images/accent-divider.svg)
 # Next Steps: SSO Implementation Plan
+
+> **Status: planned, not deployed.** There is no Keycloak or oauth2-proxy in the cluster today; tracked in [Pro #3](https://github.com/seadogger-tech/seadogger-homelab-pro/issues/3). The flows below are the design.
 
 This section outlines the plan for implementing Single Sign-On (SSO) using Keycloak as the Identity Provider (IdP), enforced at the edge by `oauth2-proxy` and Traefik's `ForwardAuth` middleware.
 
@@ -186,7 +191,7 @@ Centralize login with Keycloak, enforce it uniformly at the edge with `oauth2-pr
 *   **Keycloak (IdP):** `idp.seadogger-homelab` (will be assigned a new VIP, e.g., 192.168.1.253)
 *   **oauth2-proxy:** `auth.seadogger-homelab` (internal service, no dedicated VIP)
 *   **Traefik (Ingress):** `192.168.1.241` (existing VIP)
-*   **Protected Applications:** `n8n.seadogger-homelab`, `argocd.seadogger-homelab`, `ceph.seadogger-homelab`.
+*   **Protected Applications:** `traefik.seadogger-homelab`, `argocd.seadogger-homelab`, `ceph.seadogger-homelab`.
 
 ![accent-divider.svg](images/accent-divider.svg)
 ## Secrets & Credentials
@@ -245,7 +250,7 @@ graph LR
         O[oauth2-proxy]
         K[Keycloak]
         subgraph "SSO-Protected Apps"
-            A2[n8n.seadogger-homelab]
+            A2[traefik.seadogger-homelab]
             A6[argocd.seadogger-homelab]
             A7[ceph.seadogger-homelab]
         end
@@ -271,7 +276,7 @@ graph LR
 ![accent-divider.svg](images/accent-divider.svg)
 ## SSO Login Flow (First Time Access)
 
-This diagram shows a user accessing a protected application (`n8n.seadogger-homelab`) for the first time.
+This diagram shows a user accessing a protected application (`traefik.seadogger-homelab`) for the first time.
 
 ```mermaid
 sequenceDiagram
@@ -280,9 +285,9 @@ sequenceDiagram
     participant Traefik as Traefik Ingress (192.168.1.241)
     participant OAuth2Proxy as oauth2-proxy (auth.seadogger-homelab)
     participant Keycloak as Keycloak (idp.seadogger-homelab)
-    participant N8N as n8n App
+    participant App as Traefik Dashboard
 
-    User->>Traefik: GET https://n8n.seadogger-homelab
+    User->>Traefik: GET https://traefik.seadogger-homelab
     Traefik->>OAuth2Proxy: ForwardAuth: Is user authenticated?
     OAuth2Proxy-->>Traefik: No (401 Unauthorized)
     Traefik-->>User: Redirect to login page
@@ -293,12 +298,12 @@ sequenceDiagram
     User->>OAuth2Proxy: GET /oauth2/callback?code=...
     OAuth2Proxy->>Keycloak: Exchange auth code for tokens
     Keycloak-->>OAuth2Proxy: ID, Access, Refresh Tokens
-    OAuth2Proxy-->>User: Set session cookie, redirect to original URL (n8n.seadogger-homelab)
-    User->>Traefik: GET https://n8n.seadogger-homelab (with session cookie)
+    OAuth2Proxy-->>User: Set session cookie, redirect to original URL (traefik.seadogger-homelab)
+    User->>Traefik: GET https://traefik.seadogger-homelab (with session cookie)
     Traefik->>OAuth2Proxy: ForwardAuth: Is user authenticated?
     OAuth2Proxy-->>Traefik: Yes (200 OK) + sets X-Forwarded-User header
-    Traefik->>N8N: Forward request with user identity header
-    N8N-->>Traefik: App content
+    Traefik->>App: Forward request with user identity header
+    App-->>Traefik: App content
     Traefik-->>User: App content
 ```
 ![accent-divider.svg](images/accent-divider.svg)
@@ -312,13 +317,13 @@ sequenceDiagram
     participant User
     participant Traefik as Traefik Ingress (192.168.1.241)
     participant OAuth2Proxy as oauth2-proxy (auth.seadogger-homelab)
-    participant N8N as n8n App
+    participant App as Traefik Dashboard
 
-    User->>Traefik: GET https://n8n.seadogger-homelab (with session cookie)
+    User->>Traefik: GET https://traefik.seadogger-homelab (with session cookie)
     Traefik->>OAuth2Proxy: ForwardAuth: Validate cookie
     OAuth2Proxy-->>Traefik: OK (200) + X-Forwarded-User header
-    Traefik->>N8N: Forward request with identity
-    N8N-->>Traefik: App content
+    Traefik->>App: Forward request with identity
+    App-->>Traefik: App content
     Traefik-->>User: App content
 ```
 ![accent-divider.svg](images/accent-divider.svg)
@@ -335,7 +340,7 @@ sequenceDiagram
     participant Keycloak as Keycloak (idp.seadogger-homelab)
 
     User->>Traefik: GET https://auth.seadogger-homelab/oauth2/sign_out
-    Note over User, Traefik: (This link would be present in the UI of n8n, etc.)
+    Note over User, Traefik: (This link would be present in each protected app's UI)
     Traefik->>OAuth2Proxy: Forward request to sign_out endpoint
     OAuth2Proxy-->>User: Clear session cookie
     OAuth2Proxy->>Keycloak: RP-Initiated Logout: Invalidate user session

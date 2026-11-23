@@ -91,12 +91,13 @@ graph TB
         subgraph Apps["📦 Open Source Apps"]
             Nextcloud[Nextcloud<br/>File Storage]
             Jellyfin[Jellyfin<br/>Media Server]
-            N8N[N8N<br/>Automation]
+            HA[Home Assistant<br/>Home Automation]
+            Mealie[Mealie<br/>Recipes]
         end
 
         subgraph Pro["💼 Pro Features"]
             Portal[Portal<br/>Dashboard]
-            Keycloak[Keycloak<br/>SSO - Future]
+            Velero[Velero<br/>Backups]
         end
     end
 
@@ -108,7 +109,8 @@ graph TB
 
     Traefik --> Nextcloud
     Traefik --> Jellyfin
-    Traefik --> N8N
+    Traefik --> HA
+    Traefik --> Mealie
     Traefik --> Portal
 
     ArgoCD -->|Deploys| Apps
@@ -124,6 +126,7 @@ graph TB
     Jellyfin --> Ceph
 
     Nextcloud -->|Encrypted| S3
+    Velero -->|Kopia| S3
 
     style Infrastructure fill:#1e3a5f,stroke:#4a90e2,stroke-width:3px
     style Apps fill:#2d5016,stroke:#5a9216,stroke-width:3px
@@ -249,15 +252,15 @@ The architecture is based on a Kubernetes (k3s) cluster running on a group of Ra
 *   **Declarative Configuration:** All aspects of the system, from infrastructure to applications, are defined declaratively in configuration files (Ansible playbooks, Kubernetes manifests).
 *   **Immutable Infrastructure:** The goal is to treat the cluster nodes as immutable. Changes are made by updating the Ansible playbooks and re-running them, rather than making manual changes to the nodes.
 *   **Separation of Concerns:** The project is structured to separate concerns:
-    *   `.github/workflow/`: Automated workflow that will sync the Wiki docs when anything is checked into the source repo.
+    *   `.github/workflows/`: Wiki publishing, Nextcloud checks and the Ansible runner image build (see [[15-CI-CD-and-GitHub-Actions]]).
     *   `ansible/`: Infrastructure provisioning.
+    *   `assets/`: Logos and artwork.
     *   `benchmarks/`: Scripts to benchmark system storage capabilities.
     *   `certificates/`: Manifests which create TLS certs from the cert-manager for each app.
     *   `deployments/`: This directory contains Helm values files and Kubernetes manifests that are referenced by ArgoCD for application deployment.
     *   `docs/wiki/`: Project Wiki repository.
     *   `ingress/`: Manifest which setup ingress routes for each app thru Traefik.
     *   `useful_scripts/`: Scripts for partitioning 4TB NVMe drive as well as getting the RPi5 to boot from the NVMe vs. SDCard.
-    *   `memory-bank/`: Project documentation waiting to be integrated into the project Wiki.
 *   **Application Deployment Workflow:** Application deployments follow a GitOps pattern:
     1.  **Git Configuration:** Application manifests, Helm values, or Kustomize overlays are stored in Git
     2.  **ArgoCD Application:** ArgoCD `Application` resources define what to deploy and where
@@ -277,4 +280,4 @@ The architecture is based on a Kubernetes (k3s) cluster running on a group of Ra
 **Related Issues:**
 - [#48 - Deployment Dependencies Refactor](https://github.com/seadogger-tech/seadogger-homelab/issues/48) - GitOps migration progress
 - [#50 - Move infrastructure to ArgoCD](https://github.com/seadogger-tech/seadogger-homelab/issues/50) - Implementing sync waves
-- [Pro #4 - HTTP→HTTPS redirect middleware](https://github.com/seadogger-tech/seadogger-homelab-pro/issues/4) - Security enhancement
+- [Pro #4 - HTTP→HTTPS redirect middleware](https://github.com/seadogger-tech/seadogger-homelab-pro/issues/4) - Done

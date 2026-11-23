@@ -13,7 +13,8 @@ This page captures the practical hardware and network plan that the Ansible play
 - Configure your subnet once in `ansible/config.yml`:
   - `ipv4_subnet_prefix`, `ipv4_gateway`, `dns4_servers`
 - MetalLB pool and VIPs: see [[07-Networking-and-Ingress]] for the authoritative address ranges and service VIP table.
-- Pi-hole host overrides: see `core/deployments/pihole/pihole-values.yaml` for the `address=/.../192.168.1.241` entries pointing at Traefik.
+- Pi-hole host overrides: see `dnsmasq.customDnsEntries` in `core/deployments/pihole/pihole-values.yaml` for the `address=/.../192.168.1.241` entries pointing at Traefik.
+- Node DNS: every node resolves through Pi-hole (`192.168.1.250`) first, with `node_dns_fallback` (`1.1.1.1`) second so the cluster can recover after a power loss. See [[12-Troubleshooting#power-failure--cluster-wide-dns-deadlock-2026-08-04]].
 
 ![accent-divider.svg](images/accent-divider.svg)
 ## Hardware Summary
@@ -24,9 +25,10 @@ This page captures the practical hardware and network plan that the Ansible play
 
 ![accent-divider.svg](images/accent-divider.svg)
 ## Node Configuration (example)
-- K3s: v1.32.6+k3s1
+- K3s: v1.33.4+k3s1
 - OS: Debian GNU/Linux 12 (bookworm)
-- Kernel: 6.6.51+rpt-rpi-2712
+- Kernel: 6.6.51+rpt-rpi-2712 or 6.12.x+rpt-rpi-2712 (nodes are not all on the same kernel)
+- Container runtime: containerd 2.0.5-k3s2
 
 ![accent-divider.svg](images/accent-divider.svg)
 ## Bill of Materials (BoM)

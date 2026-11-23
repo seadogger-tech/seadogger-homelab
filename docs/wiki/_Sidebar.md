@@ -25,9 +25,6 @@
 - [[20-HDHomeRun-Guide]]
 - [[16-Pro-Overlays-and-SSO]]
 
-## 🧩 Setting Up Apps
-- [[18-Setting-Up-n8n-Connections]]
-
 ## 📊 Ops
 - [[10-Benchmarking]]
 - [[12-Troubleshooting]]
@@ -36,6 +33,7 @@
 - [[23-Disaster-Recovery-Restore]]
 - [[26-Nextcloud-PostgreSQL-Migration]]
 - [[27-Deployment-and-Validation]]
+- [[28-Ansible-Runner]]
 
 ## 🧠 Knowledge
 - [[13-ADR-Index]]

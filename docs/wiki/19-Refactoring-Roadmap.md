@@ -4,6 +4,27 @@
 This document provides a comprehensive analysis of the Seadogger Homelab codebase and outlines a prioritized roadmap for refactoring the infrastructure to align with Kubernetes (K3s) industry best practices.
 
 ![accent-divider.svg](images/accent-divider.svg)
+## Status (reviewed 2026-11-23)
+
+This roadmap was written in 2025-09. Where each priority stands now:
+
+| Priority | Status | Tracking |
+|---|---|---|
+| 0A Disaster Recovery & Backup | ✅ Implemented: Velero + Kopia to S3, nightly Nextcloud file mirror and PostgreSQL dump ([[23-Disaster-Recovery-Restore]]). Kopia index blobs in Deep Archive still open | [#24](https://github.com/seadogger-tech/seadogger-homelab/issues/24), [#58](https://github.com/seadogger-tech/seadogger-homelab/issues/58) |
+| 0B Staging Environment | Not started | [#47](https://github.com/seadogger-tech/seadogger-homelab/issues/47) |
+| 1 Secrets Management | Not started; `config.yml` stays gitignored | — |
+| 1.5 Deployment Dependencies Refactor | Not started; MetalLB, Rook-Ceph and ArgoCD are still installed by Ansible | [#48](https://github.com/seadogger-tech/seadogger-homelab/issues/48), [#50](https://github.com/seadogger-tech/seadogger-homelab/issues/50) |
+| 2 Ansible Restructure | Not started | [#32](https://github.com/seadogger-tech/seadogger-homelab/issues/32) |
+| 3 K3s Best Practices | Not started; single control-plane node | [#52](https://github.com/seadogger-tech/seadogger-homelab/issues/52) |
+| 4 GitOps Consistency | Partial: all applications are ArgoCD Applications | [#50](https://github.com/seadogger-tech/seadogger-homelab/issues/50) |
+| 5 Operational Excellence | Partial: in-cluster Ansible runner ([[28-Ansible-Runner]]) and Nextcloud CI checks; the Prometheus stack was retired in 2026-10 | [#53](https://github.com/seadogger-tech/seadogger-homelab/issues/53) |
+| 6 Documentation | Ongoing | — |
+| 7 Portal → Home Assistant | In progress | ADR-012 |
+| 8 Hermes config | Retired with Hermes (2026-11) | — |
+| 9 Node DNS depends on Pi-hole | ✅ Resolved 2026-08-05; kept as a known issue | [#59](https://github.com/seadogger-tech/seadogger-homelab/issues/59) |
+
+The rest of this page is the original analysis and is kept for reference.
+
 ## Executive Summary
 
 **Current Maturity:** 6/10 - Functional homelab with good automation foundation
@@ -56,7 +77,7 @@ bootstrap.
 
 ### Critical Issues ⚠️
 
-#### 0. **NO DISASTER RECOVERY FOR PRODUCTION DATA** 🔴 **CRITICAL**
+#### 0. **NO DISASTER RECOVERY FOR PRODUCTION DATA** 🔴 **CRITICAL** (✅ resolved, see Status above)
 
 **Issue:** 4TB of critical production data (movies, photos, music, files) with no offsite backup
 
@@ -276,7 +297,7 @@ obiwan.local ansible_host=192.168.1.96 ip_host_octet=96
 ![accent-divider.svg](images/accent-divider.svg)
 ## Prioritized Recommendations
 
-### Priority 0A: Disaster Recovery & Backup Strategy (CRITICAL) 🔴
+### Priority 0A: Disaster Recovery & Backup Strategy (CRITICAL) ✅ IMPLEMENTED
 
 **GitHub Issue:** [#24](https://github.com/seadogger-tech/seadogger-homelab/issues/24)
 **Timeline:** Week 1-2 (IMMEDIATE)
@@ -2470,7 +2491,7 @@ kubectl logs -n nextcloud -l job-name=nextcloud-backup-test --follow
 aws s3 ls s3://seadogger-homelab-backups/nextcloud/
 
 # Test restore (in staging!)
-# Follow procedures in docs/wiki/24-Backup-and-Restore.md
+# Follow procedures in docs/wiki/23-Disaster-Recovery-Restore.md
 ```
 
 #### Week 2-3: Staging Environment Setup
@@ -2805,6 +2826,6 @@ ansible-playbook main.yml --tags k3s,validate
 
 ---
 
-**Last Updated:** 2025-09-29
+**Written:** 2025-09-29 (status table reviewed 2026-11-23)
 **Author:** Claude Code Analysis
-**Status:** Proposed
+**Status:** Partly implemented; see Status at the top
