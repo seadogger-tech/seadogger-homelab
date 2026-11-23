@@ -36,6 +36,15 @@ cephClusterSpec:
                     - anakin.local
                     - obiwan.local
                     - rey.local
+    # mgrs are also kept off anakin (2026-11-23, OCE-151). A Ceph disruption on
+    # 2026-11-18 rescheduled mgr-b there, adding 576Mi of requests (mgr plus
+    # sidecar) and leaving anakin ~53Mi of request headroom. Velero pins each
+    # per-volume backup pod to its volume's node with nodeName, and the velero
+    # LimitRange gives it a 64Mi request, so anakin's kubelet rejected every
+    # one at admission (OutOfmemory) and no volume on anakin was backed up
+    # from 11-18 on: paperclip-data, Pi-hole and Nextcloud's main volume.
+    # With two mgrs and two eligible nodes there is no spare node for a mgr
+    # while obiwan or rey is down; Ceph runs on one mgr until it returns.
     mgr:
       nodeAffinity:
         requiredDuringSchedulingIgnoredDuringExecution:
@@ -44,7 +53,6 @@ cephClusterSpec:
                 - key: kubernetes.io/hostname
                   operator: In
                   values:
-                    - anakin.local
                     - obiwan.local
                     - rey.local
 
