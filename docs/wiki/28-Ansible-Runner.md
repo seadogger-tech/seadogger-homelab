@@ -90,11 +90,11 @@ All three default to `false` in `main.yml` and `example.config.yml`.
 3. Create the Secret from the live local files:
 
 ```bash
-PRO_CONFIG=/PATH/TO/runner-pro-config.yml PRO_HOSTS=/PATH/TO/pro/ansible/hosts.ini \\
+PRO_CONFIG=/PATH/TO/runner-pro-config.yml PRO_HOSTS=/PATH/TO/pro/ansible/hosts.ini \
   sh deployments/ansible-runner/refresh-secret.sh /PATH/TO/dedicated_key /PATH/TO/known_hosts /PATH/TO/pro_deploy_key
+```
 
 The runner copy of Pro's `config.yml` must set every destructive and stage-2 flag the guard checks to false, including `run_pod_cleanup`, and define the derived stage-2 flags as false; Pro's own `config.yml` doesn't define them, so the guard would refuse it.
-```
 
 Use a dedicated SSH key authorized on the four nodes for `pi`, not a personal key. Revoke by removing it from the nodes' `authorized_keys` and deleting the Secret.
 
@@ -142,7 +142,14 @@ Accepted by the owner on the Paperclip task OCE-130 (2026-11-19):
 - `--syntax-check`: Job `ansible-run-20261118-syntax3`, Core `800407866fff`, passed. The first attempt (`-syntax`) failed on missing collections (bare image) and the second (`-syntax2`) on the hidden collections path; the third passed with `ANSIBLE_COLLECTIONS_PATH` set by hand, which PR #74 then made part of the Job template.
 - `--check --diff`: Job `ansible-run-20261119-check1`, Core `13d3b5748d713c83d92f6c278ced2833f68b622a`, image digest `sha256:3a3da79b401c518bc3c2f8cc29f13f1597e3aa53621414b39e04d32a392c8944`, arguments `main.yml -i hosts.ini --check --diff -e '{"enable_internal_pki": true}'`. The guard passed and SSH, host-key checking and collections worked on all 4 nodes. Recap: anakin, obiwan, rey `failed=0`; yoda `failed=1` from the `--check` limit above.
 
+Real Pro runs, 2026-11-25, Map OCE-369, from `/work/pro/ansible` (evidence on OCE-580):
+
+- `ansible-run-20261125-pro-syntax1`: Core `19d4fa4`, Pro `259f764`. `--syntax-check` passed and the guard passed.
+- `ansible-run-20261125-pro-housekeeping1`: failed on all four nodes with `Destination directory /usr/local/libexec does not exist` (fixed by OCE-586).
+- `ansible-run-20261125-pro-housekeeping-absent1`: the rollback, `failed=0 changed=0 unreachable=0` on all four nodes.
+- `ansible-run-20261125-pro-housekeeping2`: Core `19d4fa4`, Pro `379a049`. `failed=0 unreachable=0` on all four nodes.
+- Run-argument lesson: the runner's Pro config turns on `enable_node_sensors`, `cold_start_pro_install_applications` and every `manual_install_*` flag, so a single-play run must set each other app play false in `-e`.
+
 ## Open follow-ups
 
 - `refresh-secret.sh` assumes a local `kubectl`, which the owner's Mac does not have. It should apply the Secret through yoda. Not done; until then, apply the Secret from a host that has cluster access.
-- No real (non-check) run has gone through the runner yet.
