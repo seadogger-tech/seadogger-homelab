@@ -1,7 +1,10 @@
 ---
 # Stage B0 (OCE-369 / OCE-598): per-container memory peaks and today's live values.
-# Peaks are cgroup v2 memory.peak maxima over every container a key sets (OCE-550 findings,
-# read 2026-11-25); old_* are the live requests/limits from the same snapshot, in Mi.
+# Peaks are cgroup v2 memory.peak maxima over every container a key sets. peak_mi (P) is the
+# max of the OCE-550 snapshot (oce550_peak_mi, read 2026-11-25) and the live re-read of
+# 2026-11-25 19:29:53Z-19:30:24Z (live_peak_mi; OCE-600 document peak-reread). live_window_days
+# runs to 19:30Z. events_max and oom_kill are memory.events counters at the live read.
+# old_* are the live requests/limits from the OCE-550 snapshot, in Mi.
 # test_b0_memory_reductions.py asserts the changed files against this table, and that the
 # wiki section lists every row.
 containers:
@@ -10,6 +13,11 @@ containers:
     path: cephClusterSpec.resources.logcollector
     peak_mi: 26.5
     window_days: 1.84
+    oce550_peak_mi: 26.5
+    live_peak_mi: 26.5
+    live_window_days: 2.22
+    events_max: 0
+    oom_kill: 0
     old_request_mi: 100
     old_limit_mi: 1024
   - name: ceph-exporter (x3)
@@ -17,6 +25,11 @@ containers:
     path: cephClusterSpec.resources.exporter
     peak_mi: 33.1
     window_days: 9.9
+    oce550_peak_mi: 33.1
+    live_peak_mi: 33.1
+    live_window_days: 10.28
+    events_max: 0
+    oom_kill: 0
     old_request_mi: 50
     old_limit_mi: 128
   - name: rook-ceph-tools
@@ -24,6 +37,11 @@ containers:
     path: toolbox.resources
     peak_mi: 105.6
     window_days: 27.3
+    oce550_peak_mi: 105.6
+    live_peak_mi: 105.6
+    live_window_days: 27.68
+    events_max: 0
+    oom_kill: 0
     old_request_mi: 64
     old_limit_mi: 256
   - name: csi-rbdplugin
@@ -31,6 +49,11 @@ containers:
     path: csi.csiRBDPluginResource#csi-rbdplugin
     peak_mi: 102.2
     window_days: 24.66
+    oce550_peak_mi: 102.2
+    live_peak_mi: 102.2
+    live_window_days: 25.05
+    events_max: 0
+    oom_kill: 0
     old_request_mi: 64
     old_limit_mi: 1024
   - name: csi-rbdplugin driver-registrar
@@ -38,6 +61,11 @@ containers:
     path: csi.csiRBDPluginResource#driver-registrar
     peak_mi: 24.3
     window_days: 24.66
+    oce550_peak_mi: 24.3
+    live_peak_mi: 18.0
+    live_window_days: 25.05
+    events_max: 0
+    oom_kill: 0
     old_request_mi: 64
     old_limit_mi: 512
   - name: csi-rbdplugin liveness-prometheus
@@ -45,6 +73,11 @@ containers:
     path: csi.csiRBDPluginResource#liveness-prometheus
     peak_mi: 37.9
     window_days: 23.64
+    oce550_peak_mi: 37.9
+    live_peak_mi: 37.9
+    live_window_days: 25.05
+    events_max: 0
+    oom_kill: 0
     old_request_mi: 32
     old_limit_mi: 256
   - name: csi-cephfsplugin
@@ -52,6 +85,11 @@ containers:
     path: csi.csiCephFSPluginResource#csi-cephfsplugin
     peak_mi: 110.4
     window_days: 23.64
+    oce550_peak_mi: 110.4
+    live_peak_mi: 110.4
+    live_window_days: 25.05
+    events_max: 0
+    oom_kill: 0
     old_request_mi: 64
     old_limit_mi: 1024
   - name: csi-cephfsplugin driver-registrar
@@ -59,6 +97,11 @@ containers:
     path: csi.csiCephFSPluginResource#driver-registrar
     peak_mi: 24.3
     window_days: 24.66
+    oce550_peak_mi: 24.3
+    live_peak_mi: 24.3
+    live_window_days: 25.05
+    events_max: 0
+    oom_kill: 0
     old_request_mi: 64
     old_limit_mi: 512
   - name: csi-cephfsplugin liveness-prometheus
@@ -66,6 +109,11 @@ containers:
     path: csi.csiCephFSPluginResource#liveness-prometheus
     peak_mi: 37.9
     window_days: 23.64
+    oce550_peak_mi: 37.9
+    live_peak_mi: 37.7
+    live_window_days: 25.05
+    events_max: 0
+    oom_kill: 0
     old_request_mi: 32
     old_limit_mi: 256
   - name: metallb speaker
@@ -73,6 +121,11 @@ containers:
     path: metallb_helm_values.speaker.resources
     peak_mi: 68.1
     window_days: 7.09
+    oce550_peak_mi: 68.1
+    live_peak_mi: 68.1
+    live_window_days: 7.47
+    events_max: 0
+    oom_kill: 0
     old_request_mi: 128
     old_limit_mi: 512
   - name: metallb frr
@@ -80,6 +133,11 @@ containers:
     path: metallb_helm_values.speaker.frr.resources
     peak_mi: 50.2
     window_days: 7.09
+    oce550_peak_mi: 50.2
+    live_peak_mi: 50.2
+    live_window_days: 7.48
+    events_max: 0
+    oom_kill: 0
     old_request_mi: 32
     old_limit_mi: 256
   - name: metallb reloader
@@ -87,6 +145,11 @@ containers:
     path: metallb_helm_values.speaker.reloader.resources
     peak_mi: 45.3
     window_days: 24.66
+    oce550_peak_mi: 45.3
+    live_peak_mi: 45.2
+    live_window_days: 25.04
+    events_max: 0
+    oom_kill: 0
     old_request_mi: 32
     old_limit_mi: 256
   - name: metallb frr-metrics
@@ -94,6 +157,11 @@ containers:
     path: metallb_helm_values.speaker.frrMetrics.resources
     peak_mi: 32.3
     window_days: 24.66
+    oce550_peak_mi: 32.3
+    live_peak_mi: 32.3
+    live_window_days: 25.04
+    events_max: 0
+    oom_kill: 0
     old_request_mi: 32
     old_limit_mi: 256
   - name: metallb controller
@@ -101,6 +169,11 @@ containers:
     path: metallb_helm_values.controller.resources
     peak_mi: 120.4
     window_days: 25.34
+    oce550_peak_mi: 120.4
+    live_peak_mi: 120.4
+    live_window_days: 25.73
+    events_max: 0
+    oom_kill: 0
     old_request_mi: 96
     old_limit_mi: 512
   - name: argocd application-controller
@@ -108,6 +181,11 @@ containers:
     path: argocd_helm_values.controller.resources
     peak_mi: 631.5
     window_days: 24.84
+    oce550_peak_mi: 631.5
+    live_peak_mi: 631.5
+    live_window_days: 25.23
+    events_max: 0
+    oom_kill: 0
     old_request_mi: 384
     old_limit_mi: 1024
   - name: argocd repo-server
@@ -115,6 +193,11 @@ containers:
     path: argocd_helm_values.repoServer.resources
     peak_mi: 321.0
     window_days: 15.34
+    oce550_peak_mi: 321.0
+    live_peak_mi: 321.0
+    live_window_days: 15.72
+    events_max: 0
+    oom_kill: 0
     old_request_mi: 64
     old_limit_mi: 1024
   - name: argocd server
@@ -122,6 +205,11 @@ containers:
     path: argocd_helm_values.server.resources
     peak_mi: 146.5
     window_days: 24.65
+    oce550_peak_mi: 146.5
+    live_peak_mi: 146.5
+    live_window_days: 25.04
+    events_max: 0
+    oom_kill: 0
     old_request_mi: 64
     old_limit_mi: 1024
   - name: argocd dex-server
@@ -129,6 +217,11 @@ containers:
     path: argocd_helm_values.dex.resources
     peak_mi: 124.2
     window_days: 24.84
+    oce550_peak_mi: 124.2
+    live_peak_mi: 124.2
+    live_window_days: 25.23
+    events_max: 0
+    oom_kill: 0
     old_request_mi: 64
     old_limit_mi: 1024
   - name: argocd notifications-controller
@@ -136,6 +229,11 @@ containers:
     path: argocd_helm_values.notifications.resources
     peak_mi: 69.7
     window_days: 25.34
+    oce550_peak_mi: 69.7
+    live_peak_mi: 69.7
+    live_window_days: 25.73
+    events_max: 0
+    oom_kill: 0
     old_request_mi: 64
     old_limit_mi: 1024
   - name: argocd applicationset-controller
@@ -143,6 +241,11 @@ containers:
     path: argocd_helm_values.applicationSet.resources
     peak_mi: 63.5
     window_days: 24.84
+    oce550_peak_mi: 63.5
+    live_peak_mi: 63.5
+    live_window_days: 25.23
+    events_max: 0
+    oom_kill: 0
     old_request_mi: 64
     old_limit_mi: 1024
   - name: argocd redis
@@ -150,6 +253,11 @@ containers:
     path: argocd_helm_values.redis.resources
     peak_mi: 15.4
     window_days: 25.34
+    oce550_peak_mi: 15.4
+    live_peak_mi: 15.4
+    live_window_days: 25.73
+    events_max: 0
+    oom_kill: 0
     old_request_mi: 64
     old_limit_mi: 1024
   - name: mealie
@@ -157,5 +265,10 @@ containers:
     path: spec.template.spec.containers#mealie
     peak_mi: 325.5
     window_days: 20.28
+    oce550_peak_mi: 325.5
+    live_peak_mi: 325.5
+    live_window_days: 20.67
+    events_max: 0
+    oom_kill: 0
     old_request_mi: 320
     old_limit_mi: 1024
