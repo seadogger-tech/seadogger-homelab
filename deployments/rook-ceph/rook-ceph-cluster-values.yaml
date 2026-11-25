@@ -175,6 +175,28 @@ cephClusterSpec:
       requests:
         cpu: "50m"
         memory: "64Mi"   # was 256Mi; the watch-active sidecar is tiny
+    # Stage B0 (OCE-369): limits cut to 1.25 x the memory.peak read over the
+    # long windows; CPU comes from the chart defaults. See the "Stage B0
+    # immediate reductions" section in docs/wiki/30-Cluster-Resource-Monitor.md.
+    logcollector:
+      limits:
+        memory: "40Mi"   # was 1Gi; peak 26.5Mi over 10 log-collector sidecars
+      requests:
+        memory: "32Mi"   # was 100Mi
+    exporter:
+      limits:
+        memory: "64Mi"   # was 128Mi; peak 33.1Mi
+      requests:
+        memory: "48Mi"   # was 50Mi
+    # Set explicitly at the effective values the namespace LimitRange `default`
+    # (512Mi) gives the detect-version and network Jobs today, so cutting that
+    # default cannot reach them. Remove this key only after the rook-ceph
+    # LimitRange default is back at 512Mi and verified.
+    cmd-reporter:
+      limits:
+        memory: "512Mi"
+      requests:
+        memory: "64Mi"
 
   storage:
     useAllNodes: false
@@ -398,7 +420,7 @@ toolbox:
   resources:
     limits:
       cpu: "200m"
-      memory: "256Mi"
+      memory: "136Mi"   # was 256Mi; peak 105.6Mi (Stage B0)
     requests:
       cpu: "50m"
       memory: "64Mi"
