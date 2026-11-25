@@ -171,7 +171,53 @@ sequenceDiagram
 
 The Pro repository's `deployments/cluster-defaults/` is managed by the `cluster-defaults` ArgoCD application. Ansible creates that Application only when `enable_cluster_defaults` is true; the switch defaults to false. The Application uses automated sync with pruning disabled and self-healing enabled. Its LimitRanges target existing namespaces, so it does not create namespaces.
 
-Every Container limit item must set `defaultRequest` explicitly. Without it, Kubernetes can default a container's request to its memory limit and reserve much more schedulable memory than intended. Stage A adopts the live values unchanged. LimitRange values change only through Git; Stage B sets the 1.25× values after the measured week.
+Every Container limit item must set `defaultRequest` explicitly. Without it, Kubernetes can default a container's request to its memory limit and reserve much more schedulable memory than intended. Stage A adopted the live values unchanged. Stage B0 changes only the measured rook-ceph default below; later Stage B sizing still waits for the clean measured week. LimitRange values change only through Git.
+
+Stage B0 lowers only the rook-ceph default. `defaultRequest` stays unchanged:
+
+| Namespace | `defaultRequest` | `default` before B0 | `default` after B0 |
+| --- | --- | ---: | ---: |
+| `rook-ceph` | `cpu: 10m`, `memory: 64Mi` | `512Mi` | `72Mi` |
+| `cert-manager` | `cpu: 10m`, `memory: 32Mi` | `256Mi` | `256Mi` (unchanged) |
+
+A default cut requires a seven-day `memory.peak` for **every** container that inherits its limit, including live Pods, workload templates, init containers and Jobs. If any inheriting container lacks that window, keep that namespace's existing default. Recheck the full set and peaks when building a later cut; do not infer coverage from a sample of the pods.
+
+The rook-ceph default consumers are the unset CSI sidecars below. The private Pro Build ticket's fixture records every live pod/container instance, its measured peak, and its measurement window.
+
+| Inheriting workload container | Templates |
+| --- | --- |
+| CSI controller `csi-attacher` | CephFS and RBD |
+| CSI controller `csi-provisioner` | CephFS and RBD |
+| CSI controller `csi-resizer` | CephFS and RBD |
+| CSI controller `csi-snapshotter` | CephFS and RBD |
+| CSI node-plugin `driver-registrar` | CephFS and RBD |
+
+The rook CSI controller's other containers, the CSI node plugins and liveness sidecars, Rook/Ceph workloads, and the OSD-prepare Job's `provision` and `copy-bins` init container have explicit memory resources, so they do not inherit this default. The OSD-prepare Job template was checked as well as its completed Pods.
+
+The cert-manager controller, cainjector and webhook inherit that namespace's default. The chart also enables `cert-manager-startupapicheck`, a short-lived `post-install` hook Job with empty resources; Argo runs it as a PostSync hook on sync. No live Job exists for a seven-day peak measurement, so the cert-manager default remains at `256Mi` and must not be lowered under the seven-day evidence rule.
+
+The B0 check applies the spec's 1.25× sizing and 8Mi rounding to the private rook-ceph fixture. Other namespace defaults remain unchanged because their Jobs, init containers or workload windows do not meet this cut's evidence rule.
+
+For the Pro B0 rollout, first land and apply the core half. After `enable_rook_ceph_resources` succeeds, verify the live CephCluster `spec.resources.cmd-reporter` and a `rook-ceph-detect-version` Job Pod both show a 64Mi request and 512Mi limit; also verify that the live rook-ceph LimitRange still has a 512Mi default. Record this gate on the Merge-to-main task before Pro lands. Then let Argo sync `cluster-defaults`, `google-mcp`, `operations-mcp` and `ember-trail`, and recreate the affected rook-ceph and cert-manager Pods one controller at a time by deleting each Pod. Verify the recreated Pod resources match Git.
+
+```mermaid
+flowchart TD
+  C["Core applied; cmd-reporter is live at 64Mi / 512Mi"] --> G{"CephCluster CR and detect-version Job Pod verified;<br/>rook-ceph default still 512Mi?"}
+  G -->|yes| P["Land Pro; Argo syncs cluster-defaults and Pro apps"]
+  P --> R["Recreate affected rook-ceph and cert-manager Pods,<br/>one controller at a time"]
+  R --> V["Verify resources match Git and monitor for OOM / eviction"]
+  P -. "rollback Pro" .-> D["Restore rook-ceph default to 512Mi and verify live"]
+  D --> K{"Default 512Mi verified?"}
+  K -->|yes| X["Only then remove cmd-reporter key from core<br/>and rerun enable_rook_ceph_resources"]
+  style C fill:#1e3a5f,color:#fff
+  style P fill:#1e3a5f,color:#fff
+  style R fill:#2d5016,color:#fff
+  style V fill:#2d5016,color:#fff
+  style D fill:#8b4513,color:#fff
+  style X fill:#8b4513,color:#fff
+```
+
+The `cmd-reporter` key must remain live for as long as the rook-ceph default is below 512Mi. On rollback, restore and verify the live 512Mi default before removing that key from core and rerunning the runner flag.
 
 **Example ArgoCD Application:**
 ```yaml
