@@ -79,8 +79,10 @@ Total PGs across all pools: ~150-200 (optimal)
 
 **Choose appropriate EC profile:**
 - **2+1 (used):** Minimum viable, tolerates 1 node failure, ~67% storage efficiency
-- **4+2 (recommended for production):** Better durability, tolerates 2 node failures, ~67% efficiency
+- **4+2:** Better durability, tolerates 2 node failures, ~67% efficiency
 - **8+3:** Large clusters only, ~73% efficiency
+
+With `failureDomain: host`, each of the k+m chunks sits on a different host, so a k+m profile needs at least k+m OSD hosts: 4+2 needs 6 and 8+3 needs 11. This cluster has 3 OSD hosts, so 2+1 is the only profile it can run.
 
 ### 2. PG Management
 
