@@ -167,6 +167,12 @@ sequenceDiagram
 - **Auto-healing** - Reverts manual changes back to Git state
 - **Health checks** - Monitors application health
 
+#### Cluster-default LimitRanges
+
+The Pro repository's `deployments/cluster-defaults/` is managed by the `cluster-defaults` ArgoCD application. Ansible creates that Application only when `enable_cluster_defaults` is true; the switch defaults to false. The Application uses automated sync with pruning disabled and self-healing enabled. Its LimitRanges target existing namespaces, so it does not create namespaces.
+
+Every Container limit item must set `defaultRequest` explicitly. Without it, Kubernetes can default a container's request to its memory limit and reserve much more schedulable memory than intended. Stage A adopts the live values unchanged. LimitRange values change only through Git; Stage B sets the 1.25× values after the measured week.
+
 **Example ArgoCD Application:**
 ```yaml
 apiVersion: argoproj.io/v1alpha1
