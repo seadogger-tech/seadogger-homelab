@@ -1,0 +1,161 @@
+---
+# Stage B0 (OCE-369 / OCE-598): per-container memory peaks and today's live values.
+# Peaks are cgroup v2 memory.peak maxima over every container a key sets (OCE-550 findings,
+# read 2026-11-25); old_* are the live requests/limits from the same snapshot, in Mi.
+# test_b0_memory_reductions.py asserts the changed files against this table, and that the
+# wiki section lists every row.
+containers:
+  - name: log-collector (x10)
+    file: deployments/rook-ceph/rook-ceph-cluster-values.yaml
+    path: cephClusterSpec.resources.logcollector
+    peak_mi: 26.5
+    window_days: 1.84
+    old_request_mi: 100
+    old_limit_mi: 1024
+  - name: ceph-exporter (x3)
+    file: deployments/rook-ceph/rook-ceph-cluster-values.yaml
+    path: cephClusterSpec.resources.exporter
+    peak_mi: 33.1
+    window_days: 9.9
+    old_request_mi: 50
+    old_limit_mi: 128
+  - name: rook-ceph-tools
+    file: deployments/rook-ceph/rook-ceph-cluster-values.yaml
+    path: toolbox.resources
+    peak_mi: 105.6
+    window_days: 27.3
+    old_request_mi: 64
+    old_limit_mi: 256
+  - name: csi-rbdplugin
+    file: deployments/rook-ceph/rook-ceph-operator-values.yaml
+    path: csi.csiRBDPluginResource#csi-rbdplugin
+    peak_mi: 102.2
+    window_days: 24.66
+    old_request_mi: 64
+    old_limit_mi: 1024
+  - name: csi-rbdplugin driver-registrar
+    file: deployments/rook-ceph/rook-ceph-operator-values.yaml
+    path: csi.csiRBDPluginResource#driver-registrar
+    peak_mi: 24.3
+    window_days: 24.66
+    old_request_mi: 64
+    old_limit_mi: 512
+  - name: csi-rbdplugin liveness-prometheus
+    file: deployments/rook-ceph/rook-ceph-operator-values.yaml
+    path: csi.csiRBDPluginResource#liveness-prometheus
+    peak_mi: 37.9
+    window_days: 23.64
+    old_request_mi: 32
+    old_limit_mi: 256
+  - name: csi-cephfsplugin
+    file: deployments/rook-ceph/rook-ceph-operator-values.yaml
+    path: csi.csiCephFSPluginResource#csi-cephfsplugin
+    peak_mi: 110.4
+    window_days: 23.64
+    old_request_mi: 64
+    old_limit_mi: 1024
+  - name: csi-cephfsplugin driver-registrar
+    file: deployments/rook-ceph/rook-ceph-operator-values.yaml
+    path: csi.csiCephFSPluginResource#driver-registrar
+    peak_mi: 24.3
+    window_days: 24.66
+    old_request_mi: 64
+    old_limit_mi: 512
+  - name: csi-cephfsplugin liveness-prometheus
+    file: deployments/rook-ceph/rook-ceph-operator-values.yaml
+    path: csi.csiCephFSPluginResource#liveness-prometheus
+    peak_mi: 37.9
+    window_days: 23.64
+    old_request_mi: 32
+    old_limit_mi: 256
+  - name: metallb speaker
+    file: ansible/vars/metallb_helm_values.yml
+    path: metallb_helm_values.speaker.resources
+    peak_mi: 68.1
+    window_days: 7.09
+    old_request_mi: 128
+    old_limit_mi: 512
+  - name: metallb frr
+    file: ansible/vars/metallb_helm_values.yml
+    path: metallb_helm_values.speaker.frr.resources
+    peak_mi: 50.2
+    window_days: 7.09
+    old_request_mi: 32
+    old_limit_mi: 256
+  - name: metallb reloader
+    file: ansible/vars/metallb_helm_values.yml
+    path: metallb_helm_values.speaker.reloader.resources
+    peak_mi: 45.3
+    window_days: 24.66
+    old_request_mi: 32
+    old_limit_mi: 256
+  - name: metallb frr-metrics
+    file: ansible/vars/metallb_helm_values.yml
+    path: metallb_helm_values.speaker.frrMetrics.resources
+    peak_mi: 32.3
+    window_days: 24.66
+    old_request_mi: 32
+    old_limit_mi: 256
+  - name: metallb controller
+    file: ansible/vars/metallb_helm_values.yml
+    path: metallb_helm_values.controller.resources
+    peak_mi: 120.4
+    window_days: 25.34
+    old_request_mi: 96
+    old_limit_mi: 512
+  - name: argocd application-controller
+    file: ansible/vars/argocd_helm_values.yml
+    path: argocd_helm_values.controller.resources
+    peak_mi: 631.5
+    window_days: 24.84
+    old_request_mi: 384
+    old_limit_mi: 1024
+  - name: argocd repo-server
+    file: ansible/vars/argocd_helm_values.yml
+    path: argocd_helm_values.repoServer.resources
+    peak_mi: 321.0
+    window_days: 15.34
+    old_request_mi: 64
+    old_limit_mi: 1024
+  - name: argocd server
+    file: ansible/vars/argocd_helm_values.yml
+    path: argocd_helm_values.server.resources
+    peak_mi: 146.5
+    window_days: 24.65
+    old_request_mi: 64
+    old_limit_mi: 1024
+  - name: argocd dex-server
+    file: ansible/vars/argocd_helm_values.yml
+    path: argocd_helm_values.dex.resources
+    peak_mi: 124.2
+    window_days: 24.84
+    old_request_mi: 64
+    old_limit_mi: 1024
+  - name: argocd notifications-controller
+    file: ansible/vars/argocd_helm_values.yml
+    path: argocd_helm_values.notifications.resources
+    peak_mi: 69.7
+    window_days: 25.34
+    old_request_mi: 64
+    old_limit_mi: 1024
+  - name: argocd applicationset-controller
+    file: ansible/vars/argocd_helm_values.yml
+    path: argocd_helm_values.applicationSet.resources
+    peak_mi: 63.5
+    window_days: 24.84
+    old_request_mi: 64
+    old_limit_mi: 1024
+  - name: argocd redis
+    file: ansible/vars/argocd_helm_values.yml
+    path: argocd_helm_values.redis.resources
+    peak_mi: 15.4
+    window_days: 25.34
+    old_request_mi: 64
+    old_limit_mi: 1024
+  - name: mealie
+    file: deployments/mealie/deployment.yaml
+    path: spec.template.spec.containers#mealie
+    peak_mi: 325.5
+    window_days: 20.28
+    old_request_mi: 320
+    old_limit_mi: 1024
