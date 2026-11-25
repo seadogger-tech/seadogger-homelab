@@ -145,5 +145,4 @@ Accepted by the owner on the Paperclip task OCE-130 (2026-11-19):
 ## Open follow-ups
 
 - `refresh-secret.sh` assumes a local `kubectl`, which the owner's Mac does not have. It should apply the Secret through yoda. Not done; until then, apply the Secret from a host that has cluster access.
-- Pro playbooks are not exercised: the Secret still needs Pro's `config.yml`, `hosts.ini` and the `pro_deploy_key`, and Pro's `ansible.cfg` collections path needs checking.
 - No real (non-check) run has gone through the runner yet.
