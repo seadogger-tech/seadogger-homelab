@@ -1,0 +1,27 @@
+---
+name: Apply flag checks
+on:
+  pull_request:
+  push:
+    branches: [master]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: apply-flag-checks-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install Ansible and PyYAML
+        run: python3 -m pip install --quiet 'ansible>=11,<12' pyyaml
+      - name: Run the helm-upgrade-only flag checks (helm and kubectl are stubs)
+        run: python3 -m unittest discover -s ansible/tests -v

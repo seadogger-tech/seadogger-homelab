@@ -19,6 +19,10 @@
     state: present
     kubeconfig: "{{ KUBECONFIG }}"
 
+- name: Load the shared ArgoCD Helm values
+  ansible.builtin.include_vars:
+    file: "{{ playbook_dir }}/vars/argocd_helm_values.yml"
+
 - name: Deploy ArgoCD with Helm
   kubernetes.core.helm:
     name: argocd
@@ -30,28 +34,7 @@
     # ArgoCD. Both helm tasks must carry the same values, because each run
     # replaces the release values rather than merging them.
     chart_version: "8.5.8"
-    values:
-      server:
-        service:
-          type: ClusterIP
-      # Behind Traefik's TLS termination. Set here as well as by the patch
-      # tasks below, because a helm upgrade rewrites these ConfigMaps and a
-      # values-less upgrade put server.insecure back to false (2026-10-31).
-      configs:
-        params:
-          server.insecure: true
-        cm:
-          url: https://argocd.seadogger-homelab
-      controller:
-        # The application controller had no resources and fell back to the
-        # namespace LimitRange default (64Mi) while using ~350Mi, 606Mi peak
-        # (2026-10-31), so every node it landed on was under-counted.
-        resources:
-          requests:
-            cpu: 100m
-            memory: 384Mi
-          limits:
-            memory: 1Gi
+    values: "{{ argocd_helm_values }}"
 
 - name: Force argocd server.service.type=ClusterIP via Helm
   kubernetes.core.helm:
@@ -64,28 +47,7 @@
     # ArgoCD. Both helm tasks must carry the same values, because each run
     # replaces the release values rather than merging them.
     chart_version: "8.5.8"
-    values:
-      server:
-        service:
-          type: ClusterIP
-      # Behind Traefik's TLS termination. Set here as well as by the patch
-      # tasks below, because a helm upgrade rewrites these ConfigMaps and a
-      # values-less upgrade put server.insecure back to false (2026-10-31).
-      configs:
-        params:
-          server.insecure: true
-        cm:
-          url: https://argocd.seadogger-homelab
-      controller:
-        # The application controller had no resources and fell back to the
-        # namespace LimitRange default (64Mi) while using ~350Mi, 606Mi peak
-        # (2026-10-31), so every node it landed on was under-counted.
-        resources:
-          requests:
-            cpu: 100m
-            memory: 384Mi
-          limits:
-            memory: 1Gi
+    values: "{{ argocd_helm_values }}"
 
 # --- Fix the proxy/TLS loop by telling ArgoCD it’s behind TLS-terminating proxy
 - name: Set server.insecure=true in argocd-cmd-params-cm
