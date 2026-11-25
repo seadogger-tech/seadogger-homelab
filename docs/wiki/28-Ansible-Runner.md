@@ -63,17 +63,22 @@ The guard fails closed: an unparseable argument string or a guard error also sto
 
 ### What it can run: the helm-upgrade-only apply flags
 
-Three flags change a chart's running values without a cold start. `guard.py` does not refuse them, because they are not on its lists, so the runner may run them. `enable_k3s_*` and `enable_rook_ceph_part1` stay refused.
+Four flags change a chart's or a HelmChartConfig's running values without a cold start. `guard.py` does not refuse them, because they are not on its lists, so the runner may run them. `enable_k3s_*` and `enable_rook_ceph_part1` stay refused.
 
 | Flag | Task file | Release (namespace) | Chart pin |
 | --- | --- | --- | --- |
 | `enable_rook_ceph_resources` | `ansible/tasks/rook_ceph_resources.yml` | `rook-ceph`, `rook-ceph-cluster` (`rook-ceph`) | 1.19.2 and 1.18.1, equal to `rook_ceph_deploy_part1.yml` |
 | `enable_metallb_resources` | `ansible/tasks/metallb_resources.yml` | `metallb` (`metallb-system`) | 0.15.2, equal to `metallb_native_deploy.yml` |
 | `enable_argocd_resources` | `ansible/tasks/argocd_resources.yml` | `argocd` (`argocd`) | 8.5.8, equal to `argocd_native_deploy.yml` |
+| `enable_traefik_resources` | `ansible/tasks/traefik_resources.yml` | HelmChartConfig `traefik` (`kube-system`), not a Helm release | none: k3s's helm controller upgrades Traefik |
 
-All three default to `false` in `main.yml` and `example.config.yml`.
+All four default to `false` in `main.yml` and `example.config.yml`.
+
+`enable_traefik_resources` writes one object, the HelmChartConfig `kube-system/traefik`, from `ansible/vars/traefik_helmchartconfig_values.yml` (the cold-start `traefik_dashboard_deploy.yml` loads the same file). It is not `enable_traefik_dashboard`, which is an untagged task in a play that also runs other applications, so `--tags` cannot narrow it. It downloads nothing and creates no dashboard object.
 
 **What they may do.** Run `helm upgrade` on a release that already exists, with the values from the checked-out repo (Helm runs on the control-plane host, so each values file is first copied from the runner's checkout to `/tmp` on that host): `deployments/rook-ceph/*.yaml` for Rook, and the shared vars files `ansible/vars/metallb_helm_values.yml` and `ansible/vars/argocd_helm_values.yml` for MetalLB and ArgoCD (the cold-start tasks load the same files, so the two paths cannot drift). Values therefore come from the pinned Core commit the Job checked out, never from the raw `master` URL.
+
+**MetalLB speakers are replaced through a gate.** The speaker DaemonSet uses `OnDelete`, so the `helm upgrade` in `enable_metallb_resources` changes the template and the controller Deployment but replaces no speaker. The play then runs `ansible/tasks/metallb_speaker_replace.yml`, which deletes the stale speakers one at a time in node-name order, waits for each replacement (Ready, at the target revision, at the expected QoS class), and runs a network check before the next deletion: every `LoadBalancer` Service has an ingress IP and exactly one `ServiceL2Status` on a node with a Ready speaker, and the Traefik IP answers HTTP. The first failure ends the play, names the pod and deletes nothing further. A native redeploy (`metallb_native_deploy.yml` over running speakers) replaces none of them; only `enable_metallb_resources` replaces them, through the gated loop. Optional variables, set with `-e`: `metallb_speaker_replace` (`stale`, the default, or `all`), `metallb_speaker_expect_qos` (`Guaranteed`, the default, or `Burstable`) and `metallb_values_file` (`metallb_helm_values.yml`, the default, or `metallb_helm_values.previous.yml`); any other value fails before a command runs. `guard.py` evaluates these `-e` variables and refuses none of them, since none is a destructive or derived flag. See [Cluster Resource Monitor](30-Cluster-Resource-Monitor.md#stage-b1-guaranteed-qos-for-the-network-path-and-csi-nodeplugin-limits).
 
 **What they may not do.** Install (`helm install`, `--install`), wipe anything, or touch or restart k3s. If the release is missing, `helm status` fails and the run stops with `helm release <name> is not installed`. Nothing else in the run changes either: a run is a no-op upgrade when the cluster already matches the repo.
 

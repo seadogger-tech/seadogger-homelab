@@ -539,6 +539,11 @@ Notes:
   `helm template` cannot show them; after `enable_rook_ceph_resources`, read the
   Driver CR and confirm the request did not rise. If the operator ignores a
   key, record it here and leave that container to Stage B.
+  **Correction (Stage B1):** the nodeplugin rows (`csi-*plugin`, `driver-registrar`,
+  `liveness-prometheus`) were not delivered by B0; they are delivered by B1
+  through the `csi*ProvisionerResource` keys. The `csi*PluginResource` keys B0
+  edited reach only the controller plugin Driver CR, and Rook 1.18 reads the
+  node plugin and registrar from the other pair (see *Stage B1*).
 - `cmd-reporter` is a new key on the CephCluster CR at 64Mi request / 512Mi
   limit, today's effective values from the `rook-ceph` LimitRange `default`
   (512Mi). It has no measured peak: it is set explicitly so the Pro cut of
@@ -558,7 +563,7 @@ Notes:
 | Ceph mon, mgr, OSD, MDS daemons | App budgets tied to the limit; the OSDs are already at their limit. Stage B sets the pins. |
 | Paperclip, `oce-git-sync`, paperclip-db | Critical; windows under 2 days; no node has room. |
 | Velero server and node-agents | Data-mover path; the server is at its limit. |
-| Traefik | `GOMEMLIMIT` = limit; Stage B sets it Guaranteed at ≥ 256Mi. |
+| Traefik | Not delivered by B0; delivered by B1 through the HelmChartConfig (Guaranteed at ≥ 256Mi, see *Stage B1*). |
 | company-memory, rook-ceph-operator | At their limit: they need a raise, not a cut. |
 | Home Assistant | 1.25 × P is above today's 2048Mi limit. |
 | pihole, cloudflared, portal, mgr `watch-active` | Windows under 7 days. |
@@ -622,3 +627,182 @@ flowchart TD
   style RL fill:#8b4513,color:#fff
   style HOLD fill:#8b4513,color:#fff
 ```
+
+## Stage B1: Guaranteed QoS for the network path and CSI nodeplugin limits
+
+Stage B1 of OCE-369 finishes what B0 could not deliver without a capacity decision: the
+CSI nodeplugin limits, Guaranteed QoS for MetalLB and Traefik, and a gated way to replace
+the MetalLB speakers. It adds no measured value to this wiki. The per-container table
+(`P`, old → new, ratio), the per-node totals and every rollout receipt are in the private
+Pro `docs/operations/memory-sizing.md`; this section holds only the rule, the keys and
+how to check them, with placeholder values (`<P>`, `<request>`, `<limit>`).
+
+*Delivered by B1 through these paths:* the nodeplugin rows B0 listed (not delivered by B0)
+through `csi*ProvisionerResource` in `deployments/rook-ceph/rook-ceph-operator-values.yaml`;
+the operations-mcp row (not delivered by B0, whose reduced value never reached the
+cluster because its Application is pinned to a reviewed revision) through the Pro pin
+advance; Traefik through the HelmChartConfig below.
+
+### Sizing rule
+
+`P` is the larger of a container's working-set peak and its cgroup `memory.peak`, read
+live at build time and taken as the maximum over all replicas on all nodes.
+
+- **Burstable:** request = `P` rounded up to 8Mi; limit = 1.25 × request, rounded up to 8Mi.
+- **Guaranteed:** request = limit = 1.25 × `P`, rounded up to 8Mi, and CPU request = CPU
+  limit. A pod is Guaranteed only when **every** container, init containers included, has
+  request = limit for memory and CPU.
+- No request is below `P` and no limit rises above the one it replaces.
+- **The 1.5× exception.** The two CSI plugin containers (`csi-rbdplugin`,
+  `csi-cephfsplugin`) get limit = 1.5 × request. An OOM kill of a plugin breaks every
+  mount on its node, and its mount work scales with the number of volumes, which no
+  observation window bounds. No other container uses the exception.
+- **Init containers.** The MetalLB chart has no values for the speaker's `cp-frr-files`,
+  `cp-reloader` and `cp-metrics`; they take the namespace LimitRange defaults. The
+  `metallb-system` LimitRange must have `default` = `defaultRequest` (memory and CPU) before a
+  speaker is recreated, or the pod stays Burstable. LimitRanges apply only at pod
+  admission, so a changed default reaches a speaker only when it is recreated.
+
+### Where each key lives
+
+| Component | Where Git sets it | What the live object shows |
+|---|---|---|
+| CSI nodeplugin (plugin, registrar, liveness) | `csi.csiRBDProvisionerResource` and `csi.csiCephFSProvisionerResource` in `deployments/rook-ceph/rook-ceph-operator-values.yaml`; entries named `csi-*plugin`, `driver-registrar` and `liveness-prometheus` | Driver CR `spec.nodePlugin.resources.{plugin,registrar,liveness}` and the nodeplugin DaemonSet pods |
+| CSI controller plugin | `csi.csiRBDPluginResource` and `csi.csiCephFSPluginResource` (unchanged by B1) | Driver CR `spec.controllerPlugin.resources` |
+| MetalLB speaker and sidecars | `speaker.resources`, `speaker.frr.resources`, `speaker.reloader.resources`, `speaker.frrMetrics.resources` in `ansible/vars/metallb_helm_values.yml` | speaker DaemonSet pods |
+| MetalLB controller | `controller.resources` in the same file | controller Deployment pod |
+| Traefik | `resources` in `ansible/vars/traefik_helmchartconfig_values.yml` (both the cold-start dashboard task and `enable_traefik_resources` render it into the HelmChartConfig `kube-system/traefik`) | Traefik Deployment pod |
+
+**Rook 1.18 reads the CSI keys crossed.** With `ROOK_USE_CSI_OPERATOR`, the operator writes
+`csi.ceph.io/v1` `Driver` CRs on every start (`createOrUpdateRBDDriverResource` and its
+CephFS twin in `pkg/operator/ceph/csi/operator_driver.go`, v1.18.1). Their
+`spec.nodePlugin.resources` come from `createDriverNodePluginResouces(<driver>ProvisionerResource)`,
+which keeps the entries whose names contain `registrar`, `plugin`, `liveness` or `addons`; their
+`spec.controllerPlugin.resources` come from the `*PluginResource` key. So the node plugin is
+sized by the `*ProvisionerResource` entries, and the `csi-provisioner`, `csi-resizer`,
+`csi-attacher` and `csi-snapshotter` entries in that key do nothing. A hand patch of a Driver CR
+does not survive an operator restart, so it is never a path. `helm template` shows the keys in
+the operator ConfigMap (`CSI_RBD_PROVISIONER_RESOURCE`, `CSI_CEPHFS_PROVISIONER_RESOURCE`) but
+not the Driver CRs, which the operator renders at runtime.
+
+### Why MetalLB speakers use OnDelete and a gated loop
+
+`RollingUpdate` moves to the next speaker as soon as the new pod is available, and
+`metallb_resources.yml` is one `helm upgrade --atomic --wait` with no step between pods. A speaker
+that cannot announce its Services is an outage for everything behind a `LoadBalancer`, DNS
+included. So the shared values set `speaker.updateStrategy: {type: OnDelete}` (the chart key at
+0.15.2). `helm upgrade` then changes the template and the controller Deployment and replaces
+no speaker, and `ansible/tasks/metallb_speaker_replace.yml` (included by `metallb_resources.yml`
+after the upgrade; `kubectl` and `uri` only) replaces them:
+
+1. The target revision is the hash of the speaker DaemonSet's highest-numbered ControllerRevision.
+   The stale pods are the speakers off that revision, or every speaker with `metallb_speaker_replace=all`.
+2. The network check **N** (retried for about 90 s): every `LoadBalancer` Service has an ingress IP,
+   each has exactly one `ServiceL2Status` whose node runs a Ready speaker, and the Traefik
+   `LoadBalancer` IP answers HTTP with any status.
+3. **N** runs once before the first deletion. If it fails, nothing is deleted.
+4. For each stale pod, in node-name order: delete it; wait up to 180 s for the replacement on the
+   same node (Ready, at the target revision, `qosClass` = `metallb_speaker_expect_qos`, with each
+   init container's admitted resources in the output); run **N**. The first failure ends the play,
+   naming the pod, before the next deletion.
+5. Post-check: `updatedNumberScheduled` = `numberReady` = `desiredNumberScheduled`.
+
+`metallb_speaker_expect_qos` defaults to `Guaranteed`; a rollback to Burstable values passes
+`Burstable`. A native redeploy (`metallb_native_deploy.yml`) over running speakers replaces none of
+them; `enable_metallb_resources` replaces them through this loop. On a fresh install `OnDelete` only
+governs later template changes.
+
+**The Helm waiter.** Helm 3's `--wait` counts a DaemonSet whose strategy is not `RollingUpdate`
+as ready (`pkg/kube/ready.go`, `daemonSetReady`), so the upgrade returns. Helm 4's default waiter
+counts updated pods, would wait for speakers that only the loop replaces, time out, and
+`--atomic` would roll the release back. `metallb_resources.yml` therefore reads
+`helm version --short` on the control node, prints it, and passes `--wait=legacy
+--rollback-on-failure` on Helm 4 or later and `--wait --atomic` on Helm 3.
+
+```mermaid
+sequenceDiagram
+  participant R as Runner (enable_metallb_resources)
+  participant H as Helm / k8s API
+  R->>H: helm upgrade: new template, OnDelete (no speaker replaced)
+  R->>H: pre-check N: LB IPs, ServiceL2Status, Traefik HTTP
+  loop each stale speaker, node-name order
+    R->>H: delete pod
+    H-->>R: replacement Ready, target revision, expected qosClass
+    R->>H: check N
+    alt a check fails
+      R-->>R: stop; name the pod; no further deletion
+    end
+  end
+  R->>H: post-check: updated = ready = desired
+```
+
+### Rollback values
+
+`ansible/vars/metallb_helm_values.previous.yml` holds the B0 values plus `speaker.updateStrategy: OnDelete`.
+`metallb_values_file=metallb_helm_values.previous.yml` selects it; no other file name is accepted.
+Run `enable_metallb_resources` at the landing revision with `-e metallb_values_file=metallb_helm_values.previous.yml
+-e metallb_speaker_expect_qos=Burstable`: the template returns to B0, the controller Deployment rolls
+back, and the gated loop replaces the speakers the forward run replaced, one at a time. Only then revert
+the core commit: that changes the strategy back to `RollingUpdate`, which is not part of the pod
+template, so it replaces no speaker. To go back to B0 for the speakers while keeping the rest of
+B1, run the shared values with `-e metallb_speaker_replace=all -e metallb_speaker_expect_qos=Burstable`
+after the `metallb-system` LimitRange is back at its B0 value. A rollback is complete when every object in
+the prior-state record matches again; a revert alone does not count, because pods admitted under a changed
+LimitRange keep their values until they are recreated. Each later change to the shared MetalLB values
+replaces the `previous` file with its own prior values.
+
+```mermaid
+flowchart TD
+  A["revert the LimitRange change first (Pro), confirm live"] --> B{"core also reverting?"}
+  B -- no --> C["run with metallb_speaker_replace=all,<br/>metallb_speaker_expect_qos=Burstable"]
+  B -- yes --> D["run at the landing revision with<br/>metallb_values_file=previous, expect_qos=Burstable"]
+  D --> E["revert the core commit (strategy only)"]
+  E --> F["run the flags again at the revert revision:<br/>no speaker replaced"]
+  C --> G["compare every object with the prior-state record"]
+  F --> G
+  style A fill:#7b1fa2,color:#fff
+  style C fill:#8b4513,color:#fff
+  style D fill:#8b4513,color:#fff
+  style E fill:#1e3a5f,color:#fff
+  style F fill:#8b4513,color:#fff
+  style G fill:#2d5016,color:#fff
+```
+
+### Traefik
+
+The k3s HelmChartConfig `kube-system/traefik` carries `resources` with request = limit for memory and CPU
+(memory not below the Guaranteed 256Mi floor, because a Go process holds its heap to `GOMEMLIMIT`,
+which should equal the container limit). `enable_traefik_resources` (see [Ansible Runner](28-Ansible-Runner.md))
+writes only that object. `enable_traefik_dashboard` is neither a destructive nor a derived flag for
+`guard.py`, and its task writes only the dashboard IngressRoute and the HelmChartConfig, but it is an
+untagged task in a play that also runs other applications, so the narrow flag is the one to run.
+
+### Verify on a live cluster
+
+Values below are placeholders.
+
+```bash
+# CSI nodeplugin: the Driver CRs (read-only) and the pods they produce
+kubectl -n rook-ceph get driver.csi.ceph.io -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.spec.nodePlugin.resources}{"\n"}{end}'
+kubectl -n rook-ceph get pods -l app=csi-rbdplugin -o jsonpath='{range .items[*]}{.metadata.name}{" "}{range .spec.containers[*]}{.name}={.resources.requests.memory}/{.resources.limits.memory} {end}{"\n"}{end}'
+# MetalLB and Traefik: admitted resources and QoS, init containers included
+kubectl -n metallb-system get pods -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.status.qosClass}{"\n"}{end}'
+kubectl -n metallb-system get pod <speaker> -o jsonpath='{range .spec.initContainers[*]}{.name}={.resources}{"\n"}{end}'
+kubectl -n kube-system get pod -l app.kubernetes.io/name=traefik -o jsonpath='{.items[0].status.qosClass}{"\n"}'
+# gate state: strategy and revision of the speaker DaemonSet, announced Services
+kubectl -n metallb-system get ds metallb-speaker -o jsonpath='{.spec.updateStrategy.type}{" "}{.status.updatedNumberScheduled}/{.status.numberReady}/{.status.desiredNumberScheduled}{"\n"}'
+kubectl -n metallb-system get servicel2statuses.metallb.io
+```
+
+Each Guaranteed pod shows `Guaranteed`; each nodeplugin pod shows `<request>/<limit>` for its plugin,
+registrar and liveness containers, and the Driver CR shows the same values.
+
+### Tests
+
+`ansible/tests/test_b1_memory_values.py` asserts the B1 values (request = limit for every MetalLB
+container and the Traefik HelmChartConfig, the rule against the peaks recorded in the B0 fixture, the
+nodeplugin keys, and the operator ConfigMap render when `helm` is present).
+`ansible/tests/test_metallb_speaker_replace.py` runs the loop for real on localhost against a stub
+`kubectl` that serves canned JSON and logs deletions: all checks pass (one deletion per stale pod, in
+order); **N** fails after the first replacement (the play fails with exactly one deletion); the pre-check
+fails (no deletion); a replacement at the wrong `qosClass` (no second deletion); and unknown values fail.

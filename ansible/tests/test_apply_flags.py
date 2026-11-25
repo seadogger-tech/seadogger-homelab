@@ -20,6 +20,8 @@ from pathlib import Path
 
 import yaml
 
+import metallb_harness
+
 CORE = Path(__file__).resolve().parents[2]
 ANSIBLE = CORE / "ansible"
 TASKS = ANSIBLE / "tasks"
@@ -39,6 +41,7 @@ RELEASES = {
 HELM_STUB = """#!/bin/sh
 echo "helm $*" >> "$STUB_LOG"
 case "$1" in
+  version) echo "${HELM_VERSION:-v3.17.3+gabcdef}"; exit 0 ;;
   status)
     if [ "$HELM_RELEASES_PRESENT" = "1" ]; then echo "STATUS: deployed"; exit 0; fi
     echo "Error: release: not found" >&2; exit 1 ;;
@@ -47,6 +50,8 @@ echo "STATUS: deployed"
 """
 
 KUBECTL_STUB = """#!/bin/sh
+# The MetalLB runs serve the speaker-replacement canned state; the stub there logs its own calls.
+case "$*" in *ceph*) ;; *) [ -n "$METALLB_STUB_STATE" ] && exec python3 "$METALLB_STUB" "$@" ;; esac
 echo "kubectl $*" >> "$STUB_LOG"
 case "$*" in
   *"ceph health"*) echo "$CEPH_HEALTH" ;;
@@ -166,6 +171,12 @@ class RunWithStubs(unittest.TestCase):
         self.pg = self.tmp / "pg.json"
         self.pg.write_text(json.dumps(PG_CLEAN))
         (self.tmp / "hosts.ini").write_text("[control_plane]\nlocalhost ansible_connection=local\n")
+        # MetalLB's gated loop: speakers all current by default (nothing to replace), Traefik
+        # answering on a local port.
+        self.http, self.http_port = metallb_harness.start_http()
+        self.addCleanup(self.http.shutdown)
+        self.metallb_state = self.tmp / "metallb-state.json"
+        metallb_harness.write_state(self.metallb_state, metallb_harness.default_state(stale_nodes=()))
         self.env = dict(os.environ, PATH=f"{bindir}:{os.environ['PATH']}", STUB_LOG=str(self.log),
                         PG_JSON=str(self.pg), CEPH_HEALTH="HEALTH_OK", HELM_RELEASES_PRESENT="1",
                         ANSIBLE_COLLECTIONS_PATH=os.environ.get("ANSIBLE_COLLECTIONS_PATH", ""))
@@ -175,12 +186,16 @@ class RunWithStubs(unittest.TestCase):
         cmd = [self.ansible, "-i", str(self.tmp / "hosts.ini"), "main.yml", "--tags", flag,
                "-e", f"{flag}=true", "-e", "ansible_become=false",
                "-e", "ansible_python_interpreter=" + shutil.which("python3")]
+        env = dict(self.env, **env)
+        if key == "metallb":
+            env.update(METALLB_STUB_STATE=str(self.metallb_state), METALLB_STUB=str(metallb_harness.STUB))
+            extra = ("metallb_check_http_port=%d" % self.http_port, "metallb_check_retries=1",
+                     "metallb_check_delay=1", "metallb_replace_wait_retries=2", "metallb_replace_wait_delay=1") + tuple(extra)
         for pair in extra:
             cmd += ["-e", pair]
         if check:
             cmd.append("--check")
-        result = subprocess.run(cmd, cwd=self.checkout / "ansible", capture_output=True, text=True,
-                                env=dict(self.env, **env))
+        result = subprocess.run(cmd, cwd=self.checkout / "ansible", capture_output=True, text=True, env=env)
         calls = self.log.read_text().splitlines() if self.log.exists() else []
         return result, calls
 
@@ -254,6 +269,100 @@ class RunWithStubs(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("active+clean", result.stdout + result.stderr)
 
+    def test_metallb_unknown_values_file_or_mode_fails_before_helm_or_kubectl(self):
+        for pair in ("metallb_values_file=argocd_helm_values.yml", "metallb_values_file=../vars/metallb_helm_values.yml",
+                     "metallb_speaker_replace=everything", "metallb_speaker_expect_qos=BestEffort"):
+            with self.subTest(pair):
+                self.log.unlink(missing_ok=True)
+                result, calls = self.run_flag("metallb", extra=(pair,))
+                self.assertNotEqual(result.returncode, 0, result.stdout)
+                self.assertFalse(calls, calls)
+
+    def test_metallb_previous_values_file_is_what_helm_gets(self):
+        for name, memory in (("metallb_helm_values.previous.yml", "80Mi"), ("metallb_helm_values.yml", "88Mi")):
+            with self.subTest(name):
+                result, _ = self.run_flag("metallb", extra=(f"metallb_values_file={name}",))
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                sent = yaml.safe_load(Path("/tmp/metallb-helm-values.yml").read_text())
+                self.assertEqual(sent["speaker"]["updateStrategy"], {"type": "OnDelete"})
+                self.assertEqual(sent["speaker"]["resources"]["requests"]["memory"], memory)
+
+    def test_metallb_helm_wait_follows_the_helm_major_version(self):
+        for version, wanted, banned in (("v3.17.3+gabc", ["--atomic", "--wait"], ["--wait=legacy", "--rollback-on-failure"]),
+                                        ("v4.0.1+gabc", ["--rollback-on-failure", "--wait=legacy"], ["--atomic"])):
+            with self.subTest(version):
+                self.log.unlink(missing_ok=True)
+                result, calls = self.run_flag("metallb", HELM_VERSION=version)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                upgrade = next(c for c in calls if c.startswith("helm upgrade")).split()
+                for flag in wanted:
+                    self.assertIn(flag, upgrade)
+                for flag in banned:
+                    self.assertNotIn(flag, upgrade)
+                self.assertIn(version.split("+")[0], result.stdout, "the Helm version is recorded in the run output")
+
+    def test_metallb_stale_speakers_are_replaced_after_the_upgrade_under_the_tag(self):
+        metallb_harness.write_state(self.metallb_state, metallb_harness.default_state(stale_nodes=("n2", "n3")))
+        result, calls = self.run_flag("metallb")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        upgrade = next(i for i, c in enumerate(calls) if c.startswith("helm upgrade"))
+        deletes = [i for i, c in enumerate(calls) if "delete pod" in c]
+        self.assertEqual(len(deletes), 2, calls)
+        self.assertTrue(all(i > upgrade for i in deletes), calls)
+        self.assertEqual(metallb_harness.read_state(self.metallb_state)["deletions"],
+                         ["metallb-speaker-yy2", "metallb-speaker-xx3"])
+
+    def test_metallb_check_mode_deletes_nothing(self):
+        metallb_harness.write_state(self.metallb_state, metallb_harness.default_state())
+        result, calls = self.run_flag("metallb", check=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertFalse([c for c in calls if "delete pod" in c], calls)
+
+    def test_metallb_failed_upgrade_replaces_no_speaker(self):
+        # a helm failure ends the play before the loop is reached
+        metallb_harness.write_state(self.metallb_state, metallb_harness.default_state())
+        result, calls = self.run_flag("metallb", HELM_RELEASES_PRESENT="0")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse([c for c in calls if "delete pod" in c], calls)
+
+
+class TraefikResourcesFlag(unittest.TestCase):
+    """enable_traefik_resources writes only the Traefik HelmChartConfig, on the apply-flag pattern."""
+
+    def test_flag_is_wired_tagged_and_default_false(self):
+        main = (ANSIBLE / "main.yml").read_text()
+        self.assertIn("tasks/traefik_resources.yml", main)
+        self.assertIn("enable_traefik_resources | default(false)", main)
+        self.assertIn("tags: [enable_traefik_resources]", main)
+        example = yaml.safe_load((ANSIBLE / "example.config.yml").read_text())
+        self.assertIs(example.get("enable_traefik_resources"), False)
+
+    def test_task_writes_one_helmchartconfig_and_nothing_else(self):
+        text = "\n".join(code_lines(TASKS / "traefik_resources.yml"))
+        for pattern in (r"get_url", r"raw\.githubusercontent\.com", r"helm\s+(install|upgrade)", r"ansible\.builtin\.(command|shell|raw)",
+                        r"systemctl", r"state:\s*(absent|restarted)", r"IngressRoute"):
+            self.assertIsNone(re.search(pattern, text), pattern)
+        writes = [t["kubernetes.core.k8s"] for t in yaml.safe_load((TASKS / "traefik_resources.yml").read_text())
+                  if "kubernetes.core.k8s" in t]
+        self.assertEqual([(w["definition"]["kind"], w["definition"]["metadata"]["name"], w["state"]) for w in writes],
+                         [("HelmChartConfig", "traefik", "present")])
+
+    def test_dashboard_task_writes_only_the_dashboard_objects_and_the_helmchartconfig(self):
+        tasks = yaml.safe_load((TASKS / "traefik_dashboard_deploy.yml").read_text())
+        writes = []
+        for t in tasks:
+            k8s = t.get("kubernetes.core.k8s")
+            if k8s:
+                writes.append(k8s["definition"]["kind"] if "definition" in k8s else k8s["src"])
+            for module in ("ansible.builtin.command", "ansible.builtin.shell", "ansible.builtin.raw"):
+                self.assertNotIn(module, t)
+        self.assertEqual(writes, ["HelmChartConfig", "/tmp/traefik-dashboard-ingress.yml"])
+
+    def test_guard_does_not_list_the_dashboard_or_the_resources_flag(self):
+        guard = yaml.safe_load((GUARD_DIR / "guard.yml").read_text())[0]["vars"]
+        listed = set(guard["destructive_flags"]) | set(guard["derived_flags"])
+        self.assertFalse({"enable_traefik_dashboard", "enable_traefik_resources"} & listed)
+
 
 class GuardUnchanged(unittest.TestCase):
     """guard.py still refuses the destructive Rook flag and accepts the apply flags."""
@@ -267,7 +376,7 @@ class GuardUnchanged(unittest.TestCase):
         "enable_argocd_native": False, "enable_raspberry_pi_config": False,
     }
 
-    def run_guard(self, **overrides):
+    def run_guard(self, *extra_args, **overrides):
         real = real_ansible()
         tmp = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, tmp, True)
@@ -278,7 +387,7 @@ class GuardUnchanged(unittest.TestCase):
         wrapper.write_text(f'#!/bin/sh\ncase "$*" in *guard.yml*) exec {real} "$@";; esac\necho REAL_RUN_REACHED\n')
         wrapper.chmod(wrapper.stat().st_mode | stat.S_IXUSR)
         env = dict(os.environ, PATH=f"{wrapper.parent}:{os.environ['PATH']}")
-        return subprocess.run(["python3", str(GUARD_DIR / "guard.py"), "main.yml -i hosts.ini"],
+        return subprocess.run(["python3", str(GUARD_DIR / "guard.py"), " ".join(("main.yml -i hosts.ini",) + extra_args)],
                               cwd=tmp, capture_output=True, text=True, env=env)
 
     def test_destructive_part1_flag_is_still_refused(self):
@@ -295,6 +404,19 @@ class GuardUnchanged(unittest.TestCase):
                                 enable_argocd_resources=True)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("REAL_RUN_REACHED", result.stdout)
+
+    def test_b1_variables_and_flags_are_evaluated_and_none_is_refused(self):
+        result = self.run_guard(
+            "-e metallb_values_file=metallb_helm_values.previous.yml", "-e metallb_speaker_replace=all",
+            "-e metallb_speaker_expect_qos=Burstable", "-e enable_traefik_resources=true",
+            "-e enable_traefik_dashboard=true", enable_metallb_resources=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("REAL_RUN_REACHED", result.stdout)
+
+    def test_destructive_flag_is_still_refused_next_to_the_b1_variables(self):
+        result = self.run_guard("-e metallb_speaker_replace=all", "-e enable_wipe_k3s_cluster=true")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertNotIn("REAL_RUN_REACHED", result.stdout)
 
     def test_guard_lists_do_not_mention_the_apply_flags(self):
         text = (GUARD_DIR / "guard.yml").read_text()

@@ -1,0 +1,127 @@
+---
+# Network check N (Stage B1, OCE-369), retried for about 90 s:
+#   - every LoadBalancer Service has an ingress IP;
+#   - each has exactly one servicel2statuses.metallb.io whose status.node runs a Ready speaker;
+#   - the Traefik LoadBalancer IP answers HTTP (any status).
+# Retries are by recursion: the block runs once, and its rescue waits and includes this
+# file again with the next attempt until metallb_check_retries is spent. kubectl and
+# ansible.builtin.uri only.
+- name: Count this attempt
+  ansible.builtin.set_fact:
+    msr_n_cur: "{{ msr_n_attempt | default(1) | int }}"
+
+- name: "Network check N ({{ msr_n_label | default('check') }}), attempt {{ msr_n_cur }}"
+  block:
+    - name: Read every Service
+      ansible.builtin.command: kubectl get services --all-namespaces -o json
+      environment:
+        KUBECONFIG: "{{ KUBECONFIG | default('/etc/rancher/k3s/k3s.yaml') }}"
+      register: msr_n_svc
+      changed_when: false
+      check_mode: false
+
+    - name: Read the ServiceL2Statuses
+      ansible.builtin.command: kubectl -n {{ msr_namespace }} get servicel2statuses.metallb.io -o json
+      environment:
+        KUBECONFIG: "{{ KUBECONFIG | default('/etc/rancher/k3s/k3s.yaml') }}"
+      register: msr_n_l2
+      changed_when: false
+      check_mode: false
+
+    - name: Read the speaker pods
+      ansible.builtin.command: kubectl -n {{ msr_namespace }} get pods -l {{ msr_selector }} -o json
+      environment:
+        KUBECONFIG: "{{ KUBECONFIG | default('/etc/rancher/k3s/k3s.yaml') }}"
+      register: msr_n_pods
+      changed_when: false
+      check_mode: false
+
+    - name: Evaluate the Services against the announcements
+      ansible.builtin.set_fact:
+        msr_n_problems: "{{ msr_n_eval | from_json }}"
+        msr_n_traefik_ip_list: "{{ msr_n_ips_eval | from_json }}"
+      vars:
+        msr_n_eval: >-
+          {%- set svcs = (msr_n_svc.stdout | from_json)['items'] -%}
+          {%- set l2s = (msr_n_l2.stdout | from_json)['items'] -%}
+          {%- set ready_nodes = [] -%}
+          {%- for p in (msr_n_pods.stdout | from_json)['items'] -%}
+            {%- if (p.status.conditions | default([]) | selectattr('type', 'equalto', 'Ready')
+                    | selectattr('status', 'equalto', 'True') | list | length) > 0 -%}
+              {%- set _ = ready_nodes.append(p.spec.nodeName) -%}
+            {%- endif -%}
+          {%- endfor -%}
+          {%- set problems = [] -%}
+          {%- set traefik = [] -%}
+          {%- for s in svcs if s.spec.type == 'LoadBalancer' -%}
+            {%- set key = s.metadata.namespace ~ '/' ~ s.metadata.name -%}
+            {%- set ing = (((s.status | default({})).loadBalancer | default({})).ingress | default([])) -%}
+            {%- if ing | length == 0 -%}
+              {%- set _ = problems.append(key ~ ' has no ingress IP') -%}
+            {%- elif s.metadata.name == msr_traefik_name and s.metadata.namespace == msr_traefik_namespace -%}
+              {%- set _ = traefik.append(ing[0].ip) -%}
+            {%- endif -%}
+            {%- set mine = [] -%}
+            {%- for st in l2s if st.status.serviceName == s.metadata.name and st.status.serviceNamespace == s.metadata.namespace -%}
+              {%- set _ = mine.append(st) -%}
+            {%- endfor -%}
+            {%- if mine | length != 1 -%}
+              {%- set _ = problems.append(key ~ ' has ' ~ (mine | length) ~ ' ServiceL2Status objects, want exactly 1') -%}
+            {%- elif mine[0].status.node not in ready_nodes -%}
+              {%- set _ = problems.append(key ~ ' is announced from ' ~ mine[0].status.node ~ ', which has no Ready speaker') -%}
+            {%- endif -%}
+          {%- endfor -%}
+          {%- if traefik | length == 0 -%}
+            {%- set _ = problems.append('Traefik LoadBalancer Service ' ~ msr_traefik_namespace ~ '/'
+                                        ~ msr_traefik_name ~ ' has no ingress IP') -%}
+          {%- endif -%}
+          {{ problems | to_json }}
+        msr_n_ips_eval: >-
+          {%- set ips = [] -%}
+          {%- for s in (msr_n_svc.stdout | from_json)['items']
+                if s.spec.type == 'LoadBalancer' and s.metadata.name == msr_traefik_name
+                   and s.metadata.namespace == msr_traefik_namespace -%}
+            {%- for i in (((s.status | default({})).loadBalancer | default({})).ingress | default([])) -%}
+              {%- set _ = ips.append(i.ip) -%}
+            {%- endfor -%}
+          {%- endfor -%}
+          {{ ips | to_json }}
+
+    - name: Fail the attempt if a Service is unassigned or unannounced
+      ansible.builtin.assert:
+        that: msr_n_problems | length == 0
+        fail_msg: "network check failed: {{ msr_n_problems | join('; ') }}"
+        quiet: true
+
+    - name: Traefik answers HTTP on its LoadBalancer IP
+      ansible.builtin.uri:
+        url: "http://{{ msr_n_traefik_ip_list | first }}:{{ msr_http_port }}/"
+        status_code: "{{ range(100, 600) | list }}"
+        timeout: 5
+        follow_redirects: none
+        return_content: false
+      check_mode: false
+
+  rescue:
+    - name: Remember why the attempt failed
+      ansible.builtin.set_fact:
+        msr_last_failure: >-
+          network check N ({{ msr_n_label | default('check') }}) failed on attempt {{ msr_n_cur }}:
+          {{ ansible_failed_result.msg | default('a task failed') }}
+
+    - name: Stop - the retries are spent
+      ansible.builtin.fail:
+        msg: "{{ msr_last_failure }}"
+      when: msr_n_cur | int > msr_check_retries | int
+
+    - name: Wait before the next attempt
+      ansible.builtin.pause:
+        seconds: "{{ msr_check_delay | int }}"
+
+    - name: Try the network check again
+      ansible.builtin.include_tasks:
+        file: metallb_network_check.yml
+        apply:
+          tags: [enable_metallb_resources]
+      vars:
+        msr_n_attempt: "{{ msr_n_cur | int + 1 }}"
