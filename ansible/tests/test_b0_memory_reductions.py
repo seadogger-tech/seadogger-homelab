@@ -153,7 +153,8 @@ class TestB0HelmRender(unittest.TestCase):
             with self.subTest(cname):
                 self.assertIn(cname, seen)
                 self.assertLess(to_mi(seen[cname]["limits"]["memory"]), by[row]["old_limit_mi"])
-                self.assertLessEqual(to_mi(seen[cname]["requests"]["memory"]), by[row]["old_request_mi"])
+                if not by[row].get("request_raised_by_b1"):
+                    self.assertLessEqual(to_mi(seen[cname]["requests"]["memory"]), by[row]["old_request_mi"])
 
     def test_argocd_renders_new_limits(self):
         values = load_yaml("ansible/vars/argocd_helm_values.yml")["argocd_helm_values"]
