@@ -76,7 +76,8 @@ class TestB0MemoryReductions(unittest.TestCase):
             with self.subTest(spec["name"]):
                 got = resources_for(spec)
                 self.assertLess(got["limit"], spec["old_limit_mi"], "limit must come down")
-                self.assertLessEqual(got["request"], spec["old_request_mi"], "no request may go up")
+                if not spec.get("request_raised_by_b1"):
+                    self.assertLessEqual(got["request"], spec["old_request_mi"], "no request may go up")
                 self.assertGreaterEqual(got["limit"], 1.25 * spec["peak_mi"], "limit must stay >= 1.25 x peak")
                 self.assertGreaterEqual(got["request"], 32, "32Mi request floor")
                 self.assertGreaterEqual(got["limit"], 40, "40Mi limit floor")

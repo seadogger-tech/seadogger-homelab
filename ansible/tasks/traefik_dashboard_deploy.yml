@@ -4,7 +4,12 @@
   ansible.builtin.set_fact:
     KUBECONFIG: /etc/rancher/k3s/k3s.yaml
 
-# Step 2: Configure Traefik to enable API/dashboard
+# Step 2: Configure Traefik to enable API/dashboard and to run Guaranteed. The values
+# are shared with tasks/traefik_resources.yml (enable_traefik_resources).
+- name: Load the shared Traefik HelmChartConfig values
+  ansible.builtin.include_vars:
+    file: "{{ playbook_dir }}/vars/traefik_helmchartconfig_values.yml"
+
 - name: Create Traefik HelmChartConfig to enable API
   kubernetes.core.k8s:
     kubeconfig: "{{ KUBECONFIG }}"
@@ -16,24 +21,7 @@
         name: traefik
         namespace: kube-system
       spec:
-        valuesContent: |
-          additionalArguments:
-            - "--api.insecure=true"
-          # Traefik ships with no resource requests, which puts it in the
-          # BestEffort QoS class - first to be evicted when a node runs out of
-          # memory, ahead of whatever caused the pressure. Traefik is the
-          # ingress for every service in the cluster, so it is the last thing
-          # that should be sacrificed to reclaim memory.
-          #
-          # Sized against observed steady state (~75 MiB) with headroom. The
-          # limit is generous on purpose: throttling or OOM-killing the ingress
-          # to save a little memory trades a small problem for a total outage.
-          resources:
-            requests:
-              cpu: 50m
-              memory: 128Mi
-            limits:
-              memory: 512Mi
+        valuesContent: "{{ traefik_helmchartconfig_values | to_nice_yaml }}"
 
 # Step 3: Wait for Traefik to restart with new config
 - name: Wait for Traefik deployment to be ready
