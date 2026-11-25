@@ -155,6 +155,29 @@ It is applied by the Pro Ansible task `resource_monitor_deploy.yml`, gated by
 `enable_resource_monitor` (default `false`). Merging the manifests deploys
 nothing by itself.
 
+### The monitor's own access
+
+Stated from `deployments/resource-monitor/` in the Pro repo.
+
+- **Cluster RBAC.** The ClusterRole `resource-monitor` (`rbac.yaml`) is
+  cluster-wide and read-only. It allows `get`, `list` and `watch` on `nodes`,
+  `pods`, `events`, `apps/replicasets` and `batch/jobs`. It has no write verb,
+  no Secret access and no exec. It is bound to the service account
+  `resource-monitor:resource-monitor`.
+- **Exporter discovery.** The Role `resource-monitor-endpointslice-reader`
+  allows `get` and `list` on `discovery.k8s.io/endpointslices` in the
+  `node-sensors` namespace only.
+- **Network.** `networkpolicy.yaml` allows no ingress. Egress goes only to
+  node-sensors pods on 9100, the Kubernetes API server, `paperclip` pods on 3100
+  and kube-dns on 53 (UDP and TCP).
+- **The API-server rule is pinned to addresses.** It allows `10.43.0.1/32` (the
+  Service, port 443) and `192.168.1.95/32` (yoda, port 6443). If the control
+  plane moves, or the CNI changes whether it matches before or after the
+  Service's address translation, the monitor loses the API with no policy error.
+  The visible symptom is a stopped heartbeat and a failing liveness probe. The
+  rule to update is the "Kubernetes API server" `ipBlock` entry in
+  `networkpolicy.yaml`.
+
 ### The recorder and its gaps
 
 The recorder watches Pods and Events in all namespaces with bookmarks and
@@ -323,7 +346,17 @@ configured` and leaves its parts pending. At start-up and on any change it logs
 
 `resource-monitor-webhook-writer` is the only write path: a Role granting
 `patch` on that one Secret by name, bound to `paperclip:default` (the account the
-Paperclip pod runs as). It cannot read, list or create anything.
+Paperclip pod runs as). The account cannot `get`, `list`, `watch`, `create` or
+`delete`. It can still read this one Secret back: a Kubernetes PATCH response
+returns the whole object, so an empty merge-patch `{}` returns `data.url` and
+`data.secret`. Every agent process in the Paperclip pod holds that account. This
+is an accepted trade-off: the read-back reaches only principals already inside
+the Paperclip pod, and the value is Paperclip's own trigger secret.
+`provision-webhook-secret.sh` deliberately sends the Kubernetes response to
+`/dev/null`.
+
+**Rule:** no `kubectl patch`, MCP patch or other PATCH that prints its response
+may target `resource-monitor-webhook`, because that output contains the value.
 
 `deployments/resource-monitor/provision-webhook-secret.sh` (POSIX `sh`, `curl`,
 `jq`) is the only way the value is handled:
