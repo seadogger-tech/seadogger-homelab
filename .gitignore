@@ -13,3 +13,7 @@ ansible/nextcloud-database.local.json
 
 # Reproducible local validation environment and verified artifact cache
 .cache/nextcloud-check/
+
+# Python bytecode
+__pycache__/
+*.pyc
