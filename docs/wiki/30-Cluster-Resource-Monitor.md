@@ -472,3 +472,153 @@ discover -s deployments/resource-monitor/tests`): fixture metrics and API JSON
 against a stub receiver for findings, proposal maths, delivery, crash recovery
 (a test-only environment hook exits the process at a named point), the 410
 resume, secret hygiene, the rendered manifests and the provisioning script.
+
+## Stage B0 immediate reductions
+
+Stage B0 of OCE-369 cuts limits (and over-sized requests) in the charts the
+Ansible runner applies, plus mealie, using memory peaks that already prove
+the cut is safe. **No request goes up**, so no pod can go Pending and no
+node's reservation rises. Stage B (after seven clean monitor days) does the
+full 1.25× sizing. The Pro half (LimitRanges and Pro manifests) is a separate
+Map ticket and lands after this one.
+
+### Per-container table
+
+`P` is the largest cgroup v2 `memory.peak` among the containers one chart key
+sets: the larger of the OCE-550 snapshot and the live re-read of 2026-11-25
+19:29:53Z–19:30:24Z (OCE-600 document `peak-reread`), over each container's
+lifetime. `Live P` is the re-read alone; no P changed. `memory.peak` includes page cache, so it is an upper bound on
+working set. Rule: request′ = min(request, ⌈P⌉₁₆) with a 32Mi floor;
+limit′ = max(⌈1.25 × request′⌉₈, ⌈1.25 × P⌉₈) with a 40Mi floor; applied only
+when below today's limit. Values are Mi. CPU is unchanged. The same numbers
+are the fixture `ansible/tests/b0_memory_peaks.yml`, which
+`ansible/tests/test_b0_memory_reductions.py` checks against the changed files
+(limit ≤ old limit, request ≤ old request, limit ≥ 1.25 × P).
+
+| Container | Request (now → B0) | Limit (now → B0) | P | Live P | Window | Request below P |
+|---|---|---|---|---|---|---|
+| log-collector (x10) | 100 → 32 | 1024 → 40 | 26.5 | 26.5 | 2.22 d |  |
+| ceph-exporter (x3) | 50 → 48 | 128 → 64 | 33.1 | 33.1 | 10.28 d |  |
+| rook-ceph-tools | 64 → 64 | 256 → 136 | 105.6 | 105.6 | 27.68 d | yes |
+| csi-rbdplugin | 64 → 64 | 1024 → 128 | 102.2 | 102.2 | 25.05 d | yes |
+| csi-rbdplugin driver-registrar | 64 → 32 | 512 → 40 | 24.3 | 18.0 | 25.05 d |  |
+| csi-rbdplugin liveness-prometheus | 32 → 32 | 256 → 48 | 37.9 | 37.9 | 25.05 d | yes |
+| csi-cephfsplugin | 64 → 64 | 1024 → 144 | 110.4 | 110.4 | 25.05 d | yes |
+| csi-cephfsplugin driver-registrar | 64 → 32 | 512 → 40 | 24.3 | 24.3 | 25.05 d |  |
+| csi-cephfsplugin liveness-prometheus | 32 → 32 | 256 → 48 | 37.9 | 37.7 | 25.05 d | yes |
+| metallb speaker | 128 → 80 | 512 → 104 | 68.1 | 68.1 | 7.47 d |  |
+| metallb frr | 32 → 32 | 256 → 64 | 50.2 | 50.2 | 7.48 d | yes |
+| metallb reloader | 32 → 32 | 256 → 64 | 45.3 | 45.2 | 25.04 d | yes |
+| metallb frr-metrics | 32 → 32 | 256 → 48 | 32.3 | 32.3 | 25.04 d | yes |
+| metallb controller | 96 → 96 | 512 → 152 | 120.4 | 120.4 | 25.73 d | yes |
+| argocd application-controller | 384 → 384 | 1024 → 792 | 631.5 | 631.5 | 25.23 d | yes |
+| argocd repo-server | 64 → 64 | 1024 → 408 | 321 | 321.0 | 15.72 d | yes |
+| argocd server | 64 → 64 | 1024 → 184 | 146.5 | 146.5 | 25.04 d | yes |
+| argocd dex-server | 64 → 64 | 1024 → 160 | 124.2 | 124.2 | 25.23 d | yes |
+| argocd notifications-controller | 64 → 64 | 1024 → 88 | 69.7 | 69.7 | 25.73 d | yes |
+| argocd applicationset-controller | 64 → 64 | 1024 → 80 | 63.5 | 63.5 | 25.23 d |  |
+| argocd redis | 64 → 32 | 1024 → 40 | 15.4 | 15.4 | 25.73 d |  |
+| mealie | 320 → 320 | 1024 → 408 | 325.5 | 325.5 | 20.67 d | yes |
+
+Notes:
+
+- `log-collector` (10 sidecars on mon, mgr, OSD and MDS pods) and
+  `ceph-exporter` are set together by one key each; the figure is the largest
+  peak among them. The shortest `log-collector` window at the live read is
+  2.22 d (mds-b); the key qualifies through the containers over 7 d.
+- `memory.events` `max` and `oom_kill` are 0 for every container of every key
+  at the live read, and none of those containers restarted since OCE-550.
+- The rbd `driver-registrar` P of 24.3 is above its live 18.0 (likely the
+  cephfs registrar's figure). It stays at 24.3: conservative, and the 40Mi
+  limit floor applies either way.
+- `csi-*plugin` requests are written at the live 64Mi, not the repo's old
+  128Mi, per the `ROOK_USE_CSI_OPERATOR` note in the operator values. The
+  operator copies the node plugin request into the controller plugin, so the
+  controller's live 128Mi request also falls to 64Mi (its peak is 57.4Mi).
+  Nothing rises. The CSI Driver CRs are rendered by the operator at runtime, so
+  `helm template` cannot show them; after `enable_rook_ceph_resources`, read the
+  Driver CR and confirm the request did not rise. If the operator ignores a
+  key, record it here and leave that container to Stage B.
+- `cmd-reporter` is a new key on the CephCluster CR at 64Mi request / 512Mi
+  limit, today's effective values from the `rook-ceph` LimitRange `default`
+  (512Mi). It has no measured peak: it is set explicitly so the Pro cut of
+  that default cannot reach the detect-version and network Jobs.
+- MetalLB `frr-metrics` is 48Mi, not the spec's indicative 40Mi: 40Mi is
+  below 1.25 × its 32.3Mi peak.
+- Σ over the containers B0 touches, per node (Mi, before → after;
+  from the OCE-550 snapshot, not a live read): anakin requests 894 → 576,
+  limits 8064 → 912; obiwan 1058 → 672, 10112 → 1136; rey 1822 → 1344,
+  15232 → 2376; yoda 1440 → 1200, 10752 → 2264. B0 does not make the nodes
+  fit: Σ limits stays above allocatable on every node until Stage B.
+
+### Left for Stage B
+
+| Containers | Reason |
+|---|---|
+| Ceph mon, mgr, OSD, MDS daemons | App budgets tied to the limit; the OSDs are already at their limit. Stage B sets the pins. |
+| Paperclip, `oce-git-sync`, paperclip-db | Critical; windows under 2 days; no node has room. |
+| Velero server and node-agents | Data-mover path; the server is at its limit. |
+| Traefik | `GOMEMLIMIT` = limit; Stage B sets it Guaranteed at ≥ 256Mi. |
+| company-memory, rook-ceph-operator | At their limit: they need a raise, not a cut. |
+| Home Assistant | 1.25 × P is above today's 2048Mi limit. |
+| pihole, cloudflared, portal, mgr `watch-active` | Windows under 7 days. |
+| Nextcloud (app, cron, db, redis), Jellyfin (app, xmltv-proxy) | Values sit inline in `nextcloud_deploy.yml` / `jellyfin_deploy.yml`; whether the runner may run those stages is unverified. |
+| coredns, metrics-server, local-path-provisioner | k3s-bundled manifests: the k3s path is outside the runner. |
+| Every container whose request stays below P | Needs a request raise, which needs Stage B's per-node budget table. |
+
+### Rollout, verification and rollback
+
+Core lands first. Argo syncs mealie from core `HEAD`. Then the runner applies
+`enable_argocd_resources`, `enable_metallb_resources` and
+`enable_rook_ceph_resources` (HEALTH_OK gate; all PGs `active+clean`). Before
+Pro lands, the `cmd-reporter` gate must pass live: the CephCluster CR
+`spec.resources.cmd-reporter` and a `rook-ceph-detect-version` Job pod both
+read 64Mi request / 512Mi limit while the `rook-ceph` LimitRange `default` is
+still 512Mi. Run it outside 02:00–04:45 America/New_York, with no agent build
+in progress (a MetalLB speaker roll can move the Paperclip LB IP briefly).
+
+**Rollback order.** The `cmd-reporter` key stays live for as long as the
+`rook-ceph` LimitRange `default` is below 512Mi. Reverting Pro alone is always
+safe, because it raises the default. Removing the key (reverting core's
+landing, or any later change to `rook-ceph-cluster-values.yaml` that drops it)
+waits for this sequence: (a) revert the Pro `rook-ceph` LimitRange cut and let
+Argo sync; (b) read the live LimitRange and confirm the `rook-ceph` `default`
+memory is 512Mi again, recording it on the task; (c) only then revert core and
+re-run `enable_rook_ceph_resources`. An OOM kill or eviction of a B0-changed
+container sends that key back to its previous values as a fix ticket.
+
+```mermaid
+flowchart TD
+  G["B0 gate: Stage A landed, monitor live,<br/>3 no-op flag runs green"] --> B["create map/OCE-369-immediate-reductions<br/>in core and Pro"]
+  B --> T["Build tickets: charts (core), manifests (Pro)"]
+  T --> MR["Map review: Tuvok, Worf; Kirk approves"]
+  MR --> LC["land core (master); Argo syncs mealie"]
+  LC --> P2["runner: enable_argocd_resources"]
+  P2 --> P3["runner: enable_metallb_resources"]
+  P3 --> P4["runner: enable_rook_ceph_resources<br/>(HEALTH_OK gate, PGs active+clean)"]
+  P4 --> V{"live resources = Git, no OOM / eviction,<br/>Σ per node recorded"}
+  V -- no --> RBC["map-gh.sh revert core; re-run flag.<br/>Pro lands only after a fix ticket<br/>drops the rook-ceph cut"]
+  V -- yes --> CR{"cmd-reporter gate: CephCluster CR and<br/>detect-version Job pod at 64Mi / 512Mi,<br/>rook-ceph default still 512Mi"}
+  CR -- no --> HOLD["hold Pro; fix ticket on the charts key"]
+  CR -- yes --> LP["land Pro (main); Argo syncs cluster-defaults<br/>and Pro apps; recreate pods in<br/>rook-ceph only"]
+  LP --> V2{"live resources = Git, no OOM / eviction,<br/>Σ per node recorded"}
+  V2 -- no --> RBP["map-gh.sh revert Pro; Argo sync;<br/>recreate pods"]
+  V2 -- yes --> W["24 h: working-set peak below new limit"]
+  W --> SB["Stage B: 7 clean days, then full sizing"]
+  RBP -.->|core revert needed too| RL["confirm live rook-ceph default = 512Mi,<br/>then revert core and re-run<br/>enable_rook_ceph_resources"]
+  style G fill:#7b1fa2,color:#fff
+  style B fill:#1e3a5f,color:#fff
+  style T fill:#1e3a5f,color:#fff
+  style MR fill:#1e3a5f,color:#fff
+  style LC fill:#1e3a5f,color:#fff
+  style LP fill:#1e3a5f,color:#fff
+  style P2 fill:#2d5016,color:#fff
+  style P3 fill:#2d5016,color:#fff
+  style P4 fill:#2d5016,color:#fff
+  style W fill:#2d5016,color:#fff
+  style SB fill:#7b1fa2,color:#fff
+  style RBC fill:#8b4513,color:#fff
+  style RBP fill:#8b4513,color:#fff
+  style RL fill:#8b4513,color:#fff
+  style HOLD fill:#8b4513,color:#fff
+```

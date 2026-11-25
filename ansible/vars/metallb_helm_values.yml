@@ -17,18 +17,40 @@
 # Sized against observed steady state (speakers 69-95 MiB, controller 64 MiB)
 # with headroom; limits are deliberately generous because a speaker being
 # OOM-killed is worse than one briefly using more than expected.
+#
+# Stage B0 (OCE-369): limits are cut to 1.25 x the memory.peak read over 7+
+# days (OCE-550); requests never go up. CPU for the sidecars comes from the
+# metallb-system LimitRange, so only memory is set here.
 metallb_helm_values:
   controller:
     resources:
       requests:
         cpu: 25m
-        memory: 96Mi
+        memory: 96Mi   # below the 120.4Mi peak; raising it is Stage B
       limits:
-        memory: 512Mi
+        memory: 152Mi  # was 512Mi
   speaker:
     resources:
       requests:
         cpu: 25m
-        memory: 128Mi
+        memory: 80Mi   # was 128Mi
       limits:
-        memory: 512Mi
+        memory: 104Mi  # was 512Mi; peak 68.1Mi
+    frr:
+      resources:
+        requests:
+          memory: 32Mi
+        limits:
+          memory: 64Mi   # was 256Mi; peak 50.2Mi
+    reloader:
+      resources:
+        requests:
+          memory: 32Mi
+        limits:
+          memory: 64Mi   # was 256Mi; peak 45.3Mi
+    frrMetrics:
+      resources:
+        requests:
+          memory: 32Mi
+        limits:
+          memory: 48Mi   # was 256Mi; peak 32.3Mi

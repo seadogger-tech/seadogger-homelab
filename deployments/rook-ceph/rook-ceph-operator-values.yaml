@@ -42,24 +42,24 @@ csi:
     - name : driver-registrar
       resource:
         requests:
-          memory: 32Mi   # was 128Mi; measured 5-21Mi
+          memory: 32Mi   # was 128Mi; peak 24.3Mi (B0 limit 512Mi -> 40Mi)
           cpu: 25m
         limits:
-          memory: 256Mi
+          memory: 40Mi
     - name : csi-rbdplugin
       resource:
         requests:
-          memory: 128Mi   # was 512Mi; measured ~53Mi
+          memory: 64Mi   # live request; the repo's 128Mi is not what the Driver CR carries
           cpu: 100m
         limits:
-          memory: 1Gi
+          memory: 128Mi   # was 1Gi; peak 102.2Mi (B0)
     - name : liveness-prometheus
       resource:
         requests:
           memory: 32Mi   # was 128Mi; measured 5-21Mi
           cpu: 25m
         limits:
-          memory: 256Mi
+          memory: 48Mi   # was 256Mi; peak 37.9Mi (B0)
   # NOTE: with ROOK_USE_CSI_OPERATOR these *ProvisionerResource values have
   # no effect: on every start the operator re-renders the Driver CRs, taking
   # the controller plugin request from the node *PluginResource and leaving
@@ -111,24 +111,24 @@ csi:
     - name : driver-registrar
       resource:
         requests:
-          memory: 32Mi   # was 128Mi; measured 5-21Mi
+          memory: 32Mi   # was 128Mi; peak 24.3Mi (B0 limit 512Mi -> 40Mi)
           cpu: 25m
         limits:
-          memory: 256Mi
+          memory: 40Mi
     - name : csi-cephfsplugin
       resource:
         requests:
-          memory: 128Mi   # was 512Mi; measured ~53Mi
+          memory: 64Mi   # live request; the repo's 128Mi is not what the Driver CR carries
           cpu: 100m
         limits:
-          memory: 1Gi
+          memory: 144Mi   # was 1Gi; peak 110.4Mi (B0)
     - name : liveness-prometheus
       resource:
         requests:
           memory: 32Mi   # was 128Mi; measured 5-21Mi
           cpu: 25m
         limits:
-          memory: 256Mi
+          memory: 48Mi   # was 256Mi; peak 37.9Mi (B0)
   csiCephFSProvisionerResource: |
     - name : csi-provisioner
       resource:
