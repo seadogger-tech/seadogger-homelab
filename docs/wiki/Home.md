@@ -107,7 +107,7 @@ See **[[19-Refactoring-Roadmap]]** for complete roadmap and **[GitHub Issues](ht
 
 **Infrastructure:**
 - **GitOps:** ArgoCD for declarative deployments
-- **Storage:** Rook-Ceph with erasure coding (3-node cluster)
+- **Storage:** Rook-Ceph on the 3 worker nodes (one OSD each on anakin, obiwan and rey; none on the control-plane node yoda), with 2+1 erasure coding for CephFS data
 - **Load Balancer:** MetalLB (bare-metal LoadBalancer)
 - **Ingress:** Traefik with automatic TLS
 - **Certificates:** cert-manager with internal PKI
