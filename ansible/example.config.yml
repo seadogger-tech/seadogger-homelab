@@ -177,6 +177,13 @@ enable_metallb_native: "{{ cold_start_stage_2_install_infrastructure | bool }}"
 enable_argocd_native: "{{ cold_start_stage_2_install_infrastructure | bool }}"
 enable_internal_pki: "{{ cold_start_stage_2_install_infrastructure | bool }}"
 
+# helm-upgrade-only apply flags: upgrade an EXISTING release to the values in this checkout.
+# They never install, wipe or restart k3s, so the Ansible runner may run them. Leave false;
+# set one true for a single run (-e enable_metallb_resources=true). See wiki 28-Ansible-Runner.
+enable_rook_ceph_resources: false
+enable_metallb_resources: false
+enable_argocd_resources: false
+
 # --- Stage 3: Application Deployment Variables ---
 enable_nextcloud_postgresql: "{{ cold_start_stage_3_install_applications | bool and manual_install_nextcloud_postgresql | bool }}"
 enable_nextcloud_redis: "{{ cold_start_stage_3_install_applications | bool and manual_install_nextcloud_redis | bool }}"

@@ -41,7 +41,7 @@ Spock's Kubernetes connection has cluster-admin, so it can technically read this
 
 ### What it cannot run
 
-Cold-start stage 1 wipes the cluster and stage 2 restarts k3s and Rook. Run from inside the cluster, both would kill the runner partway through, so those stay a job for the owner's controller.
+Cold-start stage 1 wipes the cluster and stage 2 restarts k3s and Rook (`enable_rook_ceph_part1` is one of its derived flags). Run from inside the cluster, both would kill the runner partway through, so those stay a job for the owner's controller.
 
 `guard.py` is the Job's single launcher. It parses the argument string once, evaluates `guard.yml` against `config.yml` plus every `-e`/`--extra-vars` override, and only if that passes execs `ansible-playbook` with the same parsed list, so the guard and the run cannot see different arguments. Put the arguments in `REPLACE_ARGS` shell-quoted, for example `main.yml -i hosts.ini -e '{"enable_internal_pki": true}'`.
 
@@ -60,6 +60,28 @@ Argument rules: `--` is refused, any long option starting `--e` other than exact
 **The runner's `config.yml` must set all of these false.** `example.config.yml` ships with `perform_physical_disk_wipe`, `run_pod_cleanup` and stage 2 true, so a default config is refused by design. Keep a runner copy with them false; the owner's controller keeps its own.
 
 The guard fails closed: an unparseable argument string or a guard error also stops the run. Limits: it only sees `config.yml` and `-e` values. It does not see variables from `hosts.ini` group vars, `group_vars/`, `vars_files` or a playbook's own `vars:`. If `config.yml` is vault-encrypted the guard fails closed because no vault password is supplied; the supported path is a plaintext runner `config.yml` in the Secret. The Core revision you run must include `guard.py`.
+
+### What it can run: the helm-upgrade-only apply flags
+
+Three flags change a chart's running values without a cold start. `guard.py` does not refuse them, because they are not on its lists, so the runner may run them. `enable_k3s_*` and `enable_rook_ceph_part1` stay refused.
+
+| Flag | Task file | Release (namespace) | Chart pin |
+| --- | --- | --- | --- |
+| `enable_rook_ceph_resources` | `ansible/tasks/rook_ceph_resources.yml` | `rook-ceph`, `rook-ceph-cluster` (`rook-ceph`) | 1.19.2 and 1.18.1, equal to `rook_ceph_deploy_part1.yml` |
+| `enable_metallb_resources` | `ansible/tasks/metallb_resources.yml` | `metallb` (`metallb-system`) | 0.15.2, equal to `metallb_native_deploy.yml` |
+| `enable_argocd_resources` | `ansible/tasks/argocd_resources.yml` | `argocd` (`argocd`) | 8.5.8, equal to `argocd_native_deploy.yml` |
+
+All three default to `false` in `main.yml` and `example.config.yml`.
+
+**What they may do.** Run `helm upgrade` on a release that already exists, with the values from the checked-out repo: `{{ playbook_dir }}/../deployments/rook-ceph/*.yaml` for Rook, and the shared vars files `ansible/vars/metallb_helm_values.yml` and `ansible/vars/argocd_helm_values.yml` for MetalLB and ArgoCD (the cold-start tasks load the same files, so the two paths cannot drift). Values therefore come from the pinned Core commit the Job checked out, never from the raw `master` URL.
+
+**What they may not do.** Install (`helm install`, `--install`), wipe anything, or touch or restart k3s. If the release is missing, `helm status` fails and the run stops with `helm release <name> is not installed`. Nothing else in the run changes either: a run is a no-op upgrade when the cluster already matches the repo.
+
+**Rook gates.** Before the upgrade, `ceph health` (through `deploy/rook-ceph-tools`) must print `HEALTH_OK`, or the run fails and nothing is upgraded. After the upgrade, the run polls `ceph status -f json` until every PG is `active+clean`, for up to 30 minutes (180 tries, 10 s apart), and fails loudly if they are not.
+
+**How to run one.** Follow *Running* below with the arguments `main.yml -i hosts.ini --tags enable_metallb_resources -e '{"enable_metallb_resources": true}'` (one flag, with its tag, per run). Afterwards run the Helm diff for that release; it should be empty and no pod should restart. The flag changes only what the repo's values say, so a non-empty diff means the cluster had drifted from the repo.
+
+**Tests.** `python3 -m unittest discover -s ansible/tests -v` from the Core root (CI: *Apply flag checks*). It needs `ansible` and PyYAML, and runs the real tasks against stub `helm` and `kubectl` binaries.
 
 ## One-time setup (owner)
 

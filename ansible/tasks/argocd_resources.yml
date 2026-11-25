@@ -1,0 +1,68 @@
+---
+# enable_argocd_resources: bring the running ArgoCD release in line with the
+# values in the checked-out repo, and nothing else.
+#
+# This is `helm upgrade` only. It never installs (no `helm install`, no
+# `--install`), never wipes, and never touches k3s, so the Ansible runner may
+# run it. The release must already exist; otherwise the run fails. Unlike
+# argocd_native_deploy.yml it does not patch ConfigMaps or restart argocd-server:
+# the shared values already carry those settings.
+- name: Set KUBECONFIG global
+  ansible.builtin.set_fact:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+
+- name: Assert the ArgoCD release already exists
+  ansible.builtin.command: helm status argocd --namespace argocd
+  environment:
+    KUBECONFIG: "{{ KUBECONFIG }}"
+  register: argocd_status
+  changed_when: false
+  check_mode: false
+  failed_when: false
+
+- name: Fail unless the ArgoCD release is installed
+  ansible.builtin.assert:
+    that: argocd_status.rc == 0
+    fail_msg: "helm release argocd is not installed in argocd; this flag only upgrades an existing release"
+    quiet: true
+
+- name: Add ArgoCD Helm repository
+  ansible.builtin.command: helm repo add argo https://argoproj.github.io/argo-helm --force-update
+  environment:
+    KUBECONFIG: "{{ KUBECONFIG }}"
+  changed_when: false
+  check_mode: false
+
+- name: Load the shared ArgoCD Helm values
+  ansible.builtin.include_vars:
+    file: "{{ playbook_dir }}/vars/argocd_helm_values.yml"
+
+- name: Write the ArgoCD values file
+  ansible.builtin.copy:
+    content: "{{ argocd_helm_values | to_nice_yaml }}"
+    dest: /tmp/argocd-helm-values.yml
+    mode: "0600"
+
+# Pinned to the installed chart, equal to tasks/argocd_native_deploy.yml, so a
+# run is a no-op upgrade.
+- name: Upgrade ArgoCD (helm upgrade only, atomic, waits for readiness)
+  ansible.builtin.command:
+    argv:
+      - helm
+      - upgrade
+      - argocd
+      - argo/argo-cd
+      - --namespace
+      - argocd
+      - --version
+      - "8.5.8"
+      - -f
+      - /tmp/argocd-helm-values.yml
+      - --atomic
+      - --wait
+      - --timeout
+      - 10m
+  environment:
+    KUBECONFIG: "{{ KUBECONFIG }}"
+  register: argocd_upgrade
+  changed_when: "'STATUS: deployed' in argocd_upgrade.stdout"

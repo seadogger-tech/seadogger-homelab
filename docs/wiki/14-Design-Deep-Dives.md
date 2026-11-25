@@ -79,8 +79,46 @@ Total PGs across all pools: ~150-200 (optimal)
 
 **Choose appropriate EC profile:**
 - **2+1 (used):** Minimum viable, tolerates 1 node failure, ~67% storage efficiency
-- **4+2 (recommended for production):** Better durability, tolerates 2 node failures, ~67% efficiency
+- **4+2:** Better durability, tolerates 2 node failures, ~67% efficiency
 - **8+3:** Large clusters only, ~73% efficiency
+
+With `failureDomain: host`, each of the k+m chunks sits on a different host, so a k+m profile needs at least k+m OSD hosts: 4+2 needs 6 and 8+3 needs 11. This cluster has 3 OSD hosts, so 2+1 is the only profile it can run.
+
+One object in the 2+1 pool is split into two data chunks and one parity chunk, and CRUSH puts each on a different OSD host. Which host holds which chunk varies by placement group; any two of the three chunks are enough to rebuild the object, so no data is lost with one host down.
+
+```mermaid
+flowchart TB
+    OBJ["CephFS file object<br/>written to pool ceph-fs-data-ec"]
+
+    subgraph POOL["ceph-fs-data-ec: erasure-coded 2+1, failureDomain: host"]
+        D1["Data chunk 1 (k=1)"]
+        D2["Data chunk 2 (k=2)"]
+        P1["Parity chunk (m=1)"]
+    end
+
+    subgraph HOSTS["3 OSD hosts: one chunk per host"]
+        H1["obiwan.local<br/>OSD on 4TB NVMe"]
+        H2["anakin.local<br/>OSD on 4TB NVMe"]
+        H3["rey.local<br/>OSD on 4TB NVMe"]
+    end
+
+    OBJ --> D1
+    OBJ --> D2
+    OBJ --> P1
+    D1 --> H1
+    D2 --> H2
+    P1 --> H3
+
+    style OBJ fill:#2d5016,stroke:#4a7c2a,color:#fff
+    style D1 fill:#1e3a5f,stroke:#2d5a8f,color:#fff
+    style D2 fill:#1e3a5f,stroke:#2d5a8f,color:#fff
+    style P1 fill:#1e3a5f,stroke:#2d5a8f,color:#fff
+    style H1 fill:#7b1fa2,stroke:#9c27b0,color:#fff
+    style H2 fill:#7b1fa2,stroke:#9c27b0,color:#fff
+    style H3 fill:#7b1fa2,stroke:#9c27b0,color:#fff
+    style POOL fill:#8b4513,stroke:#a0522d,color:#fff
+    style HOSTS fill:#8b4513,stroke:#a0522d,color:#fff
+```
 
 ### 2. PG Management
 
@@ -241,8 +279,8 @@ ceph osd pool autoscale-status
    - Create troubleshooting decision tree
 
 4. **Performance Optimization**
-   - Test different EC profiles (4+2, 6+3)
-   - Benchmark CephFS with EC vs replicated
+   - Benchmark the 2+1 CephFS pool (`ceph-fs-data-ec`) against the replicated pool (`ceph-fs-data-replicated`)
+   - Re-test wider EC profiles only once there are enough OSD hosts: with `failureDomain: host` a k+m profile needs k+m hosts, so 4+2 needs 6 and 6+3 needs 9
    - Optimize for specific workload patterns
 
 ![accent-divider.svg](images/accent-divider.svg)
