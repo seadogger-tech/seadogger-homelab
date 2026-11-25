@@ -71,6 +71,7 @@ Monitor, maintain, and troubleshoot your homelab.
 | **[[12-Troubleshooting]]** | Common problems and debugging procedures |
 | **[[15-CI-CD-and-GitHub-Actions]]** | Continuous integration and deployment |
 | **[[17-Runbooks]]** | Operational runbooks and procedures |
+| **[[30-Cluster-Resource-Monitor]]** | Host housekeeping, container metrics and resource-monitor history |
 
 ### 🧠 Knowledge
 Deep dives, design decisions, and planning.

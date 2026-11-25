@@ -37,6 +37,7 @@
 - [[26-Nextcloud-PostgreSQL-Migration]]
 - [[27-Deployment-and-Validation]]
 - [[29-Pipeline-Canary]]
+- [[30-Cluster-Resource-Monitor]]
 
 ## 🧠 Knowledge
 - [[13-ADR-Index]]

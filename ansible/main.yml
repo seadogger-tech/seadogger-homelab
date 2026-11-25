@@ -59,6 +59,31 @@
       when: enable_argocd_native | default(true)
 
 # -------------------------------
+# helm-upgrade-only apply flags (safe for the Ansible runner: they never
+# install, wipe or restart k3s, and fail if the release does not exist)
+# -------------------------------
+- hosts: control_plane
+  gather_facts: false
+  become: true
+  vars_files:
+    - config.yml
+  tasks:
+    - name: Upgrade Rook-Ceph releases to the checked-out values
+      import_tasks: tasks/rook_ceph_resources.yml
+      when: enable_rook_ceph_resources | default(false) | bool
+      tags: [enable_rook_ceph_resources]
+
+    - name: Upgrade MetalLB to the checked-out values
+      import_tasks: tasks/metallb_resources.yml
+      when: enable_metallb_resources | default(false) | bool
+      tags: [enable_metallb_resources]
+
+    - name: Upgrade ArgoCD to the checked-out values
+      import_tasks: tasks/argocd_resources.yml
+      when: enable_argocd_resources | default(false) | bool
+      tags: [enable_argocd_resources]
+
+# -------------------------------
 # Namespace Pre-cooking
 # -------------------------------
 - hosts: control_plane

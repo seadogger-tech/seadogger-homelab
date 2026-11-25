@@ -1,0 +1,28 @@
+---
+# Helm values for the ArgoCD release. Shared by tasks/argocd_native_deploy.yml
+# (cold start) and tasks/argocd_resources.yml (enable_argocd_resources). Each
+# helm run replaces the release values rather than merging them, so every run
+# must carry the same values.
+argocd_helm_values:
+  server:
+    service:
+      type: ClusterIP
+  # Behind Traefik's TLS termination. Set here as well as by the patch
+  # tasks in argocd_native_deploy.yml, because a helm upgrade rewrites these
+  # ConfigMaps and a values-less upgrade put server.insecure back to false
+  # (2026-10-31).
+  configs:
+    params:
+      server.insecure: true
+    cm:
+      url: https://argocd.seadogger-homelab
+  controller:
+    # The application controller had no resources and fell back to the
+    # namespace LimitRange default (64Mi) while using ~350Mi, 606Mi peak
+    # (2026-10-31), so every node it landed on was under-counted.
+    resources:
+      requests:
+        cpu: 100m
+        memory: 384Mi
+      limits:
+        memory: 1Gi

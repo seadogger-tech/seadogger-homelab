@@ -1,0 +1,66 @@
+---
+# enable_metallb_resources: bring the running MetalLB release in line with the
+# values in the checked-out repo, and nothing else.
+#
+# This is `helm upgrade` only. It never installs (no `helm install`, no
+# `--install`), never wipes, and never touches k3s, so the Ansible runner may
+# run it. The release must already exist; otherwise the run fails.
+- name: Set KUBECONFIG global
+  ansible.builtin.set_fact:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+
+- name: Assert the MetalLB release already exists
+  ansible.builtin.command: helm status metallb --namespace metallb-system
+  environment:
+    KUBECONFIG: "{{ KUBECONFIG }}"
+  register: metallb_status
+  changed_when: false
+  check_mode: false
+  failed_when: false
+
+- name: Fail unless the MetalLB release is installed
+  ansible.builtin.assert:
+    that: metallb_status.rc == 0
+    fail_msg: "helm release metallb is not installed in metallb-system; this flag only upgrades an existing release"
+    quiet: true
+
+- name: Add MetalLB Helm repository
+  ansible.builtin.command: helm repo add metallb https://metallb.github.io/metallb --force-update
+  environment:
+    KUBECONFIG: "{{ KUBECONFIG }}"
+  changed_when: false
+  check_mode: false
+
+- name: Load the shared MetalLB Helm values
+  ansible.builtin.include_vars:
+    file: "{{ playbook_dir }}/vars/metallb_helm_values.yml"
+
+- name: Write the MetalLB values file
+  ansible.builtin.copy:
+    content: "{{ metallb_helm_values | to_nice_yaml }}"
+    dest: /tmp/metallb-helm-values.yml
+    mode: "0600"
+
+# The chart version is pinned (0.15.2, the installed chart), equal to
+# tasks/metallb_native_deploy.yml, so a run is a no-op upgrade.
+- name: Upgrade MetalLB (helm upgrade only, atomic, waits for readiness)
+  ansible.builtin.command:
+    argv:
+      - helm
+      - upgrade
+      - metallb
+      - metallb/metallb
+      - --namespace
+      - metallb-system
+      - --version
+      - "0.15.2"
+      - -f
+      - /tmp/metallb-helm-values.yml
+      - --atomic
+      - --wait
+      - --timeout
+      - 10m
+  environment:
+    KUBECONFIG: "{{ KUBECONFIG }}"
+  register: metallb_upgrade
+  changed_when: "'STATUS: deployed' in metallb_upgrade.stdout"

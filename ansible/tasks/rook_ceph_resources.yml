@@ -1,0 +1,131 @@
+---
+# enable_rook_ceph_resources: bring the running Rook operator and Ceph cluster
+# releases in line with the values in the checked-out repo, and nothing else.
+#
+# This is `helm upgrade` only. It never installs (no `helm install`, no
+# `--install`), never wipes disks, and never touches k3s, so the Ansible runner
+# may run it. Both releases must already exist; otherwise the run fails. It is
+# not rook_ceph_deploy_part1.yml, which stays the cold-start path.
+#
+# Gates: Ceph must report HEALTH_OK before anything changes, and after the
+# upgrade every PG must be active+clean again or the run fails (30 minutes by
+# default; rook_pg_clean_retries x rook_pg_clean_delay).
+- name: Set KUBECONFIG global
+  ansible.builtin.set_fact:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+
+- name: Assert the Rook-Ceph releases already exist
+  ansible.builtin.command: "helm status {{ item }} --namespace rook-ceph"
+  environment:
+    KUBECONFIG: "{{ KUBECONFIG }}"
+  loop:
+    - rook-ceph
+    - rook-ceph-cluster
+  register: rook_status
+  changed_when: false
+  check_mode: false
+  failed_when: false
+
+- name: Fail unless both Rook-Ceph releases are installed
+  ansible.builtin.assert:
+    that: item.rc == 0
+    fail_msg: "helm release {{ item.item }} is not installed in rook-ceph; this flag only upgrades an existing release"
+    quiet: true
+  loop: "{{ rook_status.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+- name: Read Ceph health through the rook-ceph-tools deployment
+  ansible.builtin.command: kubectl -n rook-ceph exec deploy/rook-ceph-tools -- ceph health
+  environment:
+    KUBECONFIG: "{{ KUBECONFIG }}"
+  register: rook_health_before
+  changed_when: false
+  check_mode: false
+  failed_when: false
+
+- name: Fail unless Ceph is HEALTH_OK before the upgrade
+  ansible.builtin.assert:
+    that:
+      - rook_health_before.rc == 0
+      - rook_health_before.stdout | trim == "HEALTH_OK"
+    fail_msg: "Ceph is not HEALTH_OK ({{ rook_health_before.stdout | default('') | trim }}); refusing to upgrade Rook"
+    quiet: true
+
+- name: Add Rook Helm repo
+  ansible.builtin.shell:
+    cmd: helm repo add rook-release https://charts.rook.io/release --force-update && helm repo update
+  environment:
+    KUBECONFIG: "{{ KUBECONFIG }}"
+  changed_when: false
+  check_mode: false
+
+# Chart versions are the cold-start pins in rook_ceph_deploy_part1.yml; keep
+# them equal, so a run is a no-op upgrade. An unpinned chart picks up whatever
+# rook-release currently resolves to (v1.20.2 broke the CSI controller plugin).
+- name: Upgrade Rook-Ceph operator (helm upgrade only)
+  ansible.builtin.command:
+    argv:
+      - helm
+      - upgrade
+      - rook-ceph
+      - rook-release/rook-ceph
+      - --namespace
+      - rook-ceph
+      - --version
+      - "1.19.2"
+      - -f
+      - "{{ playbook_dir }}/../deployments/rook-ceph/rook-ceph-operator-values.yaml"
+      - --wait
+      - --timeout
+      - 15m
+  environment:
+    KUBECONFIG: "{{ KUBECONFIG }}"
+  register: rook_operator_upgrade
+  changed_when: "'STATUS: deployed' in rook_operator_upgrade.stdout"
+
+- name: Wait for the Rook operator to be ready
+  ansible.builtin.command: kubectl -n rook-ceph wait --for=condition=ready pod -l app=rook-ceph-operator --timeout=300s
+  environment:
+    KUBECONFIG: "{{ KUBECONFIG }}"
+  changed_when: false
+  check_mode: false
+
+- name: Upgrade Rook-Ceph cluster (helm upgrade only)
+  ansible.builtin.command:
+    argv:
+      - helm
+      - upgrade
+      - rook-ceph-cluster
+      - rook-release/rook-ceph-cluster
+      - --namespace
+      - rook-ceph
+      - --version
+      - "1.18.1"
+      - -f
+      - "{{ playbook_dir }}/../deployments/rook-ceph/rook-ceph-cluster-values.yaml"
+      - --wait
+      - --timeout
+      - 15m
+  environment:
+    KUBECONFIG: "{{ KUBECONFIG }}"
+  register: rook_cluster_upgrade
+  changed_when: "'STATUS: deployed' in rook_cluster_upgrade.stdout"
+
+# Every PG must be active+clean, not just Ceph HEALTH_OK: a restarted OSD can
+# leave PGs peering or backfilling while health reads WARN or OK for a moment.
+- name: Wait until every PG is active+clean (fails after the timeout)
+  ansible.builtin.command: kubectl -n rook-ceph exec deploy/rook-ceph-tools -- ceph status -f json
+  environment:
+    KUBECONFIG: "{{ KUBECONFIG }}"
+  register: rook_pg_status
+  changed_when: false
+  check_mode: false
+  retries: "{{ rook_pg_clean_retries | default(180) | int }}"
+  delay: "{{ rook_pg_clean_delay | default(10) | int }}"
+  until: >-
+    rook_pg_status.rc == 0 and
+    rook_pg_status.stdout is regex('^\s*\{') and
+    (rook_pg_status.stdout | from_json).pgmap.pgs_by_state | default([]) | length > 0 and
+    ((rook_pg_status.stdout | from_json).pgmap.pgs_by_state
+      | rejectattr('state_name', 'equalto', 'active+clean') | list | length) == 0
