@@ -243,7 +243,7 @@ ceph osd pool autoscale-status
    - Create troubleshooting decision tree
 
 4. **Performance Optimization**
-   - Test different EC profiles (4+2, 6+3)
+   - Benchmark the 2+1 EC profile against replicated pools (larger profiles need more OSD hosts)
    - Benchmark CephFS with EC vs replicated
    - Optimize for specific workload patterns
 
