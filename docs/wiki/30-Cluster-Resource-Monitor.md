@@ -175,7 +175,12 @@ journaled and never appear in a report.
 
 Every 60 seconds it writes `journal/cursor.json` atomically: each stream's last
 `resourceVersion` and a heartbeat (the older of the two streams' last sign of
-life). After a dropped watch or a restart it resumes from the cursor. If the API
+life). A stream's version moves only after the records up to it are fsynced to
+the journal, and one lock guards every cursor change and the heartbeat's
+snapshot, so a heartbeat during an evaluation can never save a version whose
+records are still unwritten. If an append fails, the cursor stays and the watch
+retries from the old version, and the record is journaled once. After a dropped
+watch or a restart it resumes from the cursor. If the API
 answers `410 Gone` it relists and journals a **gap** from the last heartbeat to
 the relist. The first start opens coverage and journals a `start` record;
 nothing earlier counts as observed. The liveness probe fails when the heartbeat
@@ -195,7 +200,10 @@ It scrapes `:9100/metrics` on every node-sensors endpoint (found through the
 EndpointSlice), lists Nodes (allocatable) and current Pods, reads the journal
 since the last evaluation, merges the host's ended containers by container ID
 on first sight and joins them by Pod UID and container name to the journal's
-requests, limits, QoS and owner. The pinned image resolves `America/New_York`
+requests, limits, QoS and owner. A Pod that is in neither the journal slice nor
+the API (it ran yesterday and was deleted today) joins the last recorded
+metadata instead: the newest retained history row for that Pod UID and
+container, which carries its requests, limits, owner, QoS and node. The pinned image resolves `America/New_York`
 through `zoneinfo`; a test asserts it.
 
 ### Findings
@@ -212,7 +220,7 @@ metric on one node therefore are two rows.
 | `peak_unmeasured` | The journal shows a container that ran, but no host record overlaps its run (it lived under one sample interval). |
 | `besteffort` | A live Pod has QoS BestEffort. |
 | `node_overcommitted` | The sum of Pod memory limits on a node is above its allocatable memory. |
-| `evicted`, `oom_killed` | From the journal (Pod status, terminations, Events) and from the host's `oom_kill` counts, ended containers included. One incident seen by several sources is one finding that lists every source (`journal`, `host`, `event`, `api`). |
+| `evicted`, `oom_killed` | From the journal (Pod status, terminations, Events) and from the host's `oom_kill` counts, ended containers included. One incident seen by several sources is one finding that lists every source (`journal`, `host`, `event`, `api`). An eviction is counted once, in the evaluation that first sees it: the finding carries the Pod UID, and a Pod that stays visible as Evicted in the API raises no new finding once an earlier history file has one for that UID, so it leaves the 7-day window with its first day. |
 | `collector_stale` | A node has no scrape, its `daily` timestamp is missing or over 26 h old, or its `sample` timestamp is over 10 min old. |
 | `observation_gap` | A journal gap, a rise in `node_housekeeping_sampler_gap_seconds_total`, a stale collector, or a missed evaluation day. |
 | `delivery_backlog` | A report part has been pending for more than 24 h. |
