@@ -62,8 +62,12 @@ spec:
               REPLACE_ARGS
               EOF_ARGS
               )
-              install -m 0600 /private/config.yml config.yml
-              install -m 0600 /private/hosts.ini hosts.ini
+              case "$PWD" in
+                /work/pro/*) CFG=/private/pro_config.yml; INV=/private/pro_hosts.ini ;;
+                *) CFG=/private/config.yml; INV=/private/hosts.ini ;;
+              esac
+              install -m 0600 "$CFG" config.yml
+              install -m 0600 "$INV" hosts.ini
               install -d -m 0700 ~/.ssh
               install -m 0600 /private/id_ed25519 ~/.ssh/id_ed25519
               install -m 0644 /private/known_hosts ~/.ssh/known_hosts
