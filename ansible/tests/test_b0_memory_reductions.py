@@ -4,6 +4,8 @@ Loads every file B0 changes and asserts, per container in b0_memory_peaks.yml:
   - limit  <= today's live limit            (a cut, never a raise)
   - request <= today's live request         (no request goes up)
   - limit  >= 1.25 x the recorded peak      (the cut stays above the high-water mark)
+  - peak_mi == max(oce550_peak_mi, live_peak_mi), every row has a live_peak_mi, and
+    memory.events max and oom_kill are 0 (the live re-read is recorded, not skipped)
 and that cmd-reporter is set explicitly at 64Mi / 512Mi. The helm render checks
 need `helm` and the pinned charts, and are skipped when either is missing.
 
@@ -79,6 +81,20 @@ class TestB0MemoryReductions(unittest.TestCase):
                 self.assertGreaterEqual(got["request"], 32, "32Mi request floor")
                 self.assertGreaterEqual(got["limit"], 40, "40Mi limit floor")
                 self.assertLessEqual(got["request"], got["limit"])
+
+    def test_peak_is_max_of_oce550_and_live_read(self):
+        for spec in self.rows:
+            with self.subTest(spec["name"]):
+                self.assertIn("live_peak_mi", spec, "every row needs the live memory.peak re-read")
+                self.assertIn("oce550_peak_mi", spec)
+                self.assertEqual(spec["peak_mi"], max(spec["oce550_peak_mi"], spec["live_peak_mi"]))
+                self.assertIn("live_window_days", spec)
+
+    def test_no_oom_events_at_live_read(self):
+        for spec in self.rows:
+            with self.subTest(spec["name"]):
+                self.assertEqual(spec.get("events_max"), 0)
+                self.assertEqual(spec.get("oom_kill"), 0)
 
     def test_cmd_reporter_is_explicit_at_todays_effective_values(self):
         values = yaml.safe_load(CLUSTER_VALUES.read_text())

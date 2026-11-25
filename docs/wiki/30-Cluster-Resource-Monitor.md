@@ -485,8 +485,9 @@ Map ticket and lands after this one.
 ### Per-container table
 
 `P` is the largest cgroup v2 `memory.peak` among the containers one chart key
-sets, from the OCE-550 findings (read 2026-11-25, over each container's
-lifetime). `memory.peak` includes page cache, so it is an upper bound on
+sets: the larger of the OCE-550 snapshot and the live re-read of 2026-11-25
+19:29:53Z–19:30:24Z (OCE-600 document `peak-reread`), over each container's
+lifetime. `Live P` is the re-read alone; no P changed. `memory.peak` includes page cache, so it is an upper bound on
 working set. Rule: request′ = min(request, ⌈P⌉₁₆) with a 32Mi floor;
 limit′ = max(⌈1.25 × request′⌉₈, ⌈1.25 × P⌉₈) with a 40Mi floor; applied only
 when below today's limit. Values are Mi. CPU is unchanged. The same numbers
@@ -494,37 +495,42 @@ are the fixture `ansible/tests/b0_memory_peaks.yml`, which
 `ansible/tests/test_b0_memory_reductions.py` checks against the changed files
 (limit ≤ old limit, request ≤ old request, limit ≥ 1.25 × P).
 
-| Container | Request (now → B0) | Limit (now → B0) | P | Window | Request below P |
-|---|---|---|---|---|---|
-| log-collector (x10) | 100 → 32 | 1024 → 40 | 26.5 | 1.84 d | |
-| ceph-exporter (x3) | 50 → 48 | 128 → 64 | 33.1 | 9.9 d | |
-| rook-ceph-tools | 64 → 64 | 256 → 136 | 105.6 | 27.3 d | yes |
-| csi-rbdplugin | 64 → 64 | 1024 → 128 | 102.2 | 24.66 d | yes |
-| csi-rbdplugin driver-registrar | 64 → 32 | 512 → 40 | 24.3 | 24.66 d | |
-| csi-rbdplugin liveness-prometheus | 32 → 32 | 256 → 48 | 37.9 | 23.64 d | yes |
-| csi-cephfsplugin | 64 → 64 | 1024 → 144 | 110.4 | 23.64 d | yes |
-| csi-cephfsplugin driver-registrar | 64 → 32 | 512 → 40 | 24.3 | 24.66 d | |
-| csi-cephfsplugin liveness-prometheus | 32 → 32 | 256 → 48 | 37.9 | 23.64 d | yes |
-| metallb speaker | 128 → 80 | 512 → 104 | 68.1 | 7.09 d | |
-| metallb frr | 32 → 32 | 256 → 64 | 50.2 | 7.09 d | yes |
-| metallb reloader | 32 → 32 | 256 → 64 | 45.3 | 24.66 d | yes |
-| metallb frr-metrics | 32 → 32 | 256 → 48 | 32.3 | 24.66 d | yes |
-| metallb controller | 96 → 96 | 512 → 152 | 120.4 | 25.34 d | yes |
-| argocd application-controller | 384 → 384 | 1024 → 792 | 631.5 | 24.84 d | yes |
-| argocd repo-server | 64 → 64 | 1024 → 408 | 321 | 15.34 d | yes |
-| argocd server | 64 → 64 | 1024 → 184 | 146.5 | 24.65 d | yes |
-| argocd dex-server | 64 → 64 | 1024 → 160 | 124.2 | 24.84 d | yes |
-| argocd notifications-controller | 64 → 64 | 1024 → 88 | 69.7 | 25.34 d | yes |
-| argocd applicationset-controller | 64 → 64 | 1024 → 80 | 63.5 | 24.84 d | |
-| argocd redis | 64 → 32 | 1024 → 40 | 15.4 | 25.34 d | |
-| mealie | 320 → 320 | 1024 → 408 | 325.5 | 20.28 d | yes |
+| Container | Request (now → B0) | Limit (now → B0) | P | Live P | Window | Request below P |
+|---|---|---|---|---|---|---|
+| log-collector (x10) | 100 → 32 | 1024 → 40 | 26.5 | 26.5 | 2.22 d |  |
+| ceph-exporter (x3) | 50 → 48 | 128 → 64 | 33.1 | 33.1 | 10.28 d |  |
+| rook-ceph-tools | 64 → 64 | 256 → 136 | 105.6 | 105.6 | 27.68 d | yes |
+| csi-rbdplugin | 64 → 64 | 1024 → 128 | 102.2 | 102.2 | 25.05 d | yes |
+| csi-rbdplugin driver-registrar | 64 → 32 | 512 → 40 | 24.3 | 18.0 | 25.05 d |  |
+| csi-rbdplugin liveness-prometheus | 32 → 32 | 256 → 48 | 37.9 | 37.9 | 25.05 d | yes |
+| csi-cephfsplugin | 64 → 64 | 1024 → 144 | 110.4 | 110.4 | 25.05 d | yes |
+| csi-cephfsplugin driver-registrar | 64 → 32 | 512 → 40 | 24.3 | 24.3 | 25.05 d |  |
+| csi-cephfsplugin liveness-prometheus | 32 → 32 | 256 → 48 | 37.9 | 37.7 | 25.05 d | yes |
+| metallb speaker | 128 → 80 | 512 → 104 | 68.1 | 68.1 | 7.47 d |  |
+| metallb frr | 32 → 32 | 256 → 64 | 50.2 | 50.2 | 7.48 d | yes |
+| metallb reloader | 32 → 32 | 256 → 64 | 45.3 | 45.2 | 25.04 d | yes |
+| metallb frr-metrics | 32 → 32 | 256 → 48 | 32.3 | 32.3 | 25.04 d | yes |
+| metallb controller | 96 → 96 | 512 → 152 | 120.4 | 120.4 | 25.73 d | yes |
+| argocd application-controller | 384 → 384 | 1024 → 792 | 631.5 | 631.5 | 25.23 d | yes |
+| argocd repo-server | 64 → 64 | 1024 → 408 | 321 | 321.0 | 15.72 d | yes |
+| argocd server | 64 → 64 | 1024 → 184 | 146.5 | 146.5 | 25.04 d | yes |
+| argocd dex-server | 64 → 64 | 1024 → 160 | 124.2 | 124.2 | 25.23 d | yes |
+| argocd notifications-controller | 64 → 64 | 1024 → 88 | 69.7 | 69.7 | 25.73 d | yes |
+| argocd applicationset-controller | 64 → 64 | 1024 → 80 | 63.5 | 63.5 | 25.23 d |  |
+| argocd redis | 64 → 32 | 1024 → 40 | 15.4 | 15.4 | 25.73 d |  |
+| mealie | 320 → 320 | 1024 → 408 | 325.5 | 325.5 | 20.67 d | yes |
 
 Notes:
 
 - `log-collector` (10 sidecars on mon, mgr, OSD and MDS pods) and
   `ceph-exporter` are set together by one key each; the figure is the largest
-  peak among them. The `log-collector` window is 1.84 d on the mgr and MDS
-  pods and over 7 d on the others, so the key qualifies.
+  peak among them. The shortest `log-collector` window at the live read is
+  2.22 d (mds-b); the key qualifies through the containers over 7 d.
+- `memory.events` `max` and `oom_kill` are 0 for every container of every key
+  at the live read, and none of those containers restarted since OCE-550.
+- The rbd `driver-registrar` P of 24.3 is above its live 18.0 (likely the
+  cephfs registrar's figure). It stays at 24.3: conservative, and the 40Mi
+  limit floor applies either way.
 - `csi-*plugin` requests are written at the live 64Mi, not the repo's old
   128Mi, per the `ROOK_USE_CSI_OPERATOR` note in the operator values. The
   operator copies the node plugin request into the controller plugin, so the
