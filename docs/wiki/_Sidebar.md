@@ -36,6 +36,7 @@
 - [[23-Disaster-Recovery-Restore]]
 - [[26-Nextcloud-PostgreSQL-Migration]]
 - [[27-Deployment-and-Validation]]
+- [[29-Pipeline-Canary]]
 
 ## 🧠 Knowledge
 - [[13-ADR-Index]]
