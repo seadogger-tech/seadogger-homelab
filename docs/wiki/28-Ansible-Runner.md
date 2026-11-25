@@ -73,7 +73,7 @@ Three flags change a chart's running values without a cold start. `guard.py` doe
 
 All three default to `false` in `main.yml` and `example.config.yml`.
 
-**What they may do.** Run `helm upgrade` on a release that already exists, with the values from the checked-out repo: `{{ playbook_dir }}/../deployments/rook-ceph/*.yaml` for Rook, and the shared vars files `ansible/vars/metallb_helm_values.yml` and `ansible/vars/argocd_helm_values.yml` for MetalLB and ArgoCD (the cold-start tasks load the same files, so the two paths cannot drift). Values therefore come from the pinned Core commit the Job checked out, never from the raw `master` URL.
+**What they may do.** Run `helm upgrade` on a release that already exists, with the values from the checked-out repo (Helm runs on the control-plane host, so each values file is first copied from the runner's checkout to `/tmp` on that host): `deployments/rook-ceph/*.yaml` for Rook, and the shared vars files `ansible/vars/metallb_helm_values.yml` and `ansible/vars/argocd_helm_values.yml` for MetalLB and ArgoCD (the cold-start tasks load the same files, so the two paths cannot drift). Values therefore come from the pinned Core commit the Job checked out, never from the raw `master` URL.
 
 **What they may not do.** Install (`helm install`, `--install`), wipe anything, or touch or restart k3s. If the release is missing, `helm status` fails and the run stops with `helm release <name> is not installed`. Nothing else in the run changes either: a run is a no-op upgrade when the cluster already matches the repo.
 

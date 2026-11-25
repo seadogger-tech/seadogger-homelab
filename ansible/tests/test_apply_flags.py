@@ -88,6 +88,25 @@ class StaticChecks(unittest.TestCase):
         self.assertIn("{{ playbook_dir }}/../deployments/rook-ceph/rook-ceph-operator-values.yaml", rook)
         self.assertIn("{{ playbook_dir }}/../deployments/rook-ceph/rook-ceph-cluster-values.yaml", rook)
 
+    def test_helm_values_files_are_copied_to_the_host_first(self):
+        # helm runs on the control-plane host, not in the runner pod, so a -f path
+        # must be the dest of an earlier copy task and never a controller path.
+        for _, name in FLAGS.values():
+            copied = set()
+            for task in yaml.safe_load((TASKS / name).read_text()):
+                copy = task.get("ansible.builtin.copy")
+                if copy:
+                    copied.add(copy["dest"])
+                argv = (task.get("ansible.builtin.command") or {})
+                argv = argv.get("argv") if isinstance(argv, dict) else None
+                if not argv or "helm" not in argv:
+                    continue
+                for i, arg in enumerate(argv[:-1]):
+                    if arg == "-f":
+                        path = argv[i + 1]
+                        self.assertNotIn("playbook_dir", path, name)
+                        self.assertIn(path, copied, f"{name}: -f {path} is not copied to the host first")
+
     def test_metallb_chart_version_is_pinned_in_both_tasks(self):
         for name in ("metallb_native_deploy.yml", "metallb_resources.yml"):
             text = "\n".join(code_lines(TASKS / name))
@@ -192,8 +211,9 @@ class RunWithStubs(unittest.TestCase):
                 self.assertFalse([c for c in calls if "install" in c], calls)
                 self.assertFalse([c for c in calls if "--install" in c], calls)
                 for call in upgrades:
+                    self.assertNotIn(str(self.checkout), call)
                     if key == "rook":
-                        self.assertIn(f"{self.checkout}/ansible/../deployments/rook-ceph/", call)
+                        self.assertRegex(call, r"-f /tmp/rook-ceph-(operator|cluster)-values\.yaml")
                     self.assertNotIn("raw.githubusercontent.com", call)
                     self.assertIn("-f ", call)
                 if key == "metallb":

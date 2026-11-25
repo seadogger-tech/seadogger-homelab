@@ -60,6 +60,20 @@
   changed_when: false
   check_mode: false
 
+# helm runs on the control-plane host, not in the runner pod, so the values
+# files in the checkout are copied there first.
+- name: Copy the Rook operator values to the host
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../deployments/rook-ceph/rook-ceph-operator-values.yaml"
+    dest: /tmp/rook-ceph-operator-values.yaml
+    mode: "0600"
+
+- name: Copy the Rook cluster values to the host
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../deployments/rook-ceph/rook-ceph-cluster-values.yaml"
+    dest: /tmp/rook-ceph-cluster-values.yaml
+    mode: "0600"
+
 # Chart versions are the cold-start pins in rook_ceph_deploy_part1.yml; keep
 # them equal, so a run is a no-op upgrade. An unpinned chart picks up whatever
 # rook-release currently resolves to (v1.20.2 broke the CSI controller plugin).
@@ -75,7 +89,7 @@
       - --version
       - "1.19.2"
       - -f
-      - "{{ playbook_dir }}/../deployments/rook-ceph/rook-ceph-operator-values.yaml"
+      - /tmp/rook-ceph-operator-values.yaml
       - --wait
       - --timeout
       - 15m
@@ -103,7 +117,7 @@
       - --version
       - "1.18.1"
       - -f
-      - "{{ playbook_dir }}/../deployments/rook-ceph/rook-ceph-cluster-values.yaml"
+      - /tmp/rook-ceph-cluster-values.yaml
       - --wait
       - --timeout
       - 15m
