@@ -198,13 +198,13 @@ The cert-manager controller, cainjector and webhook inherit that namespace's def
 
 The B0 check applies the spec's 1.25× sizing and 8Mi rounding to the private rook-ceph fixture. Other namespace defaults remain unchanged because their Jobs, init containers or workload windows do not meet this cut's evidence rule.
 
-For the Pro B0 rollout, first land and apply the core half. After `enable_rook_ceph_resources` succeeds, verify the live CephCluster `spec.resources.cmd-reporter` and a `rook-ceph-detect-version` Job Pod both show a 64Mi request and 512Mi limit; also verify that the live rook-ceph LimitRange still has a 512Mi default. Record this gate on the Merge-to-main task before Pro lands. Then let Argo sync `cluster-defaults`, `google-mcp`, `operations-mcp` and `ember-trail`, and recreate the affected rook-ceph and cert-manager Pods one controller at a time by deleting each Pod. Verify the recreated Pod resources match Git.
+For the Pro B0 rollout, first land and apply the core half. After `enable_rook_ceph_resources` succeeds, verify the live CephCluster `spec.resources.cmd-reporter` and a `rook-ceph-detect-version` Job Pod both show a 64Mi request and 512Mi limit; also verify that the live rook-ceph LimitRange still has a 512Mi default. Record this gate on the Merge-to-main task before Pro lands. Then let Argo sync `cluster-defaults`, `google-mcp`, `operations-mcp` and `ember-trail`, and recreate only the affected rook-ceph Pods, one controller at a time, by deleting each Pod. Verify the recreated Pod resources match Git.
 
 ```mermaid
 flowchart TD
   C["Core applied; cmd-reporter is live at 64Mi / 512Mi"] --> G{"CephCluster CR and detect-version Job Pod verified;<br/>rook-ceph default still 512Mi?"}
   G -->|yes| P["Land Pro; Argo syncs cluster-defaults and Pro apps"]
-  P --> R["Recreate affected rook-ceph and cert-manager Pods,<br/>one controller at a time"]
+  P --> R["Recreate affected rook-ceph Pods,<br/>one controller at a time"]
   R --> V["Verify resources match Git and monitor for OOM / eviction"]
   P -. "rollback Pro" .-> D["Restore rook-ceph default to 512Mi and verify live"]
   D --> K{"Default 512Mi verified?"}

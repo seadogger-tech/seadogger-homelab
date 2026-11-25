@@ -594,7 +594,7 @@ flowchart TD
   V -- no --> RBC["map-gh.sh revert core; re-run flag.<br/>Pro lands only after a fix ticket<br/>drops the rook-ceph cut"]
   V -- yes --> CR{"cmd-reporter gate: CephCluster CR and<br/>detect-version Job pod at 64Mi / 512Mi,<br/>rook-ceph default still 512Mi"}
   CR -- no --> HOLD["hold Pro; fix ticket on the charts key"]
-  CR -- yes --> LP["land Pro (main); Argo syncs cluster-defaults<br/>and Pro apps; recreate pods in<br/>rook-ceph and cert-manager"]
+  CR -- yes --> LP["land Pro (main); Argo syncs cluster-defaults<br/>and Pro apps; recreate pods in<br/>rook-ceph only"]
   LP --> V2{"live resources = Git, no OOM / eviction,<br/>Σ per node recorded"}
   V2 -- no --> RBP["map-gh.sh revert Pro; Argo sync;<br/>recreate pods"]
   V2 -- yes --> W["24 h: working-set peak below new limit"]
