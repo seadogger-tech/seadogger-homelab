@@ -11,7 +11,7 @@ A manual, in-cluster way to run the Core (and optionally Pro) playbooks without 
 | Repository revisions | Core (public) at an explicit 40-char SHA. Optional Pro (`seadogger-tech/seadogger-homelab-pro`, private) at its own SHA via a read-only deploy key, checked out with `--recurse-submodules` (Pro pins Core at `core/`). Never a branch |
 | Working directory | `/work/core/ansible` for Core. `/work/pro/ansible` for Pro (playbook `main.yml`, run with `-i hosts.ini`) |
 | Inventory and configuration | `hosts.ini` and `config.yml` from Secret `ansible-runner-private` |
-| Credentials | Secret `ansible-runner-private`: `config.yml`, `hosts.ini`, `id_ed25519` (SSH key for `pi`), `known_hosts` (nodes and github.com), optional `pro_deploy_key` (read-only deploy key on the Pro repo). Created by the owner; never in tasks, comments or git |
+| Credentials | Secret `ansible-runner-private`: `config.yml`, `hosts.ini`, `id_ed25519` (SSH key for `pi`), `known_hosts` (nodes and github.com), optional `pro_deploy_key` (read-only deploy key on the Pro repo), and for Pro runs `pro_config.yml` and `pro_hosts.ini` (Pro's inventory and a runner copy of Pro's `config.yml`). A Pro run (working directory under `/work/pro`) installs the `pro_*` pair; a Core run installs `config.yml` and `hosts.ini`. Created by the owner; never in tasks, comments or git |
 | Invocation | Spock creates the Job through the granted Kubernetes connection, only after the owner confirms the exact run in the task |
 | Refused | `guard.py` evaluates the effective variables before every run and refuses if any destructive flag is true (below) |
 
@@ -68,7 +68,10 @@ The guard fails closed: an unparseable argument string or a guard error also sto
 3. Create the Secret from the live local files:
 
 ```bash
-sh deployments/ansible-runner/refresh-secret.sh /PATH/TO/dedicated_key /PATH/TO/known_hosts [/PATH/TO/pro_deploy_key]
+PRO_CONFIG=/PATH/TO/runner-pro-config.yml PRO_HOSTS=/PATH/TO/pro/ansible/hosts.ini \\
+  sh deployments/ansible-runner/refresh-secret.sh /PATH/TO/dedicated_key /PATH/TO/known_hosts /PATH/TO/pro_deploy_key
+
+The runner copy of Pro's `config.yml` must set every destructive and stage-2 flag the guard checks to false, including `run_pod_cleanup`, and define the derived stage-2 flags as false; Pro's own `config.yml` doesn't define them, so the guard would refuse it.
 ```
 
 Use a dedicated SSH key authorized on the four nodes for `pi`, not a personal key. Revoke by removing it from the nodes' `authorized_keys` and deleting the Secret.
