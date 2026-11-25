@@ -90,50 +90,32 @@ One object in the 2+1 pool is split into two data chunks and one parity chunk, a
 flowchart TB
     OBJ["CephFS file object<br/>written to pool ceph-fs-data-ec"]
 
-    subgraph POOL["ceph-fs-data-ec: erasure-coded 4+2, failureDomain: host"]
-        D1["Data chunk 1"]
-        D2["Data chunk 2"]
-        D3["Data chunk 3"]
-        D4["Data chunk 4"]
-        P1["Parity chunk 1"]
-        P2["Parity chunk 2"]
+    subgraph POOL["ceph-fs-data-ec: erasure-coded 2+1, failureDomain: host"]
+        D1["Data chunk 1 (k=1)"]
+        D2["Data chunk 2 (k=2)"]
+        P1["Parity chunk (m=1)"]
     end
 
-    subgraph HOSTS["6 OSD hosts: one chunk per host"]
+    subgraph HOSTS["3 OSD hosts: one chunk per host"]
         H1["obiwan.local<br/>OSD on 4TB NVMe"]
         H2["anakin.local<br/>OSD on 4TB NVMe"]
         H3["rey.local<br/>OSD on 4TB NVMe"]
-        H4["osd-host-4"]
-        H5["osd-host-5"]
-        H6["osd-host-6"]
     end
 
     OBJ --> D1
     OBJ --> D2
-    OBJ --> D3
-    OBJ --> D4
     OBJ --> P1
-    OBJ --> P2
     D1 --> H1
     D2 --> H2
-    D3 --> H3
-    D4 --> H4
-    P1 --> H5
-    P2 --> H6
+    P1 --> H3
 
     style OBJ fill:#2d5016,stroke:#4a7c2a,color:#fff
     style D1 fill:#1e3a5f,stroke:#2d5a8f,color:#fff
     style D2 fill:#1e3a5f,stroke:#2d5a8f,color:#fff
-    style D3 fill:#1e3a5f,stroke:#2d5a8f,color:#fff
-    style D4 fill:#1e3a5f,stroke:#2d5a8f,color:#fff
     style P1 fill:#1e3a5f,stroke:#2d5a8f,color:#fff
-    style P2 fill:#1e3a5f,stroke:#2d5a8f,color:#fff
     style H1 fill:#7b1fa2,stroke:#9c27b0,color:#fff
     style H2 fill:#7b1fa2,stroke:#9c27b0,color:#fff
     style H3 fill:#7b1fa2,stroke:#9c27b0,color:#fff
-    style H4 fill:#7b1fa2,stroke:#9c27b0,color:#fff
-    style H5 fill:#7b1fa2,stroke:#9c27b0,color:#fff
-    style H6 fill:#7b1fa2,stroke:#9c27b0,color:#fff
     style POOL fill:#8b4513,stroke:#a0522d,color:#fff
     style HOSTS fill:#8b4513,stroke:#a0522d,color:#fff
 ```
