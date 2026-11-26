@@ -1,0 +1,24 @@
+---
+# Values of the k3s Traefik HelmChartConfig. Shared by tasks/traefik_dashboard_deploy.yml
+# (cold start) and tasks/traefik_resources.yml (enable_traefik_resources), so both render
+# the same HelmChartConfig. valuesContent replaces the chart's values for the HelmChart,
+# so everything the config sets has to be listed here.
+#
+# Traefik ships with no resource requests, which puts it in the BestEffort QoS class -
+# first to be evicted when a node runs out of memory. It is the ingress for every
+# service in the cluster, so Stage B1 (OCE-369) makes it Guaranteed: memory and CPU
+# request = limit, memory at 1.25 x its measured peak rounded up to 8Mi but not
+# below the 256Mi Guaranteed floor the sizing rule sets for it (a Go process holds its
+# heap to GOMEMLIMIT, which should sit at the container limit). The measured figure is
+# in the private Pro docs/operations/memory-sizing.md. See
+# docs/wiki/30-Cluster-Resource-Monitor.md, Stage B1.
+traefik_helmchartconfig_values:
+  additionalArguments:
+    - "--api.insecure=true"
+  resources:
+    requests:
+      cpu: 500m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi

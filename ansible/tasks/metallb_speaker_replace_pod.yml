@@ -1,0 +1,153 @@
+---
+# Replace one speaker (msr_pod) and release the next only when it checks out.
+# Included in a loop by metallb_speaker_replace.yml. Any failure in the block ends the
+# play, naming the pod; nothing further is deleted.
+- name: Replace {{ msr_pod.metadata.name }} on {{ msr_pod.spec.nodeName }}
+  vars:
+    msr_old_name: "{{ msr_pod.metadata.name }}"
+    msr_old_uid: "{{ msr_pod.metadata.uid }}"
+    msr_node: "{{ msr_pod.spec.nodeName }}"
+    msr_replacements: >-
+      {%- set found = [] -%}
+      {%- for p in (msr_wait.stdout | default('{"items":[]}', true) | from_json).get('items', []) -%}
+        {%- if p.spec.nodeName == msr_node
+               and p.metadata.uid != msr_old_uid
+               and p.metadata.deletionTimestamp is not defined
+               and p.metadata.labels['controller-revision-hash'] | default('', true) == msr_target
+               and (p.status.conditions | default([], true) | selectattr('type', 'equalto', 'Ready')
+                    | selectattr('status', 'equalto', 'True') | list | length) > 0 -%}
+          {%- set _ = found.append(p) -%}
+        {%- endif -%}
+      {%- endfor -%}
+      {{ found | to_json }}
+  block:
+    - name: Name the pod deletion failure
+      ansible.builtin.set_fact:
+        msr_last_failure: "pod delete of {{ msr_old_name }} failed"
+
+    - name: Delete {{ msr_old_name }}
+      ansible.builtin.command: kubectl -n {{ msr_namespace }} delete pod {{ msr_old_name }} --wait=true --timeout=120s
+      environment:
+        KUBECONFIG: "{{ KUBECONFIG | default('/etc/rancher/k3s/k3s.yaml', true) }}"
+      changed_when: true
+      register: msr_delete
+
+    - name: Name the replacement wait condition
+      ansible.builtin.set_fact:
+        msr_last_failure: >-
+          replacement on {{ msr_node }} not Ready at revision {{ msr_target }} after
+          {{ (msr_wait_retries | int) * (msr_wait_delay | int) }} s
+
+    - name: Wait for the replacement on {{ msr_node }} - Ready and at revision {{ msr_target }}
+      ansible.builtin.command: kubectl -n {{ msr_namespace }} get pods -l {{ msr_selector }} -o json
+      environment:
+        KUBECONFIG: "{{ KUBECONFIG | default('/etc/rancher/k3s/k3s.yaml', true) }}"
+      register: msr_wait
+      changed_when: false
+      check_mode: false
+      until: msr_wait.rc == 0 and (msr_replacements | from_json | length) == 1
+      retries: "{{ msr_wait_retries | int }}"
+      delay: "{{ msr_wait_delay | int }}"
+
+    - name: Save the replacement pod
+      ansible.builtin.set_fact:
+        msr_new_pod: "{{ (msr_replacements | from_json) | first }}"
+
+    - name: Name the restart condition
+      ansible.builtin.set_fact:
+        msr_restart_failures: >-
+          {{ (((msr_new_pod.status.containerStatuses | default([], true)) +
+              (msr_new_pod.status.initContainerStatuses | default([], true)))
+             | selectattr('restartCount', 'undefined') | list) +
+             (((msr_new_pod.status.containerStatuses | default([], true)) +
+               (msr_new_pod.status.initContainerStatuses | default([], true)))
+              | selectattr('restartCount', 'defined')
+              | rejectattr('restartCount', 'equalto', 0) | list) }}
+        msr_last_failure: >-
+          {% set statuses = (msr_new_pod.status.containerStatuses | default([], true)) +
+             (msr_new_pod.status.initContainerStatuses | default([], true)) %}
+          {% set restarted = (statuses | selectattr('restartCount', 'undefined') | list) +
+             (statuses | selectattr('restartCount', 'defined')
+              | rejectattr('restartCount', 'equalto', 0) | list) %}
+          {% if restarted | length > 0 %}
+          replacement {{ msr_new_pod.metadata.name }} container
+          {{ restarted[0].name | default('unknown', true) }} restarted
+          {{ restarted[0].restartCount | default('unknown', true) }} times
+          {% else %}replacement {{ msr_new_pod.metadata.name | default('unknown', true) }} has no container restarts{% endif %}
+
+    - name: Reject any replacement container restart
+      ansible.builtin.assert:
+        that: msr_restart_failures | length == 0
+        fail_msg: "{{ msr_last_failure }}"
+        quiet: true
+
+    - name: Name the replacement report failure
+      ansible.builtin.set_fact:
+        msr_last_failure: "could not report replacement {{ msr_new_pod.metadata.name | default('unknown', true) }}"
+
+    - name: Report the replacement and its admitted init container resources
+      ansible.builtin.debug:
+        msg: >-
+          {{ msr_new_pod.metadata.name }} on {{ msr_node }}: revision {{ msr_target }},
+          qosClass {{ msr_new_pod.status.qosClass }},
+          init container resources
+          {{ msr_new_pod.spec.initContainers | default([], true) | items2dict(key_name='name', value_name='resources') | to_json }}
+
+    - name: Name the QoS condition
+      ansible.builtin.set_fact:
+        msr_last_failure: >-
+          replacement {{ msr_new_pod.metadata.name | default('unknown', true) }} has qosClass
+          {{ msr_new_pod.status.qosClass | default('unknown', true) }}, expected {{ msr_expect_qos }}
+
+    - name: Check the replacement's QoS class
+      ansible.builtin.assert:
+        that: msr_new_pod.status.qosClass == msr_expect_qos
+        fail_msg: "{{ msr_last_failure }}"
+        quiet: true
+
+    - name: Name the network check condition
+      ansible.builtin.set_fact:
+        msr_last_failure: "network check N failed after {{ msr_old_name | default('unknown', true) }}"
+
+    - name: Network check after replacing {{ msr_old_name }}
+      ansible.builtin.include_tasks:
+        file: metallb_network_check.yml
+        apply:
+          tags: [enable_metallb_resources]
+      vars:
+        msr_n_label: "after {{ msr_old_name }}"
+
+  rescue:
+    - name: Preserve the kubectl delete error
+      ansible.builtin.set_fact:
+        msr_last_failure: >-
+          pod delete of {{ msr_old_name }} failed:
+          {{ ansible_failed_result.stderr | default(ansible_failed_result.msg | default('kubectl delete failed', true), true) }}
+      when: ansible_failed_task.name | default('', true) is search('^Delete ')
+
+    - name: Preserve the last-seen replacement on an exhausted wait
+      ansible.builtin.set_fact:
+        msr_last_failure: >-
+          {% set doc = (msr_wait.stdout | default('{"items":[]}', true) | from_json) %}
+          {% set seen = doc.get('items', []) | selectattr('spec.nodeName', 'equalto', msr_node)
+             | rejectattr('metadata.uid', 'equalto', msr_old_uid)
+             | selectattr('metadata.labels.controller-revision-hash', 'equalto', msr_target) | list %}
+          {% set pod = seen | first | default({}, true) %}
+          {% set cs = [] %}
+          {% for c in (pod.status.containerStatuses | default([], true)) %}
+          {% set _ = cs.append((c.name | default('unknown', true)) ~ ' ready=' ~
+             (c.ready | default(false, true) | string) ~ ' restartCount=' ~
+             (c.restartCount | default('unknown', true) | string)) %}
+          {% endfor %}
+          replacement on {{ msr_node }} not Ready at revision {{ msr_target }} after
+          {{ (msr_wait_retries | int) * (msr_wait_delay | int) }} s; last seen pod
+          {{ pod.metadata.name | default('unknown', true) }} phase
+          {{ pod.status.phase | default('unknown', true) }}; containers {{ cs | default([], true) | join(', ') }}
+      when: ansible_failed_task.name | default('', true) is search('^Wait for the replacement')
+
+    - name: Stop - name the pod, delete nothing further
+      ansible.builtin.fail:
+        msg: >-
+          metallb speaker replacement stopped at pod {{ msr_old_name }} (node {{ msr_node }}):
+          {{ msr_last_failure | default(ansible_failed_result.msg | default('metallb speaker replacement failed', true), true) }}.
+          No further speaker was deleted; the speakers not yet replaced keep running as they were.

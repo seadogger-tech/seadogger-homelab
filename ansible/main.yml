@@ -78,6 +78,11 @@
       when: enable_metallb_resources | default(false) | bool
       tags: [enable_metallb_resources]
 
+    - name: Apply the Traefik HelmChartConfig from the checked-out values
+      import_tasks: tasks/traefik_resources.yml
+      when: enable_traefik_resources | default(false) | bool
+      tags: [enable_traefik_resources]
+
     - name: Upgrade ArgoCD to the checked-out values
       import_tasks: tasks/argocd_resources.yml
       when: enable_argocd_resources | default(false) | bool

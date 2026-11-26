@@ -71,13 +71,14 @@
   register: helm_operator_result
   changed_when: "'STATUS: deployed' in helm_operator_result.stdout or 'STATUS: upgraded' in helm_operator_result.stdout"
 
-# CSI controller-plugin memory (2026-10-31): with ROOK_USE_CSI_OPERATOR the
-# Rook operator re-renders the ceph-csi-operator Driver CRs on every start.
-# It copies the node plugin request (csi*PluginResource, 128Mi) into the
-# controller plugin and leaves the four sidecars without requests, so the
-# operator values' *ProvisionerResource lists have no effect, and patching the
-# Driver CRs does not survive an operator restart. The rendered result (160Mi
-# per controller pod against 100-180Mi measured) is close enough to leave.
+# CSI plugin memory: with ROOK_USE_CSI_OPERATOR the Rook operator re-renders the
+# ceph-csi-operator Driver CRs on every start, and patching a Driver CR does not
+# survive that. Rook 1.18 reads the two key pairs crossed: the node plugin
+# (spec.nodePlugin.resources: plugin, registrar, liveness) comes from the
+# operator values' csi*ProvisionerResource lists, and the controller plugin
+# (spec.controllerPlugin.resources) from csi*PluginResource. The csi-provisioner,
+# csi-resizer, csi-attacher and csi-snapshotter entries have no effect. See the
+# note in deployments/rook-ceph/rook-ceph-operator-values.yaml and wiki 30, Stage B1.
 
 # Step 5: Wait for operator to be ready
 - name: Wait for operator to be ready
