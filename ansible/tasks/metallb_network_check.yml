@@ -8,14 +8,14 @@
 # ansible.builtin.uri only.
 - name: Count this attempt
   ansible.builtin.set_fact:
-    msr_n_cur: "{{ msr_n_attempt | default(1) | int }}"
+    msr_n_cur: "{{ msr_n_attempt | default(1, true) | int }}"
 
-- name: "Network check N ({{ msr_n_label | default('check') }}), attempt {{ msr_n_cur }}"
+- name: "Network check N ({{ msr_n_label | default('check', true) }}), attempt {{ msr_n_cur }}"
   block:
     - name: Read every Service
       ansible.builtin.command: kubectl get services --all-namespaces -o json
       environment:
-        KUBECONFIG: "{{ KUBECONFIG | default('/etc/rancher/k3s/k3s.yaml') }}"
+        KUBECONFIG: "{{ KUBECONFIG | default('/etc/rancher/k3s/k3s.yaml', true) }}"
       register: msr_n_svc
       changed_when: false
       check_mode: false
@@ -23,7 +23,7 @@
     - name: Read the ServiceL2Statuses
       ansible.builtin.command: kubectl -n {{ msr_namespace }} get servicel2statuses.metallb.io -o json
       environment:
-        KUBECONFIG: "{{ KUBECONFIG | default('/etc/rancher/k3s/k3s.yaml') }}"
+        KUBECONFIG: "{{ KUBECONFIG | default('/etc/rancher/k3s/k3s.yaml', true) }}"
       register: msr_n_l2
       changed_when: false
       check_mode: false
@@ -31,7 +31,7 @@
     - name: Read the speaker pods
       ansible.builtin.command: kubectl -n {{ msr_namespace }} get pods -l {{ msr_selector }} -o json
       environment:
-        KUBECONFIG: "{{ KUBECONFIG | default('/etc/rancher/k3s/k3s.yaml') }}"
+        KUBECONFIG: "{{ KUBECONFIG | default('/etc/rancher/k3s/k3s.yaml', true) }}"
       register: msr_n_pods
       changed_when: false
       check_mode: false
@@ -46,7 +46,7 @@
           {%- set l2s = (msr_n_l2.stdout | from_json)['items'] -%}
           {%- set ready_nodes = [] -%}
           {%- for p in (msr_n_pods.stdout | from_json)['items'] -%}
-            {%- if (p.status.conditions | default([]) | selectattr('type', 'equalto', 'Ready')
+            {%- if (p.status.conditions | default([], true) | selectattr('type', 'equalto', 'Ready')
                     | selectattr('status', 'equalto', 'True') | list | length) > 0 -%}
               {%- set _ = ready_nodes.append(p.spec.nodeName) -%}
             {%- endif -%}
@@ -55,7 +55,7 @@
           {%- set traefik = [] -%}
           {%- for s in svcs if s.spec.type == 'LoadBalancer' -%}
             {%- set key = s.metadata.namespace ~ '/' ~ s.metadata.name -%}
-            {%- set ing = (((s.status | default({})).loadBalancer | default({})).ingress | default([])) -%}
+            {%- set ing = (((s.status | default({}, true)).loadBalancer | default({}, true)).ingress | default([], true)) -%}
             {%- if ing | length == 0 -%}
               {%- set _ = problems.append(key ~ ' has no ingress IP') -%}
             {%- elif s.metadata.name == msr_traefik_name and s.metadata.namespace == msr_traefik_namespace -%}
@@ -81,7 +81,7 @@
           {%- for s in (msr_n_svc.stdout | from_json)['items']
                 if s.spec.type == 'LoadBalancer' and s.metadata.name == msr_traefik_name
                    and s.metadata.namespace == msr_traefik_namespace -%}
-            {%- for i in (((s.status | default({})).loadBalancer | default({})).ingress | default([])) -%}
+          {%- for i in (((s.status | default({}, true)).loadBalancer | default({}, true)).ingress | default([], true)) -%}
               {%- set _ = ips.append(i.ip) -%}
             {%- endfor -%}
           {%- endfor -%}
@@ -106,8 +106,8 @@
     - name: Remember why the attempt failed
       ansible.builtin.set_fact:
         msr_last_failure: >-
-          network check N ({{ msr_n_label | default('check') }}) failed on attempt {{ msr_n_cur }}:
-          {{ ansible_failed_result.msg | default('a task failed') }}
+          network check N ({{ msr_n_label | default('check', true) }}) failed on attempt {{ msr_n_cur }}:
+          {{ ansible_failed_result.msg | default('network check task failed', true) }}
 
     - name: Stop - the retries are spent
       ansible.builtin.fail:

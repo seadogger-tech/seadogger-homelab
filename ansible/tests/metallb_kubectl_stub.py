@@ -50,6 +50,10 @@ def pod_json(p, state):
         "status": {
             "qosClass": p["qos"],
             "conditions": [{"type": "Ready", "status": "True" if ready else "False"}],
+            "containerStatuses": [
+                {"name": name, "ready": ready, "restartCount": p.get("container_restarts", {}).get(name, 0)}
+                for name in ("speaker", "frr", "reloader", "frr-metrics")
+            ],
         },
     }
 
@@ -93,6 +97,8 @@ def main(argv):
         state["pending"].append({
             "name": f"{DS}-new{state['seq']}", "uid": f"uid-new{state['seq']}", "node": old["node"],
             "hash": state["new_hash"], "qos": state["new_qos"], "ready": False,
+            "container_restarts": ({state["new_restart_container"]: 1}
+                                    if state.get("new_restart_container") else {}),
             "polls_left": state["ready_after_polls"]})
         state["pods"].append(state["pending"].pop())
         save(path, state)

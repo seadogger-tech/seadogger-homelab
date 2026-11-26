@@ -29,6 +29,7 @@ B0 = {r["name"]: r for r in yaml.safe_load(Path(__file__).with_name("b0_memory_p
 OPERATOR_VALUES = CORE / "deployments/rook-ceph/rook-ceph-operator-values.yaml"
 METALLB_VALUES = CORE / "ansible/vars/metallb_helm_values.yml"
 TRAEFIK_VALUES = CORE / "ansible/vars/traefik_helmchartconfig_values.yml"
+VARS = CORE / "ansible/vars"
 
 
 def to_mi(value):
@@ -76,9 +77,9 @@ NODEPLUGIN = {
 METALLB = [
     # path in metallb_helm_values, B0 row, memory Mi, cpu m
     (("speaker", "resources"), "metallb speaker", 88, 100),
-    (("speaker", "frr", "resources"), "metallb frr", 64, 50),
-    (("speaker", "reloader", "resources"), "metallb reloader", 64, 20),
-    (("speaker", "frrMetrics", "resources"), "metallb frr-metrics", 48, 20),
+    (("speaker", "frr", "resources"), "metallb frr", 64, 125),
+    (("speaker", "reloader", "resources"), "metallb reloader", 64, 125),
+    (("speaker", "frrMetrics", "resources"), "metallb frr-metrics", 48, 275),
     (("controller", "resources"), "metallb controller", 152, 50),
 ]
 
@@ -142,6 +143,19 @@ class TestMetalLBGuaranteed(unittest.TestCase):
                 self.assertEqual(to_mi(res["requests"]["memory"]), mem)
                 self.assertEqual(to_milli(res["requests"]["cpu"]), cpu)
 
+    def test_cpu_request_and_limit_meet_the_measured_spec_floors(self):
+        floors = {"speaker": 100, "frr": 125, "reloader": 125, "frrMetrics": 275, "controller": 50}
+        for name, floor in floors.items():
+            path = (("controller", "resources") if name == "controller"
+                    else ("speaker", "resources") if name == "speaker"
+                    else ("speaker", name, "resources"))
+            with self.subTest(name):
+                res = self.dig(self.values, path)
+                request = to_milli(res["requests"]["cpu"])
+                limit = to_milli(res["limits"]["cpu"])
+                self.assertEqual(request, limit)
+                self.assertGreaterEqual(request, floor)
+
     def test_sizing_rule_holds_against_the_recorded_peaks(self):
         for path, row, _, _ in METALLB:
             with self.subTest(row):
@@ -168,6 +182,38 @@ class TestTraefikGuaranteed(unittest.TestCase):
             text = (CORE / "ansible/tasks" / name).read_text()
             self.assertIn("traefik_helmchartconfig_values", text, name)
             self.assertNotIn("memory: 512Mi", text, name)
+
+    def test_previous_values_deep_equal_core_6097389_inline_values(self):
+        shown = subprocess.run(
+            ["git", "show", "6097389:ansible/tasks/traefik_dashboard_deploy.yml"],
+            cwd=CORE, capture_output=True, text=True)
+        if shown.returncode:
+            self.skipTest("commit 6097389 is not in this checkout")
+        task = next(t["kubernetes.core.k8s"] for t in yaml.safe_load(shown.stdout)
+                    if "kubernetes.core.k8s" in t and
+                    t["kubernetes.core.k8s"].get("definition", {}).get("kind") == "HelmChartConfig")
+        expected = yaml.safe_load(task["definition"]["spec"]["valuesContent"])
+        previous = yaml.safe_load((VARS / "traefik_helmchartconfig_values.previous.yml").read_text())
+        self.assertEqual(previous["traefik_helmchartconfig_values"], expected)
+
+    def test_unknown_traefik_values_file_fails_before_any_cluster_write(self):
+        ansible = shutil.which("ansible-playbook")
+        if not ansible:
+            self.skipTest("ansible-playbook not installed")
+        with tempfile.TemporaryDirectory() as tmp:
+            play = Path(tmp) / "play.yml"
+            play.write_text(yaml.safe_dump([{
+                "hosts": "localhost", "gather_facts": False,
+                "tasks": [{"ansible.builtin.include_tasks": str(CORE / "ansible/tasks/traefik_resources.yml")}],
+            }]))
+            proc = subprocess.run(
+                [ansible, "-i", "localhost,", "-c", "local", str(play),
+                 "-e", "ansible_python_interpreter=" + shutil.which("python3"),
+                 "-e", "traefik_values_file=unknown.yml"],
+                capture_output=True, text=True)
+        output = proc.stdout + proc.stderr
+        self.assertNotEqual(proc.returncode, 0, output)
+        self.assertIn("traefik_values_file", output)
 
 
 @unittest.skipUnless(shutil.which("helm"), "helm not installed")

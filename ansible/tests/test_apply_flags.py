@@ -409,7 +409,9 @@ class GuardUnchanged(unittest.TestCase):
         result = self.run_guard(
             "-e metallb_values_file=metallb_helm_values.previous.yml", "-e metallb_speaker_replace=all",
             "-e metallb_speaker_expect_qos=Burstable", "-e enable_traefik_resources=true",
-            "-e enable_traefik_dashboard=true", enable_metallb_resources=True)
+            "-e enable_traefik_dashboard=true",
+            "-e traefik_values_file=traefik_helmchartconfig_values.previous.yml",
+            enable_metallb_resources=True)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("REAL_RUN_REACHED", result.stdout)
 

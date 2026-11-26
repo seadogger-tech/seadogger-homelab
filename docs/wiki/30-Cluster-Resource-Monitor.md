@@ -663,6 +663,27 @@ live at build time and taken as the maximum over all replicas on all nodes.
   speaker is recreated, or the pod stays Burstable. LimitRanges apply only at pod
   admission, so a changed default reaches a speaker only when it is recreated.
 
+### CPU rule for Guaranteed containers
+
+CPU request = limit = the largest of: the slowest probe handler's CPU cost divided by a
+quarter of its timeout; startup CPU divided by 10 seconds; or four times mean steady use.
+Round up to 25m. Measure live with cgroup `cpu.stat`, process `utime`/`stime` and child
+`cutime`/`cstime`, and wall time from `/proc/uptime`. Values in the table remain placeholders;
+the measured table belongs in the private Pro sizing record and its ticket.
+
+Every MetalLB speaker must be `Guaranteed`. There is no `Burstable` fallback: if any node's
+CPU request budget does not fit, stop before rollout and return the sizing decision to design.
+The `frr-metrics` container needs CPU for the FRR probe path: every `/livez` call forks
+`vtysh`, and that CPU is charged to `frr-metrics`, even though the probe checks `frr`.
+
+| Container | Request = limit |
+|---|---:|
+| `frr-metrics` | `<CPU>` (at least 250m) |
+| `frr` | `<CPU>` (at least 125m) |
+| `reloader` | `<CPU>` (at least 125m) |
+| `speaker` | `<CPU>` (at least 100m) |
+| `controller` | `<CPU>` (at least 50m) |
+
 ### Where each key lives
 
 | Component | Where Git sets it | What the live object shows |
@@ -719,21 +740,38 @@ counts updated pods, would wait for speakers that only the loop replaces, time o
 `helm version --short` on the control node, prints it, and passes `--wait=legacy
 --rollback-on-failure` on Helm 4 or later and `--wait --atomic` on Helm 3.
 
+Under the `enable_rook_ceph_resources` flag, the Rook Ceph 1.18.1 chart renders StorageClasses
+as `post-install,pre-upgrade` hooks with `before-hook-creation` deletion policy and
+`resource-policy: keep`. Each Helm upgrade therefore deletes and recreates the class, allowing
+immutable parameters to change. Bound PVs do not depend on the StorageClass object; its
+`reclaimPolicy` and default-class annotation come from the values. A PVC created during the
+brief hook gap waits until the class is recreated.
+
 ```mermaid
-sequenceDiagram
-  participant R as Runner (enable_metallb_resources)
-  participant H as Helm / k8s API
-  R->>H: helm upgrade: new template, OnDelete (no speaker replaced)
-  R->>H: pre-check N: LB IPs, ServiceL2Status, Traefik HTTP
-  loop each stale speaker, node-name order
-    R->>H: delete pod
-    H-->>R: replacement Ready, target revision, expected qosClass
-    R->>H: check N
-    alt a check fails
-      R-->>R: stop; name the pod; no further deletion
-    end
+flowchart LR
+  subgraph core["core repo (runner-applied)"]
+    MV["metallb_helm_values.yml<br/>B1 memory + measured CPU<br/>.previous.yml = B0 + OnDelete"]
+    GL["metallb_speaker_replace_pod.yml<br/>Ready, revision, QoS, restartCount 0"]
+    TV["traefik_resources.yml + traefik_values_file<br/>.previous.yml = B0 values"]
+    OV["rook-ceph-operator-values.yaml<br/>nodeplugin keys"]
+    W["wiki 30: CPU rule, StorageClass hooks<br/>wiki 28: runner usage<br/>wiki 05: rollback-at-landing-SHA rule"]
   end
-  R->>H: post-check: updated = ready = desired
+  subgraph pro["Pro repo (private)"]
+    LR["cluster-defaults LimitRanges<br/>metallb-system default = defaultRequest"]
+    DOC["memory-sizing.md: measured CPU table<br/>operations-mcp.md"]
+  end
+  RUN["in-cluster Ansible runner"] --> MV & TV & OV
+  MV -- "helm upgrade: template only" --> SPK["MetalLB speaker + controller"]
+  RUN --> GL -- "delete, wait, N, then next" --> SPK
+  SPK -- "kubelet probe GET :7473/livez" --> FM["frr-metrics CPU for vtysh per probe"]
+  TV --> TRF["Traefik"]
+  OV --> NP["8 CSI nodeplugin pods"]
+  ARGO["ArgoCD cluster-defaults"] --> LR -- "admission of new pods" --> SPK
+  style core fill:#1e3a5f,color:#fff
+  style pro fill:#7b1fa2,color:#fff
+  style RUN fill:#8b4513,color:#fff
+  style ARGO fill:#8b4513,color:#fff
+  style FM fill:#2d5016,color:#fff
 ```
 
 ### Rollback values
@@ -753,19 +791,57 @@ replaces the `previous` file with its own prior values.
 
 ```mermaid
 flowchart TD
-  A["revert the LimitRange change first (Pro), confirm live"] --> B{"core also reverting?"}
-  B -- no --> C["run with metallb_speaker_replace=all,<br/>metallb_speaker_expect_qos=Burstable"]
-  B -- yes --> D["run at the landing revision with<br/>metallb_values_file=previous, expect_qos=Burstable"]
-  D --> E["revert the core commit (strategy only)"]
-  E --> F["run the flags again at the revert revision:<br/>no speaker replaced"]
-  C --> G["compare every object with the prior-state record"]
-  F --> G
-  style A fill:#7b1fa2,color:#fff
+  A["Kirk approves Merge to main"] --> P["step 2: record prior state + cpu.stat (private)<br/>Traefik record = D1 evidence, not rollback target"]
+  P --> B["land core"] --> C["runner: Rook and Traefik at landing SHA"]
+  C --> D1{"D1: failed=0, HEALTH_OK, mounts, Traefik live = Git?"}
+  D1 -- "no: core rollback; step 5 has not run" --> R5b
+  D1 -- yes --> E["land Pro: cluster-defaults syncs"]
+  E --> D2{"D2: LimitRange = Pro main?"}
+  D2 -- no --> RP["Pro rollback: R1 revert Pro"]
+  D2 -- yes --> F["runner: MetalLB upgrade + gated loop, expect Guaranteed"]
+  F --> F1{"Ready, target revision, Guaranteed, restartCount 0, N passes?"}
+  F1 -- "no: named stop; no further deletion" --> RP
+  F1 -- yes --> D3{"D3: all speakers clean; 10 x /livez < 250 ms; IPs announced?"}
+  D3 -- no --> RP
+  D3 -- yes --> G["runner (Pro): operations-mcp pin advance"]
+  G --> D4{"D4: targetRevision = sync.revision = SHA, Healthy?"}
+  D4 -- no --> RP
+  D4 -- yes --> V{"step 8: Guaranteed, no OOM/eviction, values live?"}
+  V -- no --> RP
+  V -- yes --> H["Gist on OCE-706; OCE-369 resumes"]
+  RP --> R2{"R2: live LimitRange = prior record?"}
+  R2 -- "no: stop and fix the sync" --> STOP["stop: leave remaining state untouched; record and investigate"]
+  R2 -- yes --> R4["R4: restore operations-mcp pin (if step 7 ran)"]
+  R4 --> Q{"core also reverting?"}
+  Q -- no --> R3["R3 (if step 5 ran): replace=all, expect Burstable"]
+  R3 --> R3G{"Job succeeded?"}
+  R3G -- "no: stop at named pod" --> STOP
+  R3G -- yes --> OK["rollback complete"]
+  Q -- yes --> S5{"step 5 ran?"}
+  S5 -- yes --> R5["R5: MetalLB .previous at landing SHA, Burstable"]
+  R5 --> R5G{"Job succeeded? record speaker UIDs and hashes"}
+  R5G -- "no: stop at named pod" --> STOP
+  R5G -- yes --> R5b
+  S5 -- no --> R5b["R5b: Traefik .previous at landing SHA"]
+  R5b --> R5bG{"Job succeeded; config = .previous; Traefik Ready, B0, Burstable; HTTP?"}
+  R5bG -- "no: do not revert core" --> STOP
+  R5bG -- yes --> R6["R6: revert core"]
+  R6 --> R7["R7 at revert SHA: Rook (+ MetalLB strategy if step 5 ran)"]
+  R7 --> R7G{"speaker UIDs unchanged; strategy = prior record?"}
+  R7G -- no --> RN["record it; run N"] --> R8
+  R7G -- yes --> R8{"R8: prior record matches; Traefik = B0 target?"}
+  R8 -- yes --> OK
+  R8 -- "no: record mismatch as a fix ticket" --> STOP
+  style A fill:#1e3a5f,color:#fff
   style C fill:#8b4513,color:#fff
-  style D fill:#8b4513,color:#fff
-  style E fill:#1e3a5f,color:#fff
-  style F fill:#8b4513,color:#fff
-  style G fill:#2d5016,color:#fff
+  style E fill:#7b1fa2,color:#fff
+  style G fill:#7b1fa2,color:#fff
+  style H fill:#2d5016,color:#fff
+  style RP fill:#8b4513,color:#fff
+  style R5b fill:#8b4513,color:#fff
+  style R6 fill:#1e3a5f,color:#fff
+  style STOP fill:#8b4513,color:#fff
+  style OK fill:#2d5016,color:#fff
 ```
 
 ### Traefik

@@ -27,6 +27,8 @@
 # cp-reloader, cp-metrics) take their size from the metallb-system LimitRange,
 # which has to carry equal defaults before a speaker is recreated, or the pod
 # stays Burstable.
+# CPU request = limit follows OCE-706 spec §3.1; the measured per-node table is
+# on the OCE-709 ticket and the reviewed sizing record is in Pro.
 #
 # The speaker DaemonSet uses OnDelete, not RollingUpdate. RollingUpdate moves
 # on as soon as a replacement is available and never looks at the network;
@@ -56,24 +58,24 @@ metallb_helm_values:
     frr:
       resources:
         requests:
-          cpu: 50m
+          cpu: 125m
           memory: 64Mi
         limits:
-          cpu: 50m
+          cpu: 125m
           memory: 64Mi
     reloader:
       resources:
         requests:
-          cpu: 20m
+          cpu: 125m
           memory: 64Mi
         limits:
-          cpu: 20m
+          cpu: 125m
           memory: 64Mi
     frrMetrics:
       resources:
         requests:
-          cpu: 20m
+          cpu: 275m
           memory: 48Mi
         limits:
-          cpu: 20m
+          cpu: 275m
           memory: 48Mi

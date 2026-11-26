@@ -175,6 +175,17 @@ class LoopRun(unittest.TestCase):
         result, out, deletions = self.run_loop()
         self.assertNotEqual(result.returncode, 0, out)
         self.assertEqual(deletions, ["metallb-speaker-zz1"])
+        self.assertIn("not Ready at revision", out)
+        self.assertIn("after 3 s", out)
+
+    def test_replacement_with_a_restarted_container_names_it_and_stops_before_next_delete(self):
+        state = h.default_state()
+        state["new_restart_container"] = "frr"
+        self.set_state(state)
+        result, out, deletions = self.run_loop()
+        self.assertNotEqual(result.returncode, 0, out)
+        self.assertEqual(deletions, ["metallb-speaker-zz1"])
+        self.assertIn("container frr restarted 1 times", out)
 
     def test_init_container_resources_are_printed(self):
         result, out, _ = self.run_loop()

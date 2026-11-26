@@ -7,13 +7,24 @@
 # renders). It does not install anything, download anything, touch the dashboard
 # IngressRoute, or restart k3s, so the Ansible runner may run it. k3s's helm controller
 # then upgrades the Traefik release, which rolls the one Traefik pod.
+- name: Refuse an unknown Traefik values file
+  ansible.builtin.assert:
+    that:
+      - >-
+        (traefik_values_file | default('traefik_helmchartconfig_values.yml', true)) in
+        ['traefik_helmchartconfig_values.yml', 'traefik_helmchartconfig_values.previous.yml']
+    fail_msg: >-
+      refused: traefik_values_file must be traefik_helmchartconfig_values.yml or
+      traefik_helmchartconfig_values.previous.yml
+    quiet: true
+
 - name: Set KUBECONFIG global
   ansible.builtin.set_fact:
     KUBECONFIG: /etc/rancher/k3s/k3s.yaml
 
 - name: Load the shared Traefik HelmChartConfig values
   ansible.builtin.include_vars:
-    file: "{{ playbook_dir }}/vars/traefik_helmchartconfig_values.yml"
+    file: "{{ playbook_dir }}/vars/{{ traefik_values_file | default('traefik_helmchartconfig_values.yml', true) }}"
 
 - name: Apply the Traefik HelmChartConfig
   kubernetes.core.k8s:
