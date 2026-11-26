@@ -781,8 +781,9 @@ flowchart LR
 For a core rollback, run `enable_metallb_resources` at the core landing SHA with
 `-e metallb_values_file=metallb_helm_values.previous.yml -e metallb_speaker_expect_qos=Burstable` only if
 the MetalLB step ran. R5 returns the template to B0, rolls back the controller Deployment, and the gated
-loop replaces the speakers the forward run replaced, one at a time. When R5's gate passes, run R5b on
-every core rollback, still at the core landing SHA: `enable_traefik_resources` with
+loop replaces the speakers the forward run replaced, one at a time. After R5's gate passes when R5 ran,
+or directly when the MetalLB step did not run, run R5b on every core rollback at the core landing SHA:
+`enable_traefik_resources` with
 `-e traefik_values_file=traefik_helmchartconfig_values.previous.yml`. R5b passes only when its Job
 succeeds, the live HelmChartConfig deep-equals `.previous.yml`, Traefik is Ready at the B0 resources and
 `Burstable`, and its LoadBalancer IP answers HTTP. If either R5 or R5b fails its gate, stop before the
