@@ -2,33 +2,12 @@
 # enable_metallb_resources: bring the running MetalLB release in line with the
 # values in the checked-out repo, and nothing else.
 #
-# This is `helm upgrade` plus the gated speaker replacement. It never installs (no
-# `helm install`, no `--install`), never wipes, and never touches k3s, so the Ansible
-# runner may run it. The release must already exist; otherwise the run fails.
-#
-# The speaker DaemonSet uses OnDelete (Stage B1, OCE-369), so `helm upgrade` changes
-# the template and replaces no speaker. tasks/metallb_speaker_replace.yml then
-# replaces them one at a time, with a network check between pods, and stops on the
-# first failure. Variables (all optional, set with -e):
-#   metallb_values_file          metallb_helm_values.yml (default) or
-#                                metallb_helm_values.previous.yml (rollback values)
-#   metallb_speaker_replace      stale (default: pods off the target revision) or all
-#   metallb_speaker_expect_qos   Guaranteed (default) or Burstable
+# This is `helm upgrade` only. It never installs (no `helm install`, no
+# `--install`), never wipes, and never touches k3s, so the Ansible runner may
+# run it. The release must already exist; otherwise the run fails.
 - name: Set KUBECONFIG global
   ansible.builtin.set_fact:
     KUBECONFIG: /etc/rancher/k3s/k3s.yaml
-
-# Nothing below runs, and no helm or kubectl call is made, unless these are valid.
-- name: Refuse unknown MetalLB values file, replacement mode or expected QoS class
-  ansible.builtin.assert:
-    that:
-      - (metallb_values_file | default('metallb_helm_values.yml')) in ['metallb_helm_values.yml', 'metallb_helm_values.previous.yml']
-      - (metallb_speaker_replace | default('stale')) in ['stale', 'all']
-      - (metallb_speaker_expect_qos | default('Guaranteed')) in ['Guaranteed', 'Burstable']
-    fail_msg: >-
-      refused: metallb_values_file must be metallb_helm_values.yml or metallb_helm_values.previous.yml,
-      metallb_speaker_replace must be stale or all, and metallb_speaker_expect_qos must be Guaranteed or Burstable
-    quiet: true
 
 - name: Assert the MetalLB release already exists
   ansible.builtin.command: helm status metallb --namespace metallb-system
@@ -52,39 +31,15 @@
   changed_when: false
   check_mode: false
 
-# vars/metallb_helm_values.yml is shared with the cold-start task; the .previous.yml
-# file holds the Stage B0 values (plus OnDelete) for a rollback, see wiki 30.
 - name: Load the shared MetalLB Helm values
   ansible.builtin.include_vars:
-    file: "{{ playbook_dir }}/vars/{{ metallb_values_file | default('metallb_helm_values.yml') }}"
+    file: "{{ playbook_dir }}/vars/metallb_helm_values.yml"
 
 - name: Write the MetalLB values file
   ansible.builtin.copy:
     content: "{{ metallb_helm_values | to_nice_yaml }}"
     dest: /tmp/metallb-helm-values.yml
     mode: "0600"
-
-# Helm 3's `--wait` treats a DaemonSet whose strategy is not RollingUpdate as ready.
-# Helm 4's default waiter (kstatus) counts updated pods, so with OnDelete it would wait
-# for speakers that only the gated loop replaces, time out, and `--atomic` would roll
-# the release back. On Helm 4 the legacy waiter (Helm 3's) returns.
-- name: Read the control node's Helm version
-  ansible.builtin.command: helm version --short
-  environment:
-    KUBECONFIG: "{{ KUBECONFIG }}"
-  register: metallb_helm_version
-  changed_when: false
-  check_mode: false
-
-- name: Choose the Helm wait arguments for an OnDelete DaemonSet
-  ansible.builtin.set_fact:
-    metallb_helm_major: "{{ ((metallb_helm_version.stdout | trim | replace('v', '', 1)).split('.')[0]) | int(3) }}"
-
-- name: Record the Helm version and the wait arguments
-  ansible.builtin.debug:
-    msg: >-
-      helm {{ metallb_helm_version.stdout | trim }}:
-      {{ 'helm 4: --wait=legacy --rollback-on-failure' if (metallb_helm_major | int) >= 4 else 'helm 3: --wait --atomic' }}
 
 # The chart version is pinned (0.15.2, the installed chart), equal to
 # tasks/metallb_native_deploy.yml, so a run is a no-op upgrade.
@@ -101,20 +56,11 @@
       - "0.15.2"
       - -f
       - /tmp/metallb-helm-values.yml
-      - "{{ '--rollback-on-failure' if (metallb_helm_major | int) >= 4 else '--atomic' }}"
-      - "{{ '--wait=legacy' if (metallb_helm_major | int) >= 4 else '--wait' }}"
+      - --atomic
+      - --wait
       - --timeout
       - 10m
   environment:
     KUBECONFIG: "{{ KUBECONFIG }}"
   register: metallb_upgrade
   changed_when: "'STATUS: deployed' in metallb_upgrade.stdout"
-
-# Replace the stale speakers through the gate. Skipped in check mode: a replacement
-# needs a real deletion.
-- name: Replace the stale MetalLB speakers one at a time, gated on the network check
-  ansible.builtin.include_tasks:
-    file: "{{ playbook_dir }}/tasks/metallb_speaker_replace.yml"
-    apply:
-      tags: [enable_metallb_resources]
-  when: not ansible_check_mode

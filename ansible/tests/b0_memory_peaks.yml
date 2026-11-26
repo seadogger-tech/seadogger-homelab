@@ -7,8 +7,6 @@
 # old_* are the live requests/limits from the OCE-550 snapshot, in Mi.
 # test_b0_memory_reductions.py asserts the changed files against this table, and that the
 # wiki section lists every row.
-# request_raised_by_b1: Stage B1 raises this request to P (Guaranteed); B0's
-# "no request goes up" check does not apply to it. test_b1_memory_values.py covers it.
 containers:
   - name: log-collector (x10)
     file: deployments/rook-ceph/rook-ceph-cluster-values.yaml
@@ -131,7 +129,6 @@ containers:
     old_request_mi: 128
     old_limit_mi: 512
   - name: metallb frr
-    request_raised_by_b1: true
     file: ansible/vars/metallb_helm_values.yml
     path: metallb_helm_values.speaker.frr.resources
     peak_mi: 50.2
@@ -144,7 +141,6 @@ containers:
     old_request_mi: 32
     old_limit_mi: 256
   - name: metallb reloader
-    request_raised_by_b1: true
     file: ansible/vars/metallb_helm_values.yml
     path: metallb_helm_values.speaker.reloader.resources
     peak_mi: 45.3
@@ -157,7 +153,6 @@ containers:
     old_request_mi: 32
     old_limit_mi: 256
   - name: metallb frr-metrics
-    request_raised_by_b1: true
     file: ansible/vars/metallb_helm_values.yml
     path: metallb_helm_values.speaker.frrMetrics.resources
     peak_mi: 32.3
@@ -170,7 +165,6 @@ containers:
     old_request_mi: 32
     old_limit_mi: 256
   - name: metallb controller
-    request_raised_by_b1: true
     file: ansible/vars/metallb_helm_values.yml
     path: metallb_helm_values.controller.resources
     peak_mi: 120.4
