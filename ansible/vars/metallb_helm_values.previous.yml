@@ -1,0 +1,65 @@
+---
+# Rollback values for the MetalLB release (Stage B1, OCE-369): Core 6097389's
+# metallb_helm_values, the Stage B0 values, plus `speaker.updateStrategy: OnDelete`.
+#
+# Run with  -e metallb_values_file=metallb_helm_values.previous.yml  (see
+# tasks/metallb_resources.yml and wiki 30). The speaker DaemonSet stays on
+# OnDelete so that going back to these values is itself gated: the pod template
+# returns to the B0 one, and tasks/metallb_speaker_replace.yml replaces the
+# stale speakers one at a time with a network check between pods. Reverting
+# the B1 commit afterwards changes only the strategy, which is not part of the
+# pod template, so it replaces no speaker. A later change to the shared values
+# replaces this file with its own prior values.
+#
+# Resource requests are set deliberately, and not for capacity reasons.
+#
+# The MetalLB chart ships no requests, which makes every speaker and the
+# controller QoS class BestEffort - the first thing the kubelet evicts when a
+# node runs out of memory, ahead of whatever actually caused the pressure.
+# Losing all four speakers means losing LoadBalancer announcement for every
+# service in the cluster, including Pi-hole's DNS on 192.168.1.250, which the
+# nodes themselves resolve through.
+#
+# Modest requests move them to Burstable so they are no longer first in line.
+# Sized against observed steady state (speakers 69-95 MiB, controller 64 MiB)
+# with headroom; limits are deliberately generous because a speaker being
+# OOM-killed is worse than one briefly using more than expected.
+#
+# Stage B0 (OCE-369): limits are cut to 1.25 x the memory.peak read over 7+
+# days (OCE-550); requests never go up. CPU for the sidecars comes from the
+# metallb-system LimitRange, so only memory is set here.
+metallb_helm_values:
+  controller:
+    resources:
+      requests:
+        cpu: 25m
+        memory: 96Mi   # below the 120.4Mi peak; raising it is Stage B
+      limits:
+        memory: 152Mi  # was 512Mi
+  speaker:
+    updateStrategy:
+      type: OnDelete
+    resources:
+      requests:
+        cpu: 25m
+        memory: 80Mi   # was 128Mi
+      limits:
+        memory: 104Mi  # was 512Mi; peak 68.1Mi
+    frr:
+      resources:
+        requests:
+          memory: 32Mi
+        limits:
+          memory: 64Mi   # was 256Mi; peak 50.2Mi
+    reloader:
+      resources:
+        requests:
+          memory: 32Mi
+        limits:
+          memory: 64Mi   # was 256Mi; peak 45.3Mi
+    frrMetrics:
+      resources:
+        requests:
+          memory: 32Mi
+        limits:
+          memory: 48Mi   # was 256Mi; peak 32.3Mi

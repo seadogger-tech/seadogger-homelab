@@ -1,0 +1,74 @@
+---
+# Replace one speaker (msr_pod) and release the next only when it checks out.
+# Included in a loop by metallb_speaker_replace.yml. Any failure in the block ends the
+# play, naming the pod; nothing further is deleted.
+- name: Replace {{ msr_pod.metadata.name }} on {{ msr_pod.spec.nodeName }}
+  vars:
+    msr_old_name: "{{ msr_pod.metadata.name }}"
+    msr_old_uid: "{{ msr_pod.metadata.uid }}"
+    msr_node: "{{ msr_pod.spec.nodeName }}"
+    msr_replacements: >-
+      {%- set found = [] -%}
+      {%- for p in (msr_wait.stdout | from_json)['items'] -%}
+        {%- if p.spec.nodeName == msr_node
+               and p.metadata.uid != msr_old_uid
+               and p.metadata.deletionTimestamp is not defined
+               and p.metadata.labels['controller-revision-hash'] == msr_target
+               and (p.status.conditions | default([]) | selectattr('type', 'equalto', 'Ready')
+                    | selectattr('status', 'equalto', 'True') | list | length) > 0 -%}
+          {%- set _ = found.append(p) -%}
+        {%- endif -%}
+      {%- endfor -%}
+      {{ found | to_json }}
+  block:
+    - name: Delete {{ msr_old_name }}
+      ansible.builtin.command: kubectl -n {{ msr_namespace }} delete pod {{ msr_old_name }} --wait=true --timeout=120s
+      environment:
+        KUBECONFIG: "{{ KUBECONFIG | default('/etc/rancher/k3s/k3s.yaml') }}"
+      changed_when: true
+
+    - name: Wait for the replacement on {{ msr_node }} - Ready and at revision {{ msr_target }}
+      ansible.builtin.command: kubectl -n {{ msr_namespace }} get pods -l {{ msr_selector }} -o json
+      environment:
+        KUBECONFIG: "{{ KUBECONFIG | default('/etc/rancher/k3s/k3s.yaml') }}"
+      register: msr_wait
+      changed_when: false
+      check_mode: false
+      until: msr_wait.rc == 0 and (msr_replacements | from_json | length) == 1
+      retries: "{{ msr_wait_retries | int }}"
+      delay: "{{ msr_wait_delay | int }}"
+
+    - name: Take the replacement pod
+      ansible.builtin.set_fact:
+        msr_new_pod: "{{ (msr_replacements | from_json) | first }}"
+
+    - name: Report the replacement and its admitted init container resources
+      ansible.builtin.debug:
+        msg: >-
+          {{ msr_new_pod.metadata.name }} on {{ msr_node }}: revision {{ msr_target }},
+          qosClass {{ msr_new_pod.status.qosClass }},
+          init container resources
+          {{ msr_new_pod.spec.initContainers | default([]) | items2dict(key_name='name', value_name='resources') | to_json }}
+
+    - name: Check the replacement's QoS class
+      ansible.builtin.assert:
+        that: msr_new_pod.status.qosClass == msr_expect_qos
+        fail_msg: "{{ msr_new_pod.metadata.name }} has qosClass {{ msr_new_pod.status.qosClass }}, expected {{ msr_expect_qos }}"
+        quiet: true
+
+    - name: Network check after replacing {{ msr_old_name }}
+      ansible.builtin.include_tasks:
+        file: metallb_network_check.yml
+        apply:
+          tags: [enable_metallb_resources]
+      vars:
+        msr_n_label: "after {{ msr_old_name }}"
+
+  rescue:
+    - name: Stop - name the pod, delete nothing further
+      ansible.builtin.fail:
+        msg: >-
+          metallb speaker replacement stopped at pod {{ msr_old_name }} (node {{ msr_node }}):
+          {{ (msr_last_failure | default('')) if (msr_last_failure | default('') | length > 0)
+             else (ansible_failed_result.msg | default('a task failed')) }}.
+          No further speaker was deleted; the speakers not yet replaced keep running as they were.

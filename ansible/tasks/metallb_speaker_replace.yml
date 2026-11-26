@@ -1,0 +1,129 @@
+---
+# Gated replacement of the MetalLB speaker pods (Stage B1, OCE-369). Included by
+# metallb_resources.yml after `helm upgrade`, on the same host and with the same
+# KUBECONFIG. It uses `kubectl` and `ansible.builtin.uri` only.
+#
+# The speaker DaemonSet is OnDelete, so `helm upgrade` replaces no speaker. Each
+# speaker is replaced here, one at a time in node-name order, and the next deletion
+# is released only when the previous replacement is Ready, at the target revision,
+# at the expected QoS class, and the network check N passes. The first failure ends
+# the play, naming the pod; the speakers not yet replaced keep running as they were.
+#
+#   metallb_speaker_replace     stale (default): only pods off the target revision
+#                               all: every speaker
+#   metallb_speaker_expect_qos  Guaranteed (default) or Burstable (the rollbacks)
+#
+# Target revision: the hash of the speaker DaemonSet's highest-numbered ControllerRevision.
+# Tunables (defaults give N 90 s and a replacement 180 s): metallb_check_retries (18),
+# metallb_check_delay (5), metallb_replace_wait_retries (36), metallb_replace_wait_delay (5),
+# metallb_check_http_port (80), metallb_traefik_service_name/_namespace (traefik/kube-system).
+- name: Refuse unknown replacement mode or expected QoS class
+  ansible.builtin.assert:
+    that:
+      - (metallb_speaker_replace | default('stale')) in ['stale', 'all']
+      - (metallb_speaker_expect_qos | default('Guaranteed')) in ['Guaranteed', 'Burstable']
+    fail_msg: "refused: metallb_speaker_replace must be stale or all, and metallb_speaker_expect_qos must be Guaranteed or Burstable"
+    quiet: true
+
+- name: Fix the loop settings
+  ansible.builtin.set_fact:
+    msr_namespace: metallb-system
+    msr_daemonset: metallb-speaker
+    msr_selector: app.kubernetes.io/component=speaker,app.kubernetes.io/instance=metallb
+    msr_mode: "{{ metallb_speaker_replace | default('stale') }}"
+    msr_expect_qos: "{{ metallb_speaker_expect_qos | default('Guaranteed') }}"
+    msr_check_retries: "{{ metallb_check_retries | default(18) | int }}"
+    msr_check_delay: "{{ metallb_check_delay | default(5) | int }}"
+    msr_wait_retries: "{{ metallb_replace_wait_retries | default(36) | int }}"
+    msr_wait_delay: "{{ metallb_replace_wait_delay | default(5) | int }}"
+    msr_http_port: "{{ metallb_check_http_port | default(80) | int }}"
+    msr_traefik_name: "{{ metallb_traefik_service_name | default('traefik') }}"
+    msr_traefik_namespace: "{{ metallb_traefik_service_namespace | default('kube-system') }}"
+    msr_last_failure: ""
+
+- name: Read the speaker DaemonSet's ControllerRevisions
+  ansible.builtin.command: kubectl -n {{ msr_namespace }} get controllerrevisions -o json
+  environment:
+    KUBECONFIG: "{{ KUBECONFIG | default('/etc/rancher/k3s/k3s.yaml') }}"
+  register: msr_revisions_raw
+  changed_when: false
+  check_mode: false
+
+- name: Read the speaker pods
+  ansible.builtin.command: kubectl -n {{ msr_namespace }} get pods -l {{ msr_selector }} -o json
+  environment:
+    KUBECONFIG: "{{ KUBECONFIG | default('/etc/rancher/k3s/k3s.yaml') }}"
+  register: msr_pods_raw
+  changed_when: false
+  check_mode: false
+
+- name: Work out the target revision and the speakers to replace
+  ansible.builtin.set_fact:
+    msr_target: >-
+      {{ ((msr_revisions_raw.stdout | from_json)['items']
+          | selectattr('metadata.name', 'match', '^' ~ msr_daemonset ~ '-')
+          | sort(attribute='revision') | last).metadata.name
+         | regex_replace('^' ~ msr_daemonset ~ '-', '') }}
+    msr_all_pods: "{{ (msr_pods_raw.stdout | from_json)['items'] | sort(attribute='spec.nodeName') }}"
+  failed_when: false
+  register: msr_target_result
+
+- name: Fail unless a target revision was found
+  ansible.builtin.assert:
+    that:
+      - msr_target_result is not failed
+      - msr_target is defined
+      - msr_target | length > 0
+      - msr_all_pods | length > 0
+    fail_msg: "refused: no ControllerRevision for {{ msr_daemonset }}, or no speaker pods, in {{ msr_namespace }}"
+    quiet: true
+
+- name: Pick the stale speakers
+  ansible.builtin.set_fact:
+    msr_stale: >-
+      {{ msr_all_pods if msr_mode == 'all'
+         else msr_all_pods | rejectattr('metadata.labels.controller-revision-hash', 'equalto', msr_target) | list }}
+
+- name: Show the plan
+  ansible.builtin.debug:
+    msg: >-
+      target revision {{ msr_target }}, mode {{ msr_mode }}, expected QoS {{ msr_expect_qos }};
+      replacing {{ msr_stale | map(attribute='metadata.name') | list }}
+      of {{ msr_all_pods | map(attribute='metadata.name') | list }}
+
+- name: Network check before the first deletion
+  ansible.builtin.include_tasks:
+    file: metallb_network_check.yml
+    apply:
+      tags: [enable_metallb_resources]
+  vars:
+    msr_n_label: "pre-check"
+
+- name: Replace each stale speaker in node-name order, one at a time
+  ansible.builtin.include_tasks:
+    file: metallb_speaker_replace_pod.yml
+    apply:
+      tags: [enable_metallb_resources]
+  loop: "{{ msr_stale }}"
+  loop_control:
+    loop_var: msr_pod
+    label: "{{ msr_pod.metadata.name }} ({{ msr_pod.spec.nodeName }})"
+
+- name: Read the speaker DaemonSet for the post-check
+  ansible.builtin.command: kubectl -n {{ msr_namespace }} get daemonset {{ msr_daemonset }} -o json
+  environment:
+    KUBECONFIG: "{{ KUBECONFIG | default('/etc/rancher/k3s/k3s.yaml') }}"
+  register: msr_ds_raw
+  changed_when: false
+  check_mode: false
+
+- name: Post-check - every speaker is at the current template and Ready
+  ansible.builtin.assert:
+    that:
+      - (msr_ds_raw.stdout | from_json).status.desiredNumberScheduled | int > 0
+      - (msr_ds_raw.stdout | from_json).status.updatedNumberScheduled == (msr_ds_raw.stdout | from_json).status.desiredNumberScheduled
+      - (msr_ds_raw.stdout | from_json).status.numberReady == (msr_ds_raw.stdout | from_json).status.desiredNumberScheduled
+    fail_msg: >-
+      post-check failed: updatedNumberScheduled, numberReady and desiredNumberScheduled differ:
+      {{ (msr_ds_raw.stdout | from_json).status }}
+    success_msg: "post-check passed: {{ (msr_ds_raw.stdout | from_json).status }}"
