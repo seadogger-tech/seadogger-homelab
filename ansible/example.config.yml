@@ -183,8 +183,6 @@ enable_internal_pki: "{{ cold_start_stage_2_install_infrastructure | bool }}"
 enable_rook_ceph_resources: false
 enable_metallb_resources: false
 enable_argocd_resources: false
-# Writes only the Traefik HelmChartConfig (kube-system/traefik), no dashboard objects.
-enable_traefik_resources: false
 
 # --- Stage 3: Application Deployment Variables ---
 enable_nextcloud_postgresql: "{{ cold_start_stage_3_install_applications | bool and manual_install_nextcloud_postgresql | bool }}"
