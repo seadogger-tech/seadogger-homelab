@@ -81,12 +81,6 @@
         fail_msg: "{{ msr_last_failure }}"
         quiet: true
 
-    - name: Name the QoS condition
-      ansible.builtin.set_fact:
-        msr_last_failure: >-
-          replacement {{ msr_new_pod.metadata.name | default('unknown', true) }} has qosClass
-          {{ msr_new_pod.status.qosClass | default('unknown', true) }}, expected {{ msr_expect_qos }}
-
     - name: Name the replacement report failure
       ansible.builtin.set_fact:
         msr_last_failure: "could not report replacement {{ msr_new_pod.metadata.name | default('unknown', true) }}"
@@ -98,6 +92,12 @@
           qosClass {{ msr_new_pod.status.qosClass }},
           init container resources
           {{ msr_new_pod.spec.initContainers | default([], true) | items2dict(key_name='name', value_name='resources') | to_json }}
+
+    - name: Name the QoS condition
+      ansible.builtin.set_fact:
+        msr_last_failure: >-
+          replacement {{ msr_new_pod.metadata.name | default('unknown', true) }} has qosClass
+          {{ msr_new_pod.status.qosClass | default('unknown', true) }}, expected {{ msr_expect_qos }}
 
     - name: Check the replacement's QoS class
       ansible.builtin.assert:

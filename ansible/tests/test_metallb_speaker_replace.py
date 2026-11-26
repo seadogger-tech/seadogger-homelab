@@ -136,7 +136,7 @@ class LoopRun(unittest.TestCase):
         result, out, deletions = self.run_loop()
         self.assertNotEqual(result.returncode, 0, out)
         self.assertEqual(deletions, ["metallb-speaker-zz1"])
-        self.assertIn("metallb-speaker-zz1", out, "the failure must name the pod")
+        self.assertIn("network check N (after metallb-speaker-zz1) failed on attempt 3", out)
 
     def test_failed_precheck_deletes_nothing(self):
         state = h.default_state()
@@ -145,14 +145,14 @@ class LoopRun(unittest.TestCase):
         result, out, deletions = self.run_loop()
         self.assertNotEqual(result.returncode, 0, out)
         self.assertEqual(deletions, [])
+        self.assertIn("network check N (pre-check) failed on attempt 3", out)
 
     def test_wrong_qos_class_stops_before_a_second_deletion(self):
         self.set_state(h.default_state(new_qos="Burstable"))
         result, out, deletions = self.run_loop()
         self.assertNotEqual(result.returncode, 0, out)
         self.assertEqual(deletions, ["metallb-speaker-zz1"])
-        self.assertIn("Burstable", out)
-        self.assertIn("metallb-speaker-zz1", out)
+        self.assertIn("has qosClass Burstable, expected Guaranteed", out)
 
     def test_expect_qos_burstable_accepts_burstable_replacements(self):
         self.set_state(h.default_state(new_qos="Burstable"))
@@ -175,8 +175,7 @@ class LoopRun(unittest.TestCase):
         result, out, deletions = self.run_loop()
         self.assertNotEqual(result.returncode, 0, out)
         self.assertEqual(deletions, ["metallb-speaker-zz1"])
-        self.assertIn("not Ready at revision", out)
-        self.assertIn("after 3 s", out)
+        self.assertRegex(out, r"not Ready at revision [a-z0-9]+ after 3 s")
 
     def test_replacement_with_a_restarted_container_names_it_and_stops_before_next_delete(self):
         state = h.default_state()
@@ -196,6 +195,7 @@ class LoopRun(unittest.TestCase):
         result, out, deletions = self.run_loop(metallb_check_http_port=1)
         self.assertNotEqual(result.returncode, 0, out)
         self.assertEqual(deletions, [])
+        self.assertIn("network check N (pre-check) failed on attempt 3", out)
 
     def test_unknown_replace_or_qos_value_fails_before_any_kubectl_call(self):
         for key, value in (("metallb_speaker_replace", "everything"), ("metallb_speaker_expect_qos", "BestEffort")):
