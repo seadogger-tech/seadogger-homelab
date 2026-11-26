@@ -229,7 +229,7 @@ A change that adds a runner apply flag (an `enable_*_resources` switch, or a var
 
 Rollback order when core also reverts:
 
-1. **R5, only if the MetalLB step ran:** run the MetalLB flag at the landing SHA with the `previous` values and the gated loop, replacing every speaker. Its Job must succeed, or the rollback stops at the named pod.
+1. **R5, only if the MetalLB step ran:** run the MetalLB flag at the landing SHA with the `previous` values and the gated loop. It replaces only the stale speakers the forward loop replaced; a speaker the forward loop never reached is already current and stays untouched, so a partial rollout leaves untouched speakers untouched. The Job must succeed, or the rollback stops at the named pod.
 2. **R5b, always:** run the Traefik flag at the landing SHA with `traefik_values_file=traefik_helmchartconfig_values.previous.yml`. The Job must succeed, the live HelmChartConfig must equal the `previous` file, Traefik must be Ready at the base resources and `Burstable`, and its LoadBalancer IP must answer.
 3. **Revert core,** only after R5 (if it ran) and R5b both pass. If a gate fails, stop before the revert and investigate at the landing SHA.
 

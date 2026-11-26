@@ -778,14 +778,24 @@ flowchart LR
 
 `ansible/vars/metallb_helm_values.previous.yml` holds the B0 values plus `speaker.updateStrategy: OnDelete`.
 `metallb_values_file=metallb_helm_values.previous.yml` selects it; no other file name is accepted.
-Run `enable_metallb_resources` at the landing revision with `-e metallb_values_file=metallb_helm_values.previous.yml
--e metallb_speaker_expect_qos=Burstable`: the template returns to B0, the controller Deployment rolls
-back, and the gated loop replaces the speakers the forward run replaced, one at a time. Only then revert
-the core commit: that changes the strategy back to `RollingUpdate`, which is not part of the pod
-template, so it replaces no speaker. To go back to B0 for the speakers while keeping the rest of
-B1, run the shared values with `-e metallb_speaker_replace=all -e metallb_speaker_expect_qos=Burstable`
-after the `metallb-system` LimitRange is back at its B0 value. A rollback is complete when every object in
-the prior-state record matches again; a revert alone does not count, because pods admitted under a changed
+For a core rollback, run `enable_metallb_resources` at the core landing SHA with
+`-e metallb_values_file=metallb_helm_values.previous.yml -e metallb_speaker_expect_qos=Burstable` only if
+the MetalLB step ran. R5 returns the template to B0, rolls back the controller Deployment, and the gated
+loop replaces the speakers the forward run replaced, one at a time. When R5's gate passes, run R5b on
+every core rollback, still at the core landing SHA: `enable_traefik_resources` with
+`-e traefik_values_file=traefik_helmchartconfig_values.previous.yml`. R5b passes only when its Job
+succeeds, the live HelmChartConfig deep-equals `.previous.yml`, Traefik is Ready at the B0 resources and
+`Burstable`, and its LoadBalancer IP answers HTTP. If either R5 or R5b fails its gate, stop before the
+core revert: the revert removes `traefik_values_file`. Only after the applicable R5 gate and the R5b gate
+pass, revert core (R6). At the revert SHA, R7 runs only the Rook flag and, if the MetalLB step ran, the
+MetalLB flag; it no longer runs the Traefik flag.
+
+The core revert changes the MetalLB strategy back to `RollingUpdate`, which is not part of the pod
+template, so it replaces no speaker. To go back to B0 for the speakers while keeping the rest of B1,
+run the shared values with `-e metallb_speaker_replace=all -e metallb_speaker_expect_qos=Burstable`
+after the `metallb-system` LimitRange is back at its B0 value; this is R3, with core staying at B1.
+Rollback is complete when every other object matches the prior-state record and Traefik matches B0 using
+the `.previous.yml` values. A revert alone does not count, because pods admitted under a changed
 LimitRange keep their values until they are recreated. Each later change to the shared MetalLB values
 replaces the `previous` file with its own prior values.
 
