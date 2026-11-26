@@ -668,9 +668,10 @@ live at build time and taken as the maximum over all replicas on all nodes.
 Let `P` be the 100 ms CFS period, `L` the CPU limit, and `C` the probe handler's CPU cost.
 The quota is `L × P` per period, so the handler finishes within
 `(ceil(C ÷ (L × P)) + 1) × P` in the worst phase. CPU request = limit = the largest of the
-limit that makes this bound ≤ 0.4 × the probe timeout, startup CPU divided by 10 seconds,
-or four times mean steady use. For a 1 s timeout, the probe term is `L ≥ C ÷ 300 ms`; for
-example, `frr-metrics` `/livez` at about 80 ms of CPU, measured 2026-11-26, gives `L ≥ 267m`,
+limit that makes this bound ≤ 0.4 × the probe timeout (400 ms for a 1 s timeout), startup CPU
+divided by 10 seconds, or four times mean steady use. For a 1 s timeout, the probe term is
+`L ≥ C ÷ 300 ms`; for example, `frr-metrics` `/livez` at about 80 ms of CPU, measured
+2026-11-26, gives `L ≥ 267m`,
 rounded up to 275m. Round up the final limit to 25m. Measure live with cgroup `cpu.stat`,
 process `utime`/`stime` and child `cutime`/`cstime`, and wall time from `/proc/uptime`;
 time the call from a different container in the pod (for example, `frr`), because a client
