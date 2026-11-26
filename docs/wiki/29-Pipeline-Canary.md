@@ -4,4 +4,4 @@ This page is the fixed input for the OCE pipeline's nightly measurement. Every n
 
 The change is docs-only and has no deploy. Between runs the line reads `off`.
 
-Canary: on
+Canary: off
