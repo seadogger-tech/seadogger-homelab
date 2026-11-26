@@ -1,0 +1,59 @@
+---
+# enable_traefik_resources: bring the Traefik HelmChartConfig in line with the values
+# in the checked-out repo, and nothing else.
+#
+# It writes one object, the HelmChartConfig kube-system/traefik, with the values in
+# vars/traefik_helmchartconfig_values.yml (the same ones the cold-start dashboard task
+# renders). It does not install anything, download anything, touch the dashboard
+# IngressRoute, or restart k3s, so the Ansible runner may run it. k3s's helm controller
+# then upgrades the Traefik release, which rolls the one Traefik pod.
+- name: Refuse an unknown Traefik values file
+  ansible.builtin.assert:
+    that:
+      - >-
+        (traefik_values_file | default('traefik_helmchartconfig_values.yml', true)) in
+        ['traefik_helmchartconfig_values.yml', 'traefik_helmchartconfig_values.previous.yml']
+    fail_msg: >-
+      refused: traefik_values_file must be traefik_helmchartconfig_values.yml or
+      traefik_helmchartconfig_values.previous.yml
+    quiet: true
+
+- name: Set KUBECONFIG global
+  ansible.builtin.set_fact:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+
+- name: Load the shared Traefik HelmChartConfig values
+  ansible.builtin.include_vars:
+    file: "{{ playbook_dir }}/vars/{{ traefik_values_file | default('traefik_helmchartconfig_values.yml', true) }}"
+
+- name: Apply the Traefik HelmChartConfig
+  kubernetes.core.k8s:
+    kubeconfig: "{{ KUBECONFIG }}"
+    state: present
+    definition:
+      apiVersion: helm.cattle.io/v1
+      kind: HelmChartConfig
+      metadata:
+        name: traefik
+        namespace: kube-system
+      spec:
+        valuesContent: "{{ traefik_helmchartconfig_values | to_nice_yaml }}"
+
+- name: Wait for the Traefik Deployment to carry the new resources and be ready
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ KUBECONFIG }}"
+    kind: Deployment
+    name: traefik
+    namespace: kube-system
+  register: traefik_deployment
+  retries: 60
+  delay: 5
+  until: >-
+    traefik_deployment.resources | length > 0 and
+    traefik_deployment.resources[0].spec.template.spec.containers[0].resources.limits.memory
+      == traefik_helmchartconfig_values.resources.limits.memory and
+    traefik_deployment.resources[0].status.updatedReplicas | default(0) == traefik_deployment.resources[0].spec.replicas and
+    traefik_deployment.resources[0].status.readyReplicas | default(0) == traefik_deployment.resources[0].spec.replicas and
+    traefik_deployment.resources[0].status.replicas | default(0) == traefik_deployment.resources[0].spec.replicas
+  changed_when: false
+  when: not ansible_check_mode

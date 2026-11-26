@@ -1,0 +1,12 @@
+---
+# Core 6097389's B0 Traefik HelmChartConfig values, used by R5b at the core
+# landing SHA before the core revert.
+traefik_helmchartconfig_values:
+  additionalArguments:
+    - "--api.insecure=true"
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      memory: 512Mi

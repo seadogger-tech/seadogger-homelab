@@ -180,7 +180,9 @@ Stage B0 lowers only the rook-ceph default. `defaultRequest` stays unchanged:
 | `rook-ceph` | `cpu: 10m`, `memory: 64Mi` | `512Mi` | `72Mi` |
 | `cert-manager` | `cpu: 10m`, `memory: 32Mi` | `256Mi` | `256Mi` (unchanged) |
 
-A default cut requires a seven-day `memory.peak` for **every** container that inherits its limit, including live Pods, workload templates, init containers and Jobs. If any inheriting container lacks that window, keep that namespace's existing default. Recheck the full set and peaks when building a later cut; do not infer coverage from a sample of the pods.
+A default reduction requires at least seven days of `memory.peak` for **every** consumer that inherits its limit. Inventory live Pods and every workload template, including init containers, Jobs and CronJobs, the Helm chart rendered with its configured values, Helm hooks, and Argo hooks or sync-wave Jobs. Include ended-container series. If any consumer lacks the full window or a series, keep the existing memory `default` and raise `defaultRequest` to match it. Otherwise set both to `max(<minimum-memory>, 1.25 × <largest-peak>)`, rounded up to 8Mi. Recheck the complete inventory and window when building a later change; a sample of live Pods is not enough.
+
+When an inherited init container must be Guaranteed, make its LimitRange `default` equal to `defaultRequest` for both CPU and memory. Use placeholders in public examples, such as `cpu: <cpu>` and `memory: <memory>` on both sides. Kubernetes applies these values to omitted container resources; matching requests and limits lets the init container join an otherwise Guaranteed Pod. The evidence gate above still applies before lowering a memory default.
 
 The rook-ceph default consumers are the unset CSI sidecars below. The private Pro Build ticket's fixture records every live pod/container instance, its measured peak, and its measurement window.
 
@@ -198,7 +200,7 @@ The cert-manager controller, cainjector and webhook inherit that namespace's def
 
 The B0 check applies the spec's 1.25× sizing and 8Mi rounding to the private rook-ceph fixture. Other namespace defaults remain unchanged because their Jobs, init containers or workload windows do not meet this cut's evidence rule.
 
-For the Pro B0 rollout, first land and apply the core half. After `enable_rook_ceph_resources` succeeds, verify the live CephCluster `spec.resources.cmd-reporter` and a `rook-ceph-detect-version` Job Pod both show a 64Mi request and 512Mi limit; also verify that the live rook-ceph LimitRange still has a 512Mi default. Record this gate on the Merge-to-main task before Pro lands. Then let Argo sync `cluster-defaults`, `google-mcp`, `operations-mcp` and `ember-trail`, and recreate only the affected rook-ceph Pods, one controller at a time, by deleting each Pod. Verify the recreated Pod resources match Git.
+For the Pro B0 rollout, first land and apply the core half. After `enable_rook_ceph_resources` succeeds, verify the live CephCluster `spec.resources.cmd-reporter` and a `rook-ceph-detect-version` Job Pod both show a 64Mi request and 512Mi limit; also verify that the live rook-ceph LimitRange still has a 512Mi default. Record this gate on the Merge-to-main task before Pro lands. Then let Argo sync `cluster-defaults`, `google-mcp` and `ember-trail`, and recreate only the affected rook-ceph Pods, one controller at a time, by deleting each Pod. Verify the recreated Pod resources match Git. The `operations-mcp` Application is Ansible-owned: advance its `targetRevision` only by running the tagged Ansible task through the scoped runner with a reviewed 40-character lowercase commit SHA. ArgoCD then syncs that pinned SHA; it does not advance the Application when Pro files change.
 
 ```mermaid
 flowchart TD
@@ -218,6 +220,42 @@ flowchart TD
 ```
 
 The `cmd-reporter` key must remain live for as long as the rook-ceph default is below 512Mi. On rollback, restore and verify the live 512Mi default before removing that key from core and rerunning the runner flag.
+
+#### Rolling back a change that adds an apply flag
+
+A change that adds a runner apply flag (an `enable_*_resources` switch, or a variable a task now accepts) must roll back its own objects **at the landing SHA**, before the revert. The revert removes the flag, so a rollback run at the revert SHA cannot reach the objects the flag manages. Rolling back at the landing SHA first leaves the revert with nothing live to change. MetalLB's rollback (R5) and Traefik's (R5b) are the examples: each runs its flag at the landing SHA with a `previous` values file, and the core revert comes only after both gates pass.
+
+**Companion rule:** if an object drifted from Git before the rollout, it rolls back to the Git value at the base, not to the live state captured before the rollout. The captured state is evidence for the "live equals Git" gate. It is not a rollback target. Traefik is the example: its live HelmChartConfig held the Stage B1 values while Git at the base held the earlier values, so R5b restores the base values from `traefik_helmchartconfig_values.previous.yml`, and rollback checks Traefik against those.
+
+Rollback order when core also reverts:
+
+1. **R5, only if the MetalLB step ran:** run the MetalLB flag at the landing SHA with the `previous` values and the gated loop. It replaces only the stale speakers the forward loop replaced; a speaker the forward loop never reached is already current and stays untouched, so a partial rollout leaves untouched speakers untouched. The Job must succeed, or the rollback stops at the named pod.
+2. **R5b, always:** run the Traefik flag at the landing SHA with `traefik_values_file=traefik_helmchartconfig_values.previous.yml`. The Job must succeed, the live HelmChartConfig must equal the `previous` file, Traefik must be Ready at the base resources and `Burstable`, and its LoadBalancer IP must answer.
+3. **Revert core,** only after R5 (if it ran) and R5b both pass. If a gate fails, stop before the revert and investigate at the landing SHA.
+
+```mermaid
+flowchart TD
+  S["Core rollback requested"] --> Q{"MetalLB step ran?"}
+  Q -- yes --> R5["R5: MetalLB previous values at landing SHA, gated loop"]
+  R5 --> R5G{"Job succeeded?"}
+  R5G -- "no: stop at the named pod" --> STOP["Stop before the core revert;<br/>leave objects as they are; record and investigate"]
+  R5G -- yes --> R5b
+  Q -- no --> R5b["R5b: Traefik previous values at landing SHA"]
+  R5b --> R5bG{"Job succeeded, HelmChartConfig = previous,<br/>Traefik Ready at base resources and Burstable,<br/>LoadBalancer IP answers?"}
+  R5bG -- "no: do not revert core" --> STOP
+  R5bG -- yes --> R6["R6: revert core"]
+  R6 --> R7["R7: remaining flags at the revert SHA"]
+  R7 --> R8{"R8: every object matches its target<br/>(Traefik: base values, others: prior record)?"}
+  R8 -- yes --> OK["Rollback complete"]
+  R8 -- no --> STOP
+  style S fill:#1e3a5f,color:#fff
+  style R5 fill:#8b4513,color:#fff
+  style R5b fill:#8b4513,color:#fff
+  style R6 fill:#8b4513,color:#fff
+  style R7 fill:#8b4513,color:#fff
+  style STOP fill:#8b4513,color:#fff
+  style OK fill:#2d5016,color:#fff
+```
 
 **Example ArgoCD Application:**
 ```yaml
