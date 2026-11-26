@@ -221,6 +221,42 @@ flowchart TD
 
 The `cmd-reporter` key must remain live for as long as the rook-ceph default is below 512Mi. On rollback, restore and verify the live 512Mi default before removing that key from core and rerunning the runner flag.
 
+#### Rolling back a change that adds an apply flag
+
+A change that adds a runner apply flag (an `enable_*_resources` switch, or a variable a task now accepts) must roll back its own objects **at the landing SHA**, before the revert. The revert removes the flag, so a rollback run at the revert SHA cannot reach the objects the flag manages. Rolling back at the landing SHA first leaves the revert with nothing live to change. MetalLB's rollback (R5) and Traefik's (R5b) are the examples: each runs its flag at the landing SHA with a `previous` values file, and the core revert comes only after both gates pass.
+
+**Companion rule:** if an object drifted from Git before the rollout, it rolls back to the Git value at the base, not to the live state captured before the rollout. The captured state is evidence for the "live equals Git" gate. It is not a rollback target. Traefik is the example: its live HelmChartConfig held the Stage B1 values while Git at the base held the earlier values, so R5b restores the base values from `traefik_helmchartconfig_values.previous.yml`, and rollback checks Traefik against those.
+
+Rollback order when core also reverts:
+
+1. **R5, only if the MetalLB step ran:** run the MetalLB flag at the landing SHA with the `previous` values and the gated loop, replacing every speaker. Its Job must succeed, or the rollback stops at the named pod.
+2. **R5b, always:** run the Traefik flag at the landing SHA with `traefik_values_file=traefik_helmchartconfig_values.previous.yml`. The Job must succeed, the live HelmChartConfig must equal the `previous` file, Traefik must be Ready at the base resources and `Burstable`, and its LoadBalancer IP must answer.
+3. **Revert core,** only after R5 (if it ran) and R5b both pass. If a gate fails, stop before the revert and investigate at the landing SHA.
+
+```mermaid
+flowchart TD
+  S["Core rollback requested"] --> Q{"MetalLB step ran?"}
+  Q -- yes --> R5["R5: MetalLB previous values at landing SHA, gated loop"]
+  R5 --> R5G{"Job succeeded?"}
+  R5G -- "no: stop at the named pod" --> STOP["Stop before the core revert;<br/>leave objects as they are; record and investigate"]
+  R5G -- yes --> R5b
+  Q -- no --> R5b["R5b: Traefik previous values at landing SHA"]
+  R5b --> R5bG{"Job succeeded, HelmChartConfig = previous,<br/>Traefik Ready at base resources and Burstable,<br/>LoadBalancer IP answers?"}
+  R5bG -- "no: do not revert core" --> STOP
+  R5bG -- yes --> R6["R6: revert core"]
+  R6 --> R7["R7: remaining flags at the revert SHA"]
+  R7 --> R8{"R8: every object matches its target<br/>(Traefik: base values, others: prior record)?"}
+  R8 -- yes --> OK["Rollback complete"]
+  R8 -- no --> STOP
+  style S fill:#1e3a5f,color:#fff
+  style R5 fill:#8b4513,color:#fff
+  style R5b fill:#8b4513,color:#fff
+  style R6 fill:#8b4513,color:#fff
+  style R7 fill:#8b4513,color:#fff
+  style STOP fill:#8b4513,color:#fff
+  style OK fill:#2d5016,color:#fff
+```
+
 **Example ArgoCD Application:**
 ```yaml
 apiVersion: argoproj.io/v1alpha1
