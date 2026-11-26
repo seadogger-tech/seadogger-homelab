@@ -665,10 +665,16 @@ live at build time and taken as the maximum over all replicas on all nodes.
 
 ### CPU rule for Guaranteed containers
 
-CPU request = limit = the largest of: the slowest probe handler's CPU cost divided by a
-quarter of its timeout; startup CPU divided by 10 seconds; or four times mean steady use.
-Round up to 25m. Measure live with cgroup `cpu.stat`, process `utime`/`stime` and child
-`cutime`/`cstime`, and wall time from `/proc/uptime`. Values in the table remain placeholders;
+Let `P` be the 100 ms CFS period, `L` the CPU limit, and `C` the probe handler's CPU cost.
+The quota is `L × P` per period, so the handler finishes within
+`(ceil(C ÷ (L × P)) + 1) × P` in the worst phase. CPU request = limit = the largest of the
+limit that makes this bound ≤ 0.4 × the probe timeout, startup CPU divided by 10 seconds,
+or four times mean steady use. For a 1 s timeout, the probe term is `L ≥ C ÷ 300 ms`; for
+example, `frr-metrics` `/livez` at about 80 ms of CPU, measured 2026-11-26, gives `L ≥ 267m`,
+rounded up to 275m. Round up the final limit to 25m. Measure live with cgroup `cpu.stat`,
+process `utime`/`stime` and child `cutime`/`cstime`, and wall time from `/proc/uptime`;
+time the call from a different container in the pod (for example, `frr`), because a client
+inside `frr-metrics` spends that cgroup's own quota. Values in the table remain placeholders;
 the measured table belongs in the private Pro sizing record and its ticket.
 
 Every MetalLB speaker must be `Guaranteed`. There is no `Burstable` fallback: if any node's
@@ -678,7 +684,7 @@ The `frr-metrics` container needs CPU for the FRR probe path: every `/livez` cal
 
 | Container | Request = limit |
 |---|---:|
-| `frr-metrics` | `<CPU>` (at least 250m) |
+| `frr-metrics` | `<CPU>` (at least 275m) |
 | `frr` | `<CPU>` (at least 125m) |
 | `reloader` | `<CPU>` (at least 125m) |
 | `speaker` | `<CPU>` (at least 100m) |
@@ -812,7 +818,7 @@ flowchart TD
   D2 -- yes --> F["runner: MetalLB upgrade + gated loop, expect Guaranteed"]
   F --> F1{"Ready, target revision, Guaranteed, restartCount 0, N passes?"}
   F1 -- "no: named stop; no further deletion" --> RP
-  F1 -- yes --> D3{"D3: all speakers clean; 10 x /livez < 250 ms; IPs announced?"}
+  F1 -- yes --> D3{"D3: all speakers clean; 10 x /livez < 400 ms; IPs announced?"}
   D3 -- no --> RP
   D3 -- yes --> G["runner (Pro): operations-mcp pin advance"]
   G --> D4{"D4: targetRevision = sync.revision = SHA, Healthy?"}
