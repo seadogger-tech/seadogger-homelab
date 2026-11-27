@@ -281,6 +281,88 @@ spec:
       - CreateNamespace=true
 ```
 
+#### Core apps: how a change reaches the cluster (Stage B3)
+
+Each core app reaches the cluster by one of three paths, and the path decides how a size or placement change lands and how it rolls back.
+
+| Path | Apps | How a change lands | How it rolls back |
+| --- | --- | --- | --- |
+| Argo, `HEAD` | mealie | Argo syncs the merge | Revert; Argo syncs it |
+| Argo, remote `valueFiles` | nextcloud, jellyfin, pihole, home-assistant | The Application reads its values file from raw `master`, so after the merge **hard refresh** each Application, then check the live pod spec rather than the sync status | Revert, then hard refresh each again |
+| Argo, pinned revision | nextcloud-db, nextcloud-redis | The Application's `targetRevision` is a 40-character commit that only the play moves: run `nextcloud_postgresql` / `nextcloud_redis` with the landing SHA | Run the play again with the recorded prior pin |
+| Apply-only play | nextcloud-s3-backup, xmltv-proxy | The play downloads the manifest from raw `master` and applies it once; no Argo Application follows it | Revert, then **re-run each play that ran** |
+
+Key points:
+
+- **Cron sidecar key.** The Nextcloud chart sizes the cron sidecar only through `cronjob.sidecar.resources`. The old `cronjob.resources` key is not read by chart 8.9.1, which left the sidecar on the namespace LimitRange defaults (128 Mi request, 1 Gi limit). The values file now sets `cronjob.sidecar.resources` (72/96 Mi) and the dead key is removed. The app container's own size is the top-level `resources`.
+- **Request = app budget.** Kubernetes cannot see a budget the app sets for itself, so for these containers the request is the larger of the measured peak and that budget, and the limit is 1.25 × the request: the Nextcloud app container (PHP `memory_limit`, from the image's `PHP_MEMORY_LIMIT`), Redis (`maxmemory`) and Postgres (`shared_buffers` + `max_connections` × `work_mem` + `maintenance_work_mem` + `autovacuum_work_mem` + a baseline). Change the setting and the request together. The figures are the placeholders in the values files; measured peaks are kept in the private Pro repository, not here.
+- **Jellyfin placement.** Jellyfin may run only on `anakin.local` or `obiwan.local` (required node affinity), and prefers anakin. The `kubernetes.io/hostname` label is the full node name, so `anakin` alone matches nothing. The pod uses host networking and the host's `/dev`, so before moving it check that the node has `/dev/dri` and that no other host-network pod uses its ports (8096, 8920, 1900/udp, 7359/udp).
+
+##### Apply-only plays follow raw `master`
+
+`nextcloud_s3_backup_deploy.yml` and `jellyfin_xmltv_proxy_deploy.yml` fetch their manifest from `raw.githubusercontent.com/.../master/...`, not from the runner's checkout. The live CronJob and Deployment therefore follow whatever `master` held when the play last ran. Two rules follow:
+
+1. A Git revert alone leaves them at the changed values. After a revert, **re-run each play that ran at rollout**, at the revert SHA.
+2. Raw `master` is served through a cache (up to 5 minutes). Before each run, check that the raw URL serves the blob you expect, and wait and re-check until it does. The expected blob is the one at the landing SHA for a rollout and at the revert SHA for a rollback:
+
+```bash
+SHA=<landing or revert SHA>
+for f in deployments/nextcloud/s3-backup-cronjob.yaml deployments/jellyfin/xmltv-proxy.yaml; do
+  raw=$(curl -fsSL "https://raw.githubusercontent.com/seadogger-tech/seadogger-homelab/master/$f" | git hash-object --stdin)
+  want=$(git rev-parse "$SHA:$f")
+  [ "$raw" = "$want" ] && echo "$f ok" || echo "$f raw=$raw want=$want (wait, re-check)"
+done
+```
+
+##### Runner Job arguments for the four plays
+
+Each play runs as its own runner Job (`REPLACE_WORKDIR=/work/core/ansible`) at a full 40-character Core SHA. The `-e` object sets every other play's flag to `false`; without that, `main.yml` runs each play whose flag defaults to true (PKI, Pi-hole, Nextcloud, Jellyfin, Home Assistant, Mealie and others). The two pinned-revision plays also take `--tags`, so only their own tasks run. The runner's Job SHA is the landing SHA for a rollout and the revert SHA for a rollback.
+
+| Play | Rollout `<REV>` | Rollback `<REV>` |
+| --- | --- | --- |
+| nextcloud-db | the landing SHA | the pin recorded before rollout |
+| nextcloud-redis | the landing SHA | the pin recorded before rollout |
+| s3-backup, xmltv-proxy | no `<REV>`: run at the landing SHA once the raw-blob check passes | no `<REV>`: run at the revert SHA once the raw-blob check passes |
+
+Run only the plays that were applied at rollout; a play that did not run changed nothing live and needs no rollback run. `REPLACE_ARGS` for each:
+
+**nextcloud-db (`nextcloud_postgresql`)**
+
+```text
+main.yml -i hosts.ini --tags nextcloud_postgresql -e '{"enable_internal_pki":false,"enable_pihole":false,"enable_nextcloud":false,"enable_nextcloud_postgresql":true,"enable_nextcloud_redis":false,"enable_nextcloud_s3_backup":false,"enable_jellyfin":false,"enable_jellyfin_secrets":false,"enable_jellyfin_xmltv_proxy":false,"enable_jellyfin_hdhomerun_hls":false,"enable_traefik_dashboard":false,"enable_home_assistant":false,"enable_mealie":false,"enable_nut_ups":false,"enable_rook_ceph_resources":false,"enable_metallb_resources":false,"enable_traefik_resources":false,"enable_argocd_resources":false,"enable_cert_manager_resources":false,"nextcloud_postgresql_revision":"<REV>"}'
+```
+
+**nextcloud-redis (`nextcloud_redis`)**
+
+```text
+main.yml -i hosts.ini --tags nextcloud_redis -e '{"enable_internal_pki":false,"enable_pihole":false,"enable_nextcloud":false,"enable_nextcloud_postgresql":false,"enable_nextcloud_redis":true,"enable_nextcloud_s3_backup":false,"enable_jellyfin":false,"enable_jellyfin_secrets":false,"enable_jellyfin_xmltv_proxy":false,"enable_jellyfin_hdhomerun_hls":false,"enable_traefik_dashboard":false,"enable_home_assistant":false,"enable_mealie":false,"enable_nut_ups":false,"enable_rook_ceph_resources":false,"enable_metallb_resources":false,"enable_traefik_resources":false,"enable_argocd_resources":false,"enable_cert_manager_resources":false,"nextcloud_redis_revision":"<REV>"}'
+```
+
+**s3-backup (`nextcloud_s3_backup_deploy.yml`)**
+
+```text
+main.yml -i hosts.ini -e '{"enable_internal_pki":false,"enable_pihole":false,"enable_nextcloud":false,"enable_nextcloud_postgresql":false,"enable_nextcloud_redis":false,"enable_nextcloud_s3_backup":true,"enable_jellyfin":false,"enable_jellyfin_secrets":false,"enable_jellyfin_xmltv_proxy":false,"enable_jellyfin_hdhomerun_hls":false,"enable_traefik_dashboard":false,"enable_home_assistant":false,"enable_mealie":false,"enable_nut_ups":false,"enable_rook_ceph_resources":false,"enable_metallb_resources":false,"enable_traefik_resources":false,"enable_argocd_resources":false,"enable_cert_manager_resources":false}'
+```
+
+**xmltv-proxy (`jellyfin_xmltv_proxy_deploy.yml`)**
+
+```text
+main.yml -i hosts.ini -e '{"enable_internal_pki":false,"enable_pihole":false,"enable_nextcloud":false,"enable_nextcloud_postgresql":false,"enable_nextcloud_redis":false,"enable_nextcloud_s3_backup":false,"enable_jellyfin":false,"enable_jellyfin_secrets":false,"enable_jellyfin_xmltv_proxy":true,"enable_jellyfin_hdhomerun_hls":false,"enable_traefik_dashboard":false,"enable_home_assistant":false,"enable_mealie":false,"enable_nut_ups":false,"enable_rook_ceph_resources":false,"enable_metallb_resources":false,"enable_traefik_resources":false,"enable_argocd_resources":false,"enable_cert_manager_resources":false}'
+```
+
+The pinned-revision plays assert the private database and Redis credentials against the live Secrets, and the s3-backup play needs the four `nextcloud_s3_backup_*` values; all come from the runner's private `config.yml`. Count those key names with a throwaway Job (names only, never values) before the first run. A play whose keys are missing keeps its manifest change in Git but is not run.
+
+After each apply-only play, check the live object, not the Job result:
+
+```bash
+kubectl -n nextcloud get cronjob nextcloud-s3-backup \
+  -o jsonpath='{.spec.jobTemplate.spec.template.spec.containers[?(@.name=="s3-sync")].resources}{"\n"}'
+kubectl -n jellyfin get deploy xmltv-proxy \
+  -o jsonpath='{.spec.template.spec.containers[?(@.name=="proxy")].resources}{" ready="}{.status.readyReplicas}{"\n"}'
+```
+
+The CronJob's `s3-sync` resources must equal the manifest at the SHA you ran, and `xmltv-proxy` must show those resources with `readyReplicas` of at least 1.
+
 ### 4. Deployment Methods by Component
 
 | Component | Deployed By | Method | Managed By |

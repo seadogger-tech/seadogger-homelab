@@ -106,10 +106,10 @@ spec:
         resources:
           requests:
             cpu: "50m"
-            memory: "64Mi"
+            memory: "24Mi"
           limits:
             cpu: "200m"
-            memory: "128Mi"
+            memory: "32Mi"
       volumes:
       - name: script
         configMap:

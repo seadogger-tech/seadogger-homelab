@@ -149,8 +149,8 @@ def main():
         redis_container = redis_pod['containers'][0]
         assert redis_container['image'] == ('docker.io/library/redis:7.4.11-bookworm@sha256:'
                                             '4fa24486b8bcca8eec45ee0eb166edc674795e53a2b53d1a9ef263eecebaac85')
-        assert redis_container['resources']['requests']['memory'] == '96Mi'
-        assert redis_container['resources']['limits']['memory'] == '192Mi'
+        assert redis_container['resources']['requests']['memory'] == '64Mi'
+        assert redis_container['resources']['limits']['memory'] == '80Mi'
         assert all('persistentVolumeClaim' not in volume for volume in redis_pod['volumes'])
         redis_command = '\n'.join(redis_container['command'])
         assert all(setting in redis_command for setting in ('maxmemory 64mb', 'maxmemory-policy noeviction',

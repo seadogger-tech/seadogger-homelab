@@ -34,9 +34,13 @@ def csi_values(path, key):
     return {row["name"].strip(): row["resource"] for row in yaml.safe_load(values["csi"][key])}
 
 
+# Commit the Map branch was cut from (merge-base of master and map/OCE-369-b3-fit): the pre-B3 state.
+PRE_B3_BASE = "518f325d5b85de472214584283891b2f01d79fb2"
+
+
 def base_yaml(path):
     relative = path.relative_to(CORE).as_posix()
-    result = subprocess.run(["git", "show", f"origin/map/OCE-369-b3-fit:{relative}"],
+    result = subprocess.run(["git", "show", f"{PRE_B3_BASE}:{relative}"],
                             cwd=CORE, capture_output=True, text=True, check=True)
     return yaml.safe_load(result.stdout)
 
