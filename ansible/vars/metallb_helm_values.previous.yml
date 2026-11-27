@@ -1,15 +1,8 @@
 ---
-# Rollback values for the MetalLB release (Stage B1, OCE-369): Core 6097389's
-# metallb_helm_values, the Stage B0 values, plus `speaker.updateStrategy: OnDelete`.
-#
-# Run with  -e metallb_values_file=metallb_helm_values.previous.yml  (see
-# tasks/metallb_resources.yml and wiki 30). The speaker DaemonSet stays on
-# OnDelete so that going back to these values is itself gated: the pod template
-# returns to the B0 one, and tasks/metallb_speaker_replace.yml replaces the
-# stale speakers one at a time with a network check between pods. Reverting
-# the B1 commit afterwards changes only the strategy, which is not part of the
-# pod template, so it replaces no speaker. A later change to the shared values
-# replaces this file with its own prior values.
+# Helm values for the MetalLB release. Shared by tasks/metallb_native_deploy.yml
+# (cold start) and tasks/metallb_resources.yml (enable_metallb_resources), so a
+# helm upgrade from either one renders the same release - each run replaces the
+# release values rather than merging them.
 #
 # Resource requests are set deliberately, and not for capacity reasons.
 #
@@ -20,46 +13,77 @@
 # service in the cluster, including Pi-hole's DNS on 192.168.1.250, which the
 # nodes themselves resolve through.
 #
-# Modest requests move them to Burstable so they are no longer first in line.
-# Sized against observed steady state (speakers 69-95 MiB, controller 64 MiB)
-# with headroom; limits are deliberately generous because a speaker being
-# OOM-killed is worse than one briefly using more than expected.
+# Requests move them out of BestEffort so they are no longer first in line;
+# Stage B1 below makes them Guaranteed.
 #
-# Stage B0 (OCE-369): limits are cut to 1.25 x the memory.peak read over 7+
-# days (OCE-550); requests never go up. CPU for the sidecars comes from the
-# metallb-system LimitRange, so only memory is set here.
+# Stage B0 (OCE-369): limits were cut to 1.25 x the memory.peak read over 7+
+# days (OCE-550); requests never went up.
+#
+# Stage B1 (OCE-369): every container is Guaranteed: memory and CPU request =
+# limit, at 1.25 x its measured peak P rounded up to 8Mi (the sizing rule in
+# docs/wiki/30-Cluster-Resource-Monitor.md; the per-container table is in the
+# private Pro docs/operations/memory-sizing.md). No request is below P and no
+# limit is above the B0 one. The three init containers (cp-frr-files,
+# cp-reloader, cp-metrics) take their size from the metallb-system LimitRange,
+# which has to carry equal defaults before a speaker is recreated, or the pod
+# stays Burstable.
+# CPU request = limit follows OCE-706 spec §3.1; the measured per-node table is
+# on the OCE-709 ticket and the reviewed sizing record is in Pro.
+#
+# The speaker DaemonSet uses OnDelete, not RollingUpdate. RollingUpdate moves
+# on as soon as a replacement is available and never looks at the network;
+# a speaker that cannot announce its Services is an outage for the whole
+# cluster. With OnDelete, `helm upgrade` changes the template and replaces no
+# speaker; tasks/metallb_speaker_replace.yml then replaces them one at a time
+# and checks every LoadBalancer Service before the next deletion.
 metallb_helm_values:
   controller:
+    affinity:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+            - matchExpressions:
+                - key: kubernetes.io/hostname
+                  operator: NotIn
+                  values: [rey.local]
     resources:
       requests:
-        cpu: 25m
-        memory: 96Mi   # below the 120.4Mi peak; raising it is Stage B
+        cpu: 50m
+        memory: 152Mi
       limits:
-        memory: 152Mi  # was 512Mi
+        cpu: 50m
+        memory: 152Mi
   speaker:
     updateStrategy:
       type: OnDelete
     resources:
       requests:
-        cpu: 25m
-        memory: 80Mi   # was 128Mi
+        cpu: 100m
+        memory: 88Mi
       limits:
-        memory: 104Mi  # was 512Mi; peak 68.1Mi
+        cpu: 100m
+        memory: 88Mi
     frr:
       resources:
         requests:
-          memory: 32Mi
+          cpu: 125m
+          memory: 64Mi
         limits:
-          memory: 64Mi   # was 256Mi; peak 50.2Mi
+          cpu: 125m
+          memory: 64Mi
     reloader:
       resources:
         requests:
-          memory: 32Mi
+          cpu: 125m
+          memory: 64Mi
         limits:
-          memory: 64Mi   # was 256Mi; peak 45.3Mi
+          cpu: 125m
+          memory: 64Mi
     frrMetrics:
       resources:
         requests:
-          memory: 32Mi
+          cpu: 275m
+          memory: 48Mi
         limits:
-          memory: 48Mi   # was 256Mi; peak 32.3Mi
+          cpu: 275m
+          memory: 48Mi

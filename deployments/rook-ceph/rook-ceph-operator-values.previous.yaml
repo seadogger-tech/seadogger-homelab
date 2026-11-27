@@ -12,16 +12,25 @@ resources:
     # CFS periods (31 min in its first hour), which made every Ceph change
     # roll slowly. It idles near zero; the limit only matters while reconciling.
     cpu: "1"
-    memory: 256Mi
+    memory: 216Mi
   requests:
     cpu: 100m
-    memory: 128Mi
+    memory: 168Mi
 
 discover:
   tolerations:
     - key: node-role.kubernetes.io/control-plane
       operator: Exists
       effect: NoSchedule
+
+ceph-csi-operator:
+  controllerManager:
+    manager:
+      resources:
+        requests:
+          memory: 48Mi
+        limits:
+          memory: 64Mi
 
 csi:
   provisionerTolerations:
@@ -52,14 +61,14 @@ csi:
           memory: 64Mi   # live request; the repo's 128Mi is not what the Driver CR carries
           cpu: 100m
         limits:
-          memory: 128Mi   # was 1Gi; peak 102.2Mi (B0)
+          memory: 80Mi
     - name : liveness-prometheus
       resource:
         requests:
-          memory: 32Mi   # was 128Mi; measured 5-21Mi
+          memory: 24Mi
           cpu: 25m
         limits:
-          memory: 48Mi   # was 256Mi; peak 37.9Mi (B0)
+          memory: 32Mi
   # NOTE: with ROOK_USE_CSI_OPERATOR (Rook 1.18, pkg/operator/ceph/csi/operator_driver.go) the
   # operator re-renders the Driver CRs on every start from these keys, and the two
   # pairs are crossed:
@@ -134,17 +143,17 @@ csi:
     - name : csi-cephfsplugin
       resource:
         requests:
-          memory: 64Mi   # live request; the repo's 128Mi is not what the Driver CR carries
+          memory: 40Mi
           cpu: 100m
         limits:
-          memory: 144Mi   # was 1Gi; peak 110.4Mi (B0)
+          memory: 56Mi
     - name : liveness-prometheus
       resource:
         requests:
-          memory: 32Mi   # was 128Mi; measured 5-21Mi
+          memory: 24Mi
           cpu: 25m
         limits:
-          memory: 48Mi   # was 256Mi; peak 37.9Mi (B0)
+          memory: 32Mi
   csiCephFSProvisionerResource: |
     - name : csi-provisioner
       resource:

@@ -747,7 +747,6 @@ affinity:
               values:
                 - anakin.local
                 - obiwan.local
-                - rey.local
 
 dnsConfig: {}
 # Custom dns config for Nextcloud containers.

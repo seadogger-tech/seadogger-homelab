@@ -119,19 +119,67 @@ current values file (default) or `traefik_helmchartconfig_values.previous.yml`.
 Any other name fails before an apply. `guard.py` refuses none of these selectors
 or the new apply flag.
 
-**B3 rollback revisions.** Run Rook with `rook_values_set=previous` at the
-core landing SHA (the re-plan landing SHA, which carries the fixed flag); add
-`rook_recovery=true` only if Ceph is not HEALTH_OK and the recovery pre-gate permits it. At that same re-plan landing SHA, run
-`enable_cert_manager_resources` with
-`cert_manager_application_file=cert-manager-application.previous.yml`, and
-`enable_traefik_resources` with
-`traefik_values_file=traefik_helmchartconfig_values.previous.yml`. ArgoCD and
-the pinned-revision plays roll back at the core revert SHA, where their
-pre-B3 values are checked out. The two Rook `.previous` files are the values
-from the base branch before B3; cert-manager `.previous` is the reconciled
-pre-B3 Application; Traefik `.previous` is the base branch's current values.
-The runbook at [Cluster Resource Monitor](30-Cluster-Resource-Monitor.md#stage-b3-fit-the-four-nodes)
-contains the B3 activity diagram and full C2/C3 checks.
+**Rollback revisions.** Use the 40-character re-plan landing SHA `<LAND>` for
+steps 1 and 2, then the 40-character core revert SHA `<REVERT>` for step 4.
+Rook and cert-manager roll back before the revert. The Rook `.previous` pair
+is byte-identical to `f883ee2`'s B3 current values: it keeps B3 sizing and has
+no ctrlplugin placement rule. The current operator values differ only at
+`csi.provisionerNodeAffinity`; the current cluster values equal `.previous`.
+Cert-manager `.previous` remains the reconciled pre-B3 Application.
+
+1. At `<LAND>`, run Rook with `rook_values_set=previous`:
+
+   ```bash
+   ansible-playbook -i hosts.ini main.yml --tags enable_rook_ceph_resources \
+     -e '{"enable_rook_ceph_resources": true, "rook_values_set": "previous"}'
+   ```
+
+   If Ceph is not HEALTH_OK, add `"rook_recovery": true` to the same `-e`
+   object. The recovery gate allows only its listed HEALTH_WARN codes and at
+   most one OSD down. If it refuses, stop before any Helm upgrade and before
+   reverting; do not override it. Check [R1](30-Cluster-Resource-Monitor.md#b3-rollback-gates)
+   before proceeding.
+
+2. At `<LAND>`, run cert-manager with its pre-B3 Application:
+
+   ```bash
+   ansible-playbook -i hosts.ini main.yml --tags enable_cert_manager_resources \
+     -e '{"enable_cert_manager_resources": true, "cert_manager_application_file": "cert-manager-application.previous.yml"}'
+   ```
+
+   Check [R2](30-Cluster-Resource-Monitor.md#b3-rollback-gates).
+
+3. Revert Core on `master`, producing `<REVERT>`, then hard-refresh Pi-hole
+   and Nextcloud.
+
+4. At `<REVERT>`, run MetalLB and ArgoCD with their default values, one flag
+   per run:
+
+   ```bash
+   ansible-playbook -i hosts.ini main.yml --tags enable_metallb_resources \
+     -e '{"enable_metallb_resources": true}'
+   ansible-playbook -i hosts.ini main.yml --tags enable_argocd_resources \
+     -e '{"enable_argocd_resources": true}'
+   ```
+
+   After the raw-blob check, run each remaining play separately:
+
+   ```bash
+   ansible-playbook -i hosts.ini main.yml --tags nextcloud_postgresql \
+     -e '{"enable_nextcloud_postgresql": true}'
+   ansible-playbook -i hosts.ini main.yml --tags nextcloud_redis \
+     -e '{"enable_nextcloud_redis": true}'
+   ansible-playbook -i hosts.ini main.yml \
+     -e '{"enable_nextcloud_s3_backup": true}'
+   ansible-playbook -i hosts.ini main.yml \
+     -e '{"enable_jellyfin_xmltv_proxy": true}'
+   ```
+
+   Check [R3](30-Cluster-Resource-Monitor.md#b3-rollback-gates).
+
+Rook and cert-manager are not rerun at `<REVERT>`. The [Cluster Resource
+Monitor](30-Cluster-Resource-Monitor.md#stage-b3-placement) runbook records
+the R1–R3 checks and stop conditions.
 
 **How to run one.** Follow *Running* below with the arguments `main.yml -i hosts.ini --tags enable_metallb_resources -e '{"enable_metallb_resources": true}'` (one flag, with its tag, per run). Afterwards run the Helm diff for that release; it should be empty and no pod should restart. The flag changes only what the repo's values say, so a non-empty diff means the cluster had drifted from the repo.
 

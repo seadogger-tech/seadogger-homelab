@@ -38,6 +38,14 @@
 # and checks every LoadBalancer Service before the next deletion.
 metallb_helm_values:
   controller:
+    affinity:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+            - matchExpressions:
+                - key: kubernetes.io/hostname
+                  operator: NotIn
+                  values: [rey.local]
     resources:
       requests:
         cpu: 50m

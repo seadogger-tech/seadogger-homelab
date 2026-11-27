@@ -17,6 +17,14 @@ spec:
           labels:
             app: nextcloud-s3-backup
         spec:
+          affinity:
+            nodeAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                nodeSelectorTerms:
+                  - matchExpressions:
+                      - key: kubernetes.io/hostname
+                        operator: NotIn
+                        values: [rey.local]
           restartPolicy: OnFailure
           securityContext:
             runAsUser: 33
