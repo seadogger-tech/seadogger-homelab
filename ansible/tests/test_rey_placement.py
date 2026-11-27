@@ -14,6 +14,8 @@ MAP_BASE = "f883ee2"
 WORKERS = {"anakin.local", "obiwan.local"}
 CORE_WORKERS = WORKERS | {"yoda"}
 REFERENCE_SHA256 = {
+    "ansible/vars/metallb_helm_values.yml":
+        "ec5c4fed08b87e8787cdf42393595483f26bdd64bb6b53b3ab70271ae7eb5944",
     "deployments/rook-ceph/rook-ceph-operator-values.yaml":
         "ff8fb80b7b16a0b691abfe39f6455ba38a6dffc1670355e1fceccc7c7cdfd934",
     "deployments/rook-ceph/rook-ceph-cluster-values.yaml":
@@ -96,7 +98,8 @@ class TestRequiredPlacement(unittest.TestCase):
 
     def test_argocd_component_values_require_notin_rey(self):
         values = read_yaml(CORE / "ansible/vars/argocd_helm_values.yml")["argocd_helm_values"]
-        components = ("controller", "repoServer", "dex", "server", "notifications", "applicationSet", "redis")
+        components = ("controller", "repoServer", "dex", "server", "notifications", "applicationSet", "redis",
+                     "redisSecretInit")
         for name in components:
             with self.subTest(component=name):
                 assert_required_hosts(self, values[name]["affinity"], None)
@@ -144,7 +147,19 @@ class TestRequiredPlacement(unittest.TestCase):
         current = read_yaml(CORE / "ansible/vars/metallb_helm_values.yml")["metallb_helm_values"]
         previous = read_yaml(CORE / "ansible/vars/metallb_helm_values.previous.yml")["metallb_helm_values"]
         assert_required_hosts(self, current["controller"]["affinity"], None)
-        self.assertEqual(current, previous)
+        previous_reference = rendered_file_at(MAP_BASE, "ansible/vars/metallb_helm_values.yml")
+        previous_path = CORE / "ansible/vars/metallb_helm_values.previous.yml"
+        if len(previous_reference) == 64:
+            self.assertEqual(hashlib.sha256(previous_path.read_bytes()).hexdigest(),
+                             previous_reference.decode("ascii"))
+        else:
+            self.assertEqual(previous_path.read_bytes(), previous_reference)
+        current_without_affinity = yaml.safe_load((CORE / "ansible/vars/metallb_helm_values.yml").read_text())[
+            "metallb_helm_values"]
+        current_without_affinity["controller"].pop("affinity", None)
+        previous_without_affinity = yaml.safe_load(previous_path.read_text())["metallb_helm_values"]
+        previous_without_affinity["controller"].pop("affinity", None)
+        self.assertEqual(current_without_affinity, previous_without_affinity)
 
     def test_rook_previous_pair_is_the_b3_snapshot_and_only_current_operator_has_rule(self):
         pairs = (
@@ -197,9 +212,9 @@ class TestRequiredPlacement(unittest.TestCase):
     def test_argocd_render_applies_required_placement_to_each_component_pod(self):
         values = read_yaml(CORE / "ansible/vars/argocd_helm_values.yml")["argocd_helm_values"]
         docs = render_values("argo-cd", "https://argoproj.github.io/argo-helm", "8.5.8", values)
-        workloads = [doc for doc in docs if doc.get("kind") in ("Deployment", "StatefulSet")
+        workloads = [doc for doc in docs if doc.get("kind") in ("Deployment", "StatefulSet", "Job")
                      and "argocd" in doc.get("metadata", {}).get("name", "")]
-        self.assertGreaterEqual(len(workloads), 7)
+        self.assertGreaterEqual(len(workloads), 8)
         for workload in workloads:
             with self.subTest(workload=workload["metadata"]["name"]):
                 assert_required_hosts(self, pod_spec(workload)["affinity"], None)

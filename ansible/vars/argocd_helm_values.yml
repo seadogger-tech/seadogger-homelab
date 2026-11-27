@@ -133,3 +133,14 @@ argocd_helm_values:
         memory: 32Mi   # was 64Mi
       limits:
         memory: 40Mi   # peak 15.4Mi
+  # The chart's pre-install/pre-upgrade secret-init hook runs when the
+  # external Redis host is unset, which is the configuration used here.
+  redisSecretInit:
+    affinity:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+            - matchExpressions:
+                - key: kubernetes.io/hostname
+                  operator: NotIn
+                  values: [rey.local]
