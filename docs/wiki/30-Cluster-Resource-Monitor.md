@@ -43,6 +43,47 @@ SHA where it ran.
   `status.php` answers, S3 backup reads Git's `0 2 * * *` schedule, Ceph is no
   worse than at the trigger, and no workload is in a restart loop.
 
+```mermaid
+flowchart TD
+  A["Kirk approves"] --> P["record prior state"]
+  P --> L["land core; refresh; plays; rook; metallb; argocd; cert-manager"]
+  L --> E1{"E1: movers Ready off rey, apps Healthy,<br/>webhook admits, s3 at 03:00 ET, Ceph OK?"}
+  E1 -- no --> HO{"Ceph HEALTH_OK?"}
+  HO -- yes --> RR["Rook previous at LAND"]
+  HO -- no --> RG{"recovery gate allows?<br/>(not ERR, listed codes, ≤1 OSD down)"}
+  RG -- no --> ST["stop: no revert;<br/>post refusal; investigate at LAND"]
+  RG -- yes --> RRR["Rook previous + rook_recovery at LAND"]
+  RR & RRR --> R1G{"R1: values = prior, ctrlplugins unpinned,<br/>B3 sizing, no Ceph daemon restarted, PGs clean?"}
+  R1G -- no --> ST
+  R1G -- yes --> R2A["cert-manager .previous at LAND (R2)"]
+  R2A --> R2G{"R2: Application = .previous;<br/>webhook admits test Certificate?"}
+  R2G -- no --> ST
+  R2G -- yes --> RV["revert core; refresh"]
+  RV --> RAW{"raw master serves revert blob<br/>(s3-backup, xmltv manifests)?"}
+  RAW -- "not yet: wait, re-check" --> RAW
+  RAW -- yes --> R3A["metallb, argocd, plays at REVERT (R3)"]
+  R3A --> R3G{"R3: movers Ready, apps Healthy,<br/>Nextcloud answers, S3 at 02:00, Ceph no worse,<br/>no restart loop?"}
+  R3G -- yes --> OK["prior core state restored"]
+  R3G -- no --> ST
+  E1 -- yes --> D2{"D2: rey free >= 2,976; anakin fits DB;<br/>no other run live?"}
+  D2 -- no --> H["hold Pro; post numbers"]
+  D2 -- yes --> LP["land Pro"]
+  LP --> D3{"D3: Paperclip Ready on rey, DB Ready,<br/>Pro apps Healthy?"}
+  D3 -- no --> RP["Pro rollback: revert"]
+  D3 -- yes --> V["B3 step 6 verify; Production; Retro; close"]
+  style A fill:#1e3a5f,color:#fff
+  style L fill:#8b4513,color:#fff
+  style LP fill:#7b1fa2,color:#fff
+  style RV fill:#8b4513,color:#fff
+  style RP fill:#8b4513,color:#fff
+  style RR fill:#8b4513,color:#fff
+  style RRR fill:#8b4513,color:#fff
+  style R2A fill:#8b4513,color:#fff
+  style R3A fill:#8b4513,color:#fff
+  style ST fill:#8b0000,color:#fff
+  style V fill:#2d5016,color:#fff
+```
+
 ### Keep Paperclip off the OSD-0 node
 
 Paperclip stays off the node that runs Ceph OSD-0 and the active MDS. Its agent
@@ -1064,18 +1105,23 @@ flowchart TD
   D3 -- yes --> V{"per-node requests fit, no BestEffort,<br/>no OOM/eviction, report clean?"}
   V -- no --> RP
   V -- yes --> CL["Production, Retro, closing Gist: met / not met"]
-  RC["core rollback: C1 git revert; hard refresh"] --> CG{"Ceph HEALTH_OK?"}
-  CG -- yes --> C2R["C2 at landing SHA: rook_values_set=previous"]
+  RC["core rollback: prepare at landing SHA"] --> CG{"Ceph HEALTH_OK?"}
+  CG -- yes --> C2R["Rook .previous at LAND"]
   CG -- no --> RG{"recovery pre-gate: not HEALTH_ERR,<br/>only listed codes, at most 1 OSD down?"}
   RG -- no --> STOP
-  RG -- yes --> C2X["C2 at landing SHA: rook previous + rook_recovery"]
-  C2R & C2X --> C2O["C2: argocd + pinned plays at revert SHA;<br/>cert-manager and Traefik .previous at landing SHA"]
-  C2O --> RAW{"raw master serves revert blob<br/>(s3-backup, xmltv manifests)?"}
+  RG -- yes --> C2X["Rook .previous + rook_recovery at LAND"]
+  C2R & C2X --> R1G{"R1: run and active+clean gate pass,<br/>values = prior, ctrlplugins Ready,<br/>B3 sizing, Ceph UIDs/restarts unchanged?"}
+  R1G -- no --> STOP
+  R1G -- yes --> CMR["cert-manager .previous at LAND"]
+  CMR --> R2G{"R2: Application = .previous;<br/>webhook admits test Certificate?"}
+  R2G -- no --> STOP
+  R2G -- yes --> RV["revert core; hard refresh"]
+  RV --> RAW{"raw master serves revert blob<br/>(s3-backup, xmltv manifests)?"}
   RAW -- "not yet: wait, re-check" --> RAW
-  RAW -- yes --> C2A["C2.6 at revert SHA: s3-backup, xmltv plays<br/>(only those run at rollout)"]
-  C2A --> RCG{"C3: prior record matches (Ceph targets, pods,<br/>cert-manager App + Deployments, Traefik,<br/>db/redis pins, s3-backup CronJob, xmltv Deployment),<br/>HEALTH_OK in 30 min, mounts, webhook admits, xmltv Ready?"}
-  RCG -- yes --> OKC["prior core state restored"]
-  RCG -- no --> STOP["stop; investigate; post on the Map"]
+  RAW -- yes --> C2A["at REVERT: metallb, argocd, pinned plays<br/>(only plays run at rollout)"]
+  C2A --> R3G{"R3: movers Ready under prior placement,<br/>apps Healthy, Nextcloud answers,<br/>S3 0 2 * * *, Ceph no worse, no restart loop?"}
+  R3G -- yes --> OKC["prior core state restored"]
+  R3G -- no --> STOP["stop; investigate; post on the Map"]
   style A fill:#1e3a5f,color:#fff
   style R1 fill:#8b4513,color:#fff
   style R2 fill:#8b4513,color:#fff
@@ -1084,7 +1130,8 @@ flowchart TD
   style RC fill:#8b4513,color:#fff
   style C2R fill:#8b4513,color:#fff
   style C2X fill:#8b4513,color:#fff
-  style C2O fill:#8b4513,color:#fff
+  style CMR fill:#8b4513,color:#fff
+  style RV fill:#8b4513,color:#fff
   style C2A fill:#8b4513,color:#fff
   style RP fill:#8b4513,color:#fff
   style OKC fill:#2d5016,color:#fff
