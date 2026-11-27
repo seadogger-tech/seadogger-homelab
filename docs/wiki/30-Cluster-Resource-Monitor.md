@@ -197,18 +197,42 @@ Environment, arguments, annotations and Event or termination messages are never
 journaled and never appear in a report.
 
 Every 60 seconds it writes `journal/cursor.json` atomically: each stream's last
-`resourceVersion` and a heartbeat (the older of the two streams' last sign of
-life). A stream's version moves only after the records up to it are fsynced to
+`resourceVersion`, each stream's last-alive time and a heartbeat (the older of
+the two streams' alive times; see the watch deadline below). A stream's version moves only after the records up to it are fsynced to
 the journal, and one lock guards every cursor change and the heartbeat's
 snapshot, so a heartbeat during an evaluation can never save a version whose
 records are still unwritten. If an append fails, the cursor stays and the watch
 retries from the old version, and the record is journaled once. After a dropped
 watch or a restart it resumes from the cursor. If the API
-answers `410 Gone` it relists and journals a **gap** from the last heartbeat to
-the relist. The first start opens coverage and journals a `start` record;
-nothing earlier counts as observed. The liveness probe fails when the heartbeat
-is more than 3 minutes old, so a stuck watch restarts the pod and its gap is
-recorded.
+answers `410 Gone` it relists and journals a **gap** from the stream's last
+alive time to the relist. The first start opens coverage and journals a `start`
+record; nothing earlier counts as observed. The liveness probe fails when the
+heartbeat is more than 3 minutes old, so a stuck watch restarts the pod and its
+gap is recorded.
+
+**The watch deadline and the heartbeat.** The watch asks the server to end it
+after `WATCH_TIMEOUT_SECONDS` (300). The socket timeout is that plus
+`WATCH_GRACE_SECONDS` (30, never below 1), so 330 s, always above the server's
+deadline. A socket timeout below it (the old 90 s) killed every quiet Events
+watch before the server did and produced false gaps. When a watch opens, the
+stream records its **watch deadline**: the OPEN time plus the socket timeout.
+When `cursor.json` is written, a stream counts as alive *now* while its watch is
+open and inside that deadline; otherwise it counts as alive at its last OPEN or
+event time (a clean server close inside the deadline counts as alive at the
+close). The heartbeat is the minimum over the two streams. So a healthy idle
+watch, with no events and no bookmarks, keeps the heartbeat fresh until the
+server closes it at 300 s and it reopens. A stalled watch (connected, nothing
+arriving) ends at its socket deadline and reopens. A stream that cannot reopen,
+or a thread stuck past its deadline, stops refreshing, and the probe restarts the
+pod when the heartbeat is 180 s old, within its 3 x 30 s failure window. The
+probe's 180 s and the healthcheck's `HEARTBEAT_STALE_SECONDS` stay equal.
+
+**When an `events` gap is real.** Kubernetes keeps Events for a TTL (k3s default
+1 hour, `EVENT_TTL_SECONDS`). A relist after a blind interval no longer than the
+TTL still sees every Event, so the monitor journals no gap for the `events`
+stream then. A blind interval longer than the TTL journals exactly one gap. The
+`pods` stream has no such cover (a Pod deleted while nobody watched is gone), so
+every `pods` relist after a `410 Gone` journals its gap.
 
 ### The evaluator
 
@@ -238,24 +262,58 @@ metric on one node therefore are two rows.
 | Type | Fires when |
 |---|---|
 | `exited_up`, `disk_up` | A node's exited-container count or root-disk use rose since yesterday, before cleanup. |
-| `ratio_over_threshold` | A live container's limit/request is above 1.5, or it has no limit. |
+| `ratio_over_threshold` | A live container's limit/request is above 1.5, or it has no limit, unless it is a [listed exception](#listed-exceptions) within its `max_ratio`. |
 | `peak_over_request` | The working-set high-water mark is above the request. Ended containers are checked once, when first merged. |
-| `peak_unmeasured` | The journal shows a container that ran, but no host record overlaps its run (it lived under one sample interval). |
+| `peak_unmeasured` | The journal shows a container that ran for at least one host sampling interval (60 s), but no host record overlaps its run. Runs of a CronJob or Job are counted per family: one finding per CronJob (or Job) and container, with the number of unmeasured runs, not one per Pod. A run shorter than the sampling interval can be missed legitimately and is never flagged, and neither is a container that ended before the first evaluation (before the evaluation window, or on the first evaluation before the recorder's own `start`). |
 | `besteffort` | A live Pod has QoS BestEffort. |
 | `node_overcommitted` | The sum of Pod memory limits on a node is above its allocatable memory. |
-| `evicted`, `oom_killed` | From the journal (Pod status, terminations, Events) and from the host's `oom_kill` counts, ended containers included. One incident seen by several sources is one finding that lists every source (`journal`, `host`, `event`, `api`). An eviction is counted once, in the evaluation that first sees it: the finding carries the Pod UID, and a Pod that stays visible as Evicted in the API raises no new finding once an earlier history file has one for that UID, so it leaves the 7-day window with its first day. |
+| `evicted`, `oom_killed` | From the journal (Pod status, terminations, Events) and from the host's `oom_kill` counts, ended containers included. One incident seen by several sources is one finding that lists every source (`journal`, `host`, `event`, `api`). An eviction is counted once, in the evaluation that first sees it: the finding carries the Pod UID, and once an earlier history file has a finding for that UID, no source (journal, Event or API) raises another, so the incident leaves the 7-day window with its first day. The window counts distinct Pod UIDs. |
 | `collector_stale` | A node has no scrape, its `daily` timestamp is missing or over 26 h old, or its `sample` timestamp is over 10 min old. |
 | `observation_gap` | A journal gap, a rise in `node_housekeeping_sampler_gap_seconds_total`, a stale collector, or a missed evaluation day. |
 | `delivery_backlog` | A report part has been pending for more than 24 h. |
+| `exception_stale` | A row of the exceptions file matches no live container. Reported once, in the evaluation that first finds it stale. |
 | `test_finding` | Added only by `--test-finding`. |
 
 A container that restarts gets a new container ID and a fresh peak, so a lower
 peak under a new ID is reported as a restart, never as a drop. Day-over-day
 change is shown only between the same container ID on consecutive days.
 
+### Listed exceptions
+
+Some containers are over 1.5x on purpose (the Ceph OSD and mon, the Velero
+node-agent, the k3s-bundled pods that cannot be changed through Git). They are
+listed in `deployments/resource-monitor/exceptions.yaml` in Pro, mounted
+read-only at `/etc/resource-monitor/exceptions.yaml` from the same ConfigMap as
+the values map. The monitor image has no YAML library, so the file is a flat
+list in exactly this shape (one value per line, no folded text):
+
+```yaml
+exceptions:
+  - namespace: example-ns          # fnmatch glob
+    workload: example-workload     # glob; the Pod's top owner (Deployment, StatefulSet, DaemonSet, CronJob)
+    container: example-container   # glob
+    max_ratio: 2.0                 # number: the listed limit/request
+    reason: One line a reviewer can check
+```
+
+A live container that matches a row and whose limit/request is at or under
+`max_ratio` appears in the daily report under **Listed exceptions**, not as a
+`ratio_over_threshold` finding. Above `max_ratio`, or with no limit at all, it
+is still a finding and says which max it broke. Listed exceptions never start a
+report on their own: they ride along when a report is sent for something else. A
+row that matches no live container is reported once as `exception_stale`. A
+malformed file is logged and ignored, which turns every listed container back
+into a finding.
+
+To add a row, a reviewer copies the block above into `exceptions.yaml`, takes
+namespace, workload and container from the finding id
+(`ratio_over_threshold/<node>/<namespace>/<workload>/<pod>/<container>`), sets
+`max_ratio` just above today's ratio, writes the reason, and merges it through
+the Pro repo. The ConfigMap name carries a hash, so the Deployment rolls.
+
 ### Window status
 
-Every history file records the trailing 7 days: eviction count, OOM count and
+Every history file records the trailing 7 days: distinct evicted Pod count, OOM count and
 the list of observation gaps (a missing day inside the window counts as a gap).
 `clean` is true only when all three are empty. A gap makes `clean` false even
 with zero evictions and zero OOM kills, because nothing can be concluded about
