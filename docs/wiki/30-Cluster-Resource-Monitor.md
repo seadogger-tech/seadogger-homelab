@@ -64,7 +64,7 @@ flowchart TD
   RAW -- yes --> R3A["metallb, argocd, plays at REVERT (R3)"]
   R3A --> R3G{"R3: movers Ready, apps Healthy,<br/>Nextcloud answers, S3 at 02:00, Ceph no worse,<br/>no restart loop?"}
   R3G -- yes --> OK["prior core state restored"]
-  R3G -- no --> ST
+  R3G -- no --> ST3["stop; investigate at REVERT; post on the Map"]
   E1 -- yes --> D2{"D2: rey free >= 2,976; anakin fits DB;<br/>no other run live?"}
   D2 -- no --> H["hold Pro; post numbers"]
   D2 -- yes --> LP["land Pro"]
@@ -80,6 +80,7 @@ flowchart TD
   style RRR fill:#8b4513,color:#fff
   style R2A fill:#8b4513,color:#fff
   style R3A fill:#8b4513,color:#fff
+  style ST3 fill:#8b4513,color:#fff
   style ST fill:#8b0000,color:#fff
   style V fill:#2d5016,color:#fff
 ```
