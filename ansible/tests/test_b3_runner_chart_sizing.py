@@ -99,7 +99,7 @@ class TestB3SizingValues(unittest.TestCase):
                 self.assertEqual(memory_mi(resources["requests"]["memory"]), request)
                 self.assertEqual(memory_mi(resources["limits"]["memory"]), limit)
         self.assertEqual(values["repoServer"]["copyutil"]["resources"], values["repoServer"]["resources"])
-        self.assertEqual(values["dex"]["copyutil"]["resources"], values["dex"]["resources"])
+        self.assertEqual(values["dex"]["initImage"]["resources"], values["dex"]["resources"])
 
     def test_cert_manager_values_and_narrow_apply_scope(self):
         app = yaml.safe_load((CORE / "certificates/cert-manager-application.yml").read_text())

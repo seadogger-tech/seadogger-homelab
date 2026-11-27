@@ -53,7 +53,7 @@ argocd_helm_values:
         memory: 128Mi
       limits:
         memory: 160Mi  # peak 124.2Mi
-    copyutil:
+    initImage:
       resources:
         requests:
           memory: 128Mi
