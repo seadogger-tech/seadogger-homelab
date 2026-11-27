@@ -575,7 +575,7 @@ a refresh failed, or a request waited more than 10 s for a refresh.
 
 **`memory.v1`**: `{generatedAt, nodes:[{name, allocatableBytes, requestsBytes,
 limitsBytes, workingSetBytes|null}], pods:[{namespace, pod, workload, node, qos,
-containers:[{name, requestBytes|null, limitBytes|null, workingSetBytes|null}]}],
+requestBytes|null, limitBytes|null, containers:[{name, requestBytes|null, limitBytes|null, workingSetBytes|null}]}],
 metrics:"ok"|"unavailable"}`.
 
 - Node requests and limits sum the Running and Pending Pods bound to the node. A
@@ -583,6 +583,11 @@ metrics:"ok"|"unavailable"}`.
   scheduler's rule. It is the code path of the evaluator's `limits_sum_bytes`
   (`pod_memory_bytes`), extended to requests; a request that is absent defaults to
   the limit. The per-Pod `containers` list holds the app containers only.
+- Each Pod's `requestBytes` and `limitBytes` are that same `pod_memory_bytes`
+  total, computed once per Pod and used for both the Pod's fields and the node
+  sums, so a node's `requestsBytes` and `limitsBytes` always equal the sum of its
+  Pods' totals. A Pod whose total is 0 reports `null`. They differ from the sum of
+  the `containers` rows when an init container is the larger term.
 - Working sets come from the Metrics API (`metrics.k8s.io/v1beta1` NodeMetrics
   and PodMetrics). A working set is an estimate of memory in use, sampled about
   every 15 s. It is not the OOM threshold: a container can be OOM-killed while
@@ -711,20 +716,43 @@ start unbounded work.
   `portal` namespace, TCP 8090. Egress is unchanged (the Metrics API goes through
   the API server entry). The Service `resource-monitor` (ClusterIP, 8090) selects
   the monitor pod.
-- **Resources.** Set from a measurement, not carried over. `tests/measure_resources.py`
-  runs `monitor.py run` against a stub cluster of 500 Pods and 750 containers
-  (about three times this cluster; each Pod padded to a real object's 11 KiB), a
-  400-day journal whose last 9 days run at three times this cluster's record
-  rate, the API under a burst of about 20 requests a second across both
-  endpoints, and a hand-run `monitor.py evaluate` in the same cgroup. Peak RSS:
-  61 MiB for the recorder and scheduler alone, 80 MiB with the API under the
-  burst, 167 MiB with the hand-run evaluation (two processes). Request 192Mi,
-  limit 240Mi (peak plus about 15 %, limit 1.25 x request); it was 80Mi / 100Mi,
-  measured on Pods of 0.5 KiB, which a hand-run evaluation passes with real-sized
-  Pods. CPU: about 5m idle, 0.9 CPU-s for the cold index build, bursts to about
-  425m for a second; request 100m, limit 125m, so the cold build finishes inside
-  the 10 s wait and a burst is throttled rather than refused. The API itself
-  adds about 18 MiB at the 3x rate and about 42 MiB at ten times it.
+- **Resources.** Set from a measurement, not carried over.
+  `tests/measure_resources.py` ran on 2026-11-27 in the production image
+  (`python:3.13-alpine@sha256:9ef1a599f863231c3d91e941389bfdc4a2d6070557243d54df1a4e57015b960e`,
+  musl, aarch64) as a one-off Pod under the Deployment's limits (memory 240Mi, CPU
+  125m; the stub cluster and the load generator share that quota). It runs
+  `monitor.py run` against a stub cluster of 500 Pods and 750 containers (about
+  three times this cluster; each Pod padded to a real object's 11 KiB), a
+  400-day journal whose last 9 days run at 6,000 records a day, the API under a
+  burst of about 20 requests a second across both endpoints for 60 s, and a
+  hand-run `monitor.py evaluate` in the same cgroup.
+  - **Baseline, observed.** The production journal held 1,505 records on
+    2026-11-26 (the only full day) and 1,333 by 15:58 UTC on 2026-11-27 (still
+    1,333 at 16:29 UTC): about 2,000 a day at about 325 B a record. The run uses
+    three times that, 6,000 a day. (An earlier assumption of 1,300 a day was
+    measured under glibc with no CPU quota.)
+  - **Memory.** Peak RSS: 64.8 MiB for the recorder and scheduler alone, 65.8 MiB
+    through the cold index build, 70.8 MiB with the API under the burst, 165.7 MiB
+    with the hand-run evaluation (two processes). A first run gave 163.6 MiB. The
+    cgroup's own peak, page cache included, was 236.5 MiB, with no OOM kill.
+    Request 192Mi (the 165.7 MiB peak plus about 16 %), limit 240Mi (1.25 x
+    request).
+  - **Headroom, not a forecast.** At ten times the record rate and three times
+    the OOM share the same run peaked at 297.7 MiB RSS and was OOM-killed at
+    240Mi (two runs). That is more than this limit; it needs about 390 MiB (cgroup
+    peak 389.8 MiB under a 480Mi limit), and the cold build took 54.5 s.
+  - **CPU.** About 8m to 12m idle; the cold index build costs about 2 CPU-s. Under
+    the 125m quota the first `/api/oom`, which builds the index, took 14.4 s, more
+    than the API's 10 s wait. The request that builds is not cut off at 10 s (it
+    was answered 200 at 14.4 s), but a request that arrives meanwhile and waits
+    more than 10 s gets 503 `Retry-After: 5`; later requests are served from the
+    built index. This happens once after each restart. The portal's own timeout is 5 s, so the
+    first poll after a restart can fail.
+  - **Burst.** At most 4 requests are in flight (`API_MAX_INFLIGHT`); the rest get
+    503 with `Retry-After` by design. In the run 116 of 760 burst requests got 503
+    (162 of 760 in the first run) and the others 200. The run shows no
+    response-time guarantee.
+  The CPU request is 100m and the limit 125m.
 
 ### Verification and rollback
 
