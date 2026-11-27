@@ -1,0 +1,23 @@
+---
+# Apply only the cert-manager Argo Application checked out with this Core run.
+# This narrow flag never reads PKI files or patches a live webhook Deployment.
+- name: Refuse an unknown cert-manager Application file
+  ansible.builtin.assert:
+    that:
+      - >-
+        (cert_manager_application_file | default('cert-manager-application.yml', true)) in
+        ['cert-manager-application.yml', 'cert-manager-application.previous.yml']
+    fail_msg: >-
+      refused: cert_manager_application_file must be cert-manager-application.yml or
+      cert-manager-application.previous.yml
+    quiet: true
+
+- name: Set KUBECONFIG global
+  ansible.builtin.set_fact:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+
+- name: Apply the cert-manager Application from the checked-out file
+  kubernetes.core.k8s:
+    kubeconfig: "{{ KUBECONFIG }}"
+    state: present
+    src: "{{ playbook_dir }}/../certificates/{{ cert_manager_application_file | default('cert-manager-application.yml', true) }}"

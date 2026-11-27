@@ -798,6 +798,180 @@ core revert: the revert removes `traefik_values_file`. Only after the applicable
 pass, revert core (R6). At the revert SHA, R7 runs only the Rook flag and, if the MetalLB step ran, the
 MetalLB flag; it no longer runs the Traefik flag.
 
+## Stage B3: fit the four nodes
+
+Stage B3 sizes the remaining runner-applied charts and workloads from live
+working-set peaks. This page keeps the rule and mechanisms; the measured P,
+per-node sums and rollout receipts belong on the Paperclip tickets and in the
+private Pro `docs/operations/memory-sizing.md`. Numbers in the tables below are
+placeholders, not measurements.
+
+### Sizing rule
+
+`P` is the highest `node_housekeeping_container_working_set_peak_bytes` for a
+container over the sampler window, across every replica and node. Re-read it at
+build time. If OCE-550 or OCE-551 recorded a higher long-window working-set
+peak, that is the floor. B3 does not use `memory.peak`: for the large
+containers it is mostly reclaimable page cache.
+
+- Change a container only when its limit/request ratio is above 1.25 or P is
+  above its request. Leave values already within the rule alone; keep B1 values.
+- For a regular container, request = P rounded up to 8Mi and limit = 1.25 ×
+  request rounded up to 8Mi.
+- For an app with an internal memory budget, request = max(P, budget) rounded
+  up to 8Mi; limit = 1.25 × request rounded up to 8Mi. This covers Nextcloud
+  PHP `memory_limit`, Redis `maxmemory`, and Nextcloud Postgres settings.
+- Init containers take their main container's resources. ArgoCD `copyutil` and
+  the Velero plugin init are explicit so their admitted limits do not hold the
+  pod above its main container.
+- Below 64Mi, 8Mi rounding can produce ratios up to 1.5× (for example 16/24).
+  This is an explicit rounding exception.
+
+| B3 row | Request / limit (Mi) |
+|---|---:|
+| OSD | `<request>` / `<limit>` |
+| MDS | `<request>` / `<limit>` |
+| mon, mgr, `mgr-sidecar`, exporter, toolbox, operator | `<request>` / `<limit>` per container |
+| CSI controller plugins and liveness | `<request>` / `<limit>` per container |
+| ArgoCD components and copyutil | `<request>` / `<limit>` per container |
+| cert-manager, cainjector, webhook | `<request>` / `<limit>` per container |
+| ansible-runner and checkout init | `<request>` / `<limit>` per container |
+| Traefik | `<request>` / `<limit>` (resources unchanged in B3) |
+
+### §3.4 exceptions
+
+The exceptions are recorded in the monitor's Git-held exceptions list and are
+described here without measured P values:
+
+| Container | Exception and reason |
+|---|---|
+| Ceph OSD | Ratio is above 1.5×. The request is deliberately the `osd_memory_target`, not P: Rook passes `POD_MEMORY_REQUEST` to Ceph as `--osd-memory-target`, so raising the request to P would grow the BlueStore cache. The limit is 1.25 × live P. The OSD remains system-node-critical and is evicted last. |
+| Ceph mon | Ratio is above 1.5× because `mon_memory_target` (1Gi) floors its limit. The target is in the Ceph config DB and has no GitOps path; current evidence does not show that lowering it is safe. |
+| Velero node-agent | Ratio is above 1.5×. Kopia streams whole volumes and has no memory knob; the weekly 13-hour Nextcloud backup falls outside the sampler window. |
+| coredns, metrics-server, local-path-provisioner | Ratios are above 1.5× and deferred because their `.skip` files on yoda block k3s from upgrading these manifests. |
+| Paperclip and paperclip-db | Their higher ratios protect concurrent agent runs and Postgres's observed worst-case memory; Postgres was OOM-killed at 1Gi. |
+| Jellyfin app | ffmpeg transcode use scales with concurrent streams, which the sampling window does not bound. |
+| Kopia maintenance Job | The Nextcloud repository grows each Sunday; its first maintenance after a weekly backup is outside the window. |
+| CSI nodeplugin `csi-*plugin` | B1's 1.5× allowance prevents an OOM from breaking every mount on that node. |
+| Containers under 64Mi | 8Mi rounding can produce a ratio up to 1.5×. |
+| MDS standby, Nextcloud and Redis / Nextcloud DB | Their requests may exceed P: standby-replay must be sized to take over the active rank, while the application requests include their internal memory budgets. |
+
+### Ceph mechanisms and chart paths
+
+For the OSD, `cephClusterSpec.resources.osd.requests.memory` is the cache
+target. B3 sets it to `<request>`; Rook passes it into Ceph as
+`--osd-memory-target`. The separate OSD limit is `<limit>` from live P and
+provides headroom for non-cache allocations. Do not infer an OSD request from
+P.
+
+For MDS, the Rook limit is `<limit>` and Rook derives
+`mds_cache_memory_limit` as 0.5 × that limit (`<cache-limit>`). B3 does not
+change the global MDS cache config. The `mon_memory_target` also stays as set.
+
+Rook 1.18.1 crosses the CSI resource keys: `csiRBDPluginResource` and
+`csiCephFSPluginResource` render `Driver.spec.controllerPlugin.resources`;
+`csiRBDProvisionerResource` and `csiCephFSProvisionerResource` render the
+nodeplugin resources. B3 changes only the controller-plugin entries
+`csi-rbdplugin`, `csi-cephfsplugin` and `liveness-prometheus`. The
+`csi-provisioner`, `csi-resizer`, `csi-attacher`, `csi-snapshotter` and all
+nodeplugin values stay as they are.
+
+The Rook operator's v1.19.2 chart has no supported affinity value (it exposes
+nodeSelector and tolerations only), so B3 leaves operator placement unchanged.
+Toolbox, Traefik and all cert-manager components prefer yoda; the operator
+placement request for obiwan is not represented in the chart.
+
+### B3 delivery map
+
+```mermaid
+flowchart LR
+  subgraph core["core repo (public: values and guidance only)"]
+    RV["rook-ceph values<br/>OSD request 1280 (trim), MDS limit 1280 (trim),<br/>mon/mgr/exporter/toolbox/operator/ctrlplugin (changed)"]
+    RVP["rook values .previous pair (new)<br/>rook task: rook_values_set + recovery pre-gate (changed)"]
+    AV["argocd_helm_values.yml (changed)"]
+    CMF["cert_manager_resources.yml + flag (new)<br/>applies only cert-manager Application<br/>or its .previous file (new)"]
+    TV["traefik values: prefer yoda (changed)<br/>.previous = today (changed)"]
+    APPS["nextcloud / jellyfin / pihole / HA / mealie values<br/>nextcloud-db, redis, s3-backup, xmltv manifests (changed)"]
+    W["wiki 30, 28, 05 (changed)"]
+  end
+  subgraph pro["Pro repo (private)"]
+    PC["paperclip Deployment + DB<br/>requests at P, anti-affinity OSD-0 (changed)"]
+    PA["company-memory, google-mcp, portal,<br/>node-sensors, velero, ember-trail (changed)"]
+    RM["resource-monitor: watch deadline + liveness,<br/>eviction, peak fixes; exceptions.yaml (new)"]
+    DOC["docs/operations/memory-sizing.md B3 (changed)"]
+  end
+  RUN["Ansible runner"] --> RV & AV & CMF & TV
+  RUN -. "rollback C2 at landing SHA" .-> RVP
+  RVP --> CEPH
+  RUN -- "pinned revision plays;<br/>s3-backup + xmltv apply raw master" --> APPS
+  ARGO["ArgoCD"] -- "valueFiles on master / HEAD" --> APPS
+  ARGO -- "HEAD" --> PC & PA & RM
+  RV --> CEPH["OSD x3, MDS x2, mon x3, mgr x2"]
+  PC -- "required: not on OSD-0 node" --> REY["rey"]
+  APPS -- "Jellyfin: anakin or obiwan" --> ANA["anakin"]
+  RM -. "daily report, findings to Spock" .-> CEPH & PC & PA
+  style core fill:#1e3a5f,color:#fff
+  style pro fill:#7b1fa2,color:#fff
+  style RUN fill:#8b4513,color:#fff
+  style ARGO fill:#8b4513,color:#fff
+  style RM fill:#2d5016,color:#fff
+  style CMF fill:#2d5016,color:#fff
+  style RVP fill:#2d5016,color:#fff
+```
+
+### B3 rollout and rollback
+
+```mermaid
+flowchart TD
+  A["Kirk approves Merge to main"] --> P["record prior state (private)"]
+  P --> L1["land core; hard refresh valueFiles apps"]
+  L1 --> C1{"C1: apps at B3 values; Jellyfin Pending only?"}
+  C1 -- no --> RC
+  C1 -- yes --> R1["runner: rook (wait for operator reconcile)"]
+  R1 --> D1C{"D1 Ceph: HEALTH_OK, PGs clean, targets set,<br/>MDS active + standby-replay, no cache/slow-op warning 15 min?"}
+  D1C -- no --> RC
+  D1C -- yes --> R2["runner: argocd, cert-manager, traefik, pinned plays (key check passed)"]
+  R2 --> D1R{"D1 rest: Synced/Healthy, webhook admits,<br/>Traefik answers, plays at B3 values?"}
+  D1R -- no --> RC
+  D1R -- yes --> D2{"D2: rey room for Paperclip + 128,<br/>anakin fits JF + DB, no other run live?"}
+  D2 -- no --> HOLD["Pro not landed; post numbers; re-plan"]
+  D2 -- yes --> L2["land Pro (Paperclip restart ends this run)"]
+  L2 --> D3{"D3: Paperclip Ready on rey, DB Ready,<br/>Jellyfin on anakin, Pro apps Healthy?"}
+  D3 -- no --> RP["Pro rollback P1"]
+  RP --> Q{"core also failing?"}
+  Q -- yes --> RC
+  Q -- no --> OKP["prior Pro state restored"]
+  D3 -- yes --> V{"per-node requests fit, no BestEffort,<br/>no OOM/eviction, report clean?"}
+  V -- no --> RP
+  V -- yes --> CL["Production, Retro, closing Gist: met / not met"]
+  RC["core rollback: C1 git revert; hard refresh"] --> CG{"Ceph HEALTH_OK?"}
+  CG -- yes --> C2R["C2 at landing SHA: rook_values_set=previous"]
+  CG -- no --> RG{"recovery pre-gate: not HEALTH_ERR,<br/>only listed codes, at most 1 OSD down?"}
+  RG -- no --> STOP
+  RG -- yes --> C2X["C2 at landing SHA: rook previous + rook_recovery"]
+  C2R & C2X --> C2O["C2: argocd + pinned plays at revert SHA;<br/>cert-manager and Traefik .previous at landing SHA"]
+  C2O --> RAW{"raw master serves revert blob<br/>(s3-backup, xmltv manifests)?"}
+  RAW -- "not yet: wait, re-check" --> RAW
+  RAW -- yes --> C2A["C2.6 at revert SHA: s3-backup, xmltv plays<br/>(only those run at rollout)"]
+  C2A --> RCG{"C3: prior record matches (Ceph targets, pods,<br/>cert-manager App + Deployments, Traefik,<br/>db/redis pins, s3-backup CronJob, xmltv Deployment),<br/>HEALTH_OK in 30 min, mounts, webhook admits, xmltv Ready?"}
+  RCG -- yes --> OKC["prior core state restored"]
+  RCG -- no --> STOP["stop; investigate; post on the Map"]
+  style A fill:#1e3a5f,color:#fff
+  style R1 fill:#8b4513,color:#fff
+  style R2 fill:#8b4513,color:#fff
+  style L2 fill:#7b1fa2,color:#fff
+  style CL fill:#2d5016,color:#fff
+  style RC fill:#8b4513,color:#fff
+  style C2R fill:#8b4513,color:#fff
+  style C2X fill:#8b4513,color:#fff
+  style C2O fill:#8b4513,color:#fff
+  style C2A fill:#8b4513,color:#fff
+  style RP fill:#8b4513,color:#fff
+  style OKC fill:#2d5016,color:#fff
+  style OKP fill:#2d5016,color:#fff
+  style STOP fill:#8b4513,color:#fff
+```
+
 The core revert changes the MetalLB strategy back to `RollingUpdate`, which is not part of the pod
 template, so it replaces no speaker. To go back to B0 for the speakers while keeping the rest of B1,
 run the shared values with `-e metallb_speaker_replace=all -e metallb_speaker_expect_qos=Burstable`

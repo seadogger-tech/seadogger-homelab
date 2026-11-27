@@ -90,8 +90,10 @@ class StaticChecks(unittest.TestCase):
             self.assertNotIn("raw.githubusercontent.com", text, name)
             self.assertIn("{{ playbook_dir }}", text, name)
         rook = (TASKS / FLAGS["rook"][1]).read_text()
-        self.assertIn("{{ playbook_dir }}/../deployments/rook-ceph/rook-ceph-operator-values.yaml", rook)
-        self.assertIn("{{ playbook_dir }}/../deployments/rook-ceph/rook-ceph-cluster-values.yaml", rook)
+        self.assertIn("{{ playbook_dir }}/../deployments/rook-ceph/{{ rook_operator_values_file }}", rook)
+        self.assertIn("{{ playbook_dir }}/../deployments/rook-ceph/{{ rook_cluster_values_file }}", rook)
+        self.assertIn("rook-ceph-operator-values.previous.yaml", rook)
+        self.assertIn("rook-ceph-cluster-values.previous.yaml", rook)
 
     def test_helm_values_files_are_copied_to_the_host_first(self):
         # helm runs on the control-plane host, not in the runner pod, so a -f path
@@ -248,6 +250,25 @@ class RunWithStubs(unittest.TestCase):
         result, calls = self.run_flag("rook", CEPH_HEALTH="HEALTH_WARN 1 pgs degraded")
         self.assertNotEqual(result.returncode, 0)
         self.assertFalse([c for c in calls if c.startswith("helm upgrade")], calls)
+
+    def test_rook_previous_selector_copies_the_previous_pair(self):
+        result, calls = self.run_flag("rook", extra=("rook_values_set=previous",))
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(len([c for c in calls if c.startswith("helm upgrade")]), 2, calls)
+        for name in ("rook-ceph-operator-values", "rook-ceph-cluster-values"):
+            with self.subTest(values=name):
+                expected = yaml.safe_load((self.checkout / "deployments/rook-ceph" / f"{name}.previous.yaml").read_text())
+                actual = yaml.safe_load((Path("/tmp") / f"{name}.yaml").read_text())
+                self.assertEqual(actual, expected)
+
+    def test_rook_rejects_unknown_values_set_and_recovery_without_previous(self):
+        for extra in (("rook_values_set=unknown",), ("rook_recovery=true",)):
+            with self.subTest(extra=extra):
+                self.log.unlink(missing_ok=True)
+                result, calls = self.run_flag("rook", extra=extra)
+                self.assertNotEqual(result.returncode, 0, result.stdout)
+                self.assertFalse(calls, calls)
+                self.assertFalse([c for c in calls if c.startswith("helm upgrade")], calls)
 
     def test_rook_checks_health_before_and_pgs_after_the_upgrade(self):
         result, calls = self.run_flag("rook")

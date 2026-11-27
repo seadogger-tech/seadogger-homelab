@@ -88,6 +88,11 @@
       when: enable_argocd_resources | default(false) | bool
       tags: [enable_argocd_resources]
 
+    - name: Apply the cert-manager Application from the checked-out repo
+      import_tasks: tasks/cert_manager_resources.yml
+      when: enable_cert_manager_resources | default(false) | bool
+      tags: [enable_cert_manager_resources]
+
 # -------------------------------
 # Namespace Pre-cooking
 # -------------------------------

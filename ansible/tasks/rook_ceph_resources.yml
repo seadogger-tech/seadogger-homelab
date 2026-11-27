@@ -7,12 +7,34 @@
 # may run it. Both releases must already exist; otherwise the run fails. It is
 # not rook_ceph_deploy_part1.yml, which stays the cold-start path.
 #
-# Gates: Ceph must report HEALTH_OK before anything changes, and after the
-# upgrade every PG must be active+clean again or the run fails (30 minutes by
+# Gates: normally Ceph must report HEALTH_OK before anything changes; the
+# explicit previous-values recovery mode has its own narrow health gate. After
+# either path, every PG must be active+clean or the run fails (30 minutes by
 # default; rook_pg_clean_retries x rook_pg_clean_delay).
 - name: Set KUBECONFIG global
   ansible.builtin.set_fact:
     KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+
+- name: Validate the Rook values set and recovery mode
+  ansible.builtin.assert:
+    that:
+      - (rook_values_set | default('current', true)) in ['current', 'previous']
+      - not (rook_recovery | default(false) | bool) or (rook_values_set | default('current', true)) == 'previous'
+    fail_msg: >-
+      refused: rook_values_set must be current or previous, and rook_recovery=true
+      requires rook_values_set=previous
+    quiet: true
+
+- name: Select the Rook values pair
+  ansible.builtin.set_fact:
+    rook_operator_values_file: >-
+      {{ 'rook-ceph-operator-values.previous.yaml'
+         if (rook_values_set | default('current', true)) == 'previous'
+         else 'rook-ceph-operator-values.yaml' }}
+    rook_cluster_values_file: >-
+      {{ 'rook-ceph-cluster-values.previous.yaml'
+         if (rook_values_set | default('current', true)) == 'previous'
+         else 'rook-ceph-cluster-values.yaml' }}
 
 - name: Assert the Rook-Ceph releases already exist
   ansible.builtin.command: "helm status {{ item }} --namespace rook-ceph"
@@ -43,6 +65,7 @@
   changed_when: false
   check_mode: false
   failed_when: false
+  when: not (rook_recovery | default(false) | bool)
 
 - name: Fail unless Ceph is HEALTH_OK before the upgrade
   ansible.builtin.assert:
@@ -51,6 +74,57 @@
       - rook_health_before.stdout | trim == "HEALTH_OK"
     fail_msg: "Ceph is not HEALTH_OK ({{ rook_health_before.stdout | default('') | trim }}); refusing to upgrade Rook"
     quiet: true
+  when: not (rook_recovery | default(false) | bool)
+
+- name: Read Ceph health detail JSON for recovery
+  ansible.builtin.command: kubectl -n rook-ceph exec deploy/rook-ceph-tools -- ceph health detail -f json
+  environment:
+    KUBECONFIG: "{{ KUBECONFIG }}"
+  register: rook_health_detail
+  changed_when: false
+  check_mode: false
+  failed_when: false
+  when: rook_recovery | default(false) | bool
+
+- name: Read Ceph OSD state JSON for recovery
+  ansible.builtin.command: kubectl -n rook-ceph exec deploy/rook-ceph-tools -- ceph osd stat -f json
+  environment:
+    KUBECONFIG: "{{ KUBECONFIG }}"
+  register: rook_osd_stat
+  changed_when: false
+  check_mode: false
+  failed_when: false
+  when: rook_recovery | default(false) | bool
+
+- name: Refuse recovery when Ceph state JSON cannot be read
+  ansible.builtin.assert:
+    that:
+      - rook_health_detail.rc == 0
+      - rook_osd_stat.rc == 0
+    fail_msg: "refused: unable to read Ceph health detail or OSD stat JSON for recovery"
+    quiet: true
+  when: rook_recovery | default(false) | bool
+
+- name: Evaluate the narrow Rook recovery pre-gate
+  ansible.builtin.command:
+    argv:
+      - python3
+      - "{{ playbook_dir }}/scripts/rook_recovery_gate.py"
+    stdin: >-
+      {{ {'health': (rook_health_detail.stdout | from_json), 'osd': (rook_osd_stat.stdout | from_json)} | to_json }}
+  delegate_to: localhost
+  become: false
+  register: rook_recovery_gate
+  changed_when: false
+  failed_when: false
+  when: rook_recovery | default(false) | bool
+
+- name: Fail unless the Rook recovery pre-gate allows the current Ceph state
+  ansible.builtin.assert:
+    that: rook_recovery_gate.rc == 0
+    fail_msg: "{{ rook_recovery_gate.stderr | default('Rook recovery pre-gate refused') | trim }}"
+    quiet: true
+  when: rook_recovery | default(false) | bool
 
 - name: Add Rook Helm repo
   ansible.builtin.shell:
@@ -64,13 +138,13 @@
 # files in the checkout are copied there first.
 - name: Copy the Rook operator values to the host
   ansible.builtin.copy:
-    src: "{{ playbook_dir }}/../deployments/rook-ceph/rook-ceph-operator-values.yaml"
+    src: "{{ playbook_dir }}/../deployments/rook-ceph/{{ rook_operator_values_file }}"
     dest: /tmp/rook-ceph-operator-values.yaml
     mode: "0600"
 
 - name: Copy the Rook cluster values to the host
   ansible.builtin.copy:
-    src: "{{ playbook_dir }}/../deployments/rook-ceph/rook-ceph-cluster-values.yaml"
+    src: "{{ playbook_dir }}/../deployments/rook-ceph/{{ rook_cluster_values_file }}"
     dest: /tmp/rook-ceph-cluster-values.yaml
     mode: "0600"
 

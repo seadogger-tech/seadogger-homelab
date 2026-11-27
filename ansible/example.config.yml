@@ -183,6 +183,7 @@ enable_internal_pki: "{{ cold_start_stage_2_install_infrastructure | bool }}"
 enable_rook_ceph_resources: false
 enable_metallb_resources: false
 enable_argocd_resources: false
+enable_cert_manager_resources: false
 # Writes only the Traefik HelmChartConfig (kube-system/traefik), no dashboard objects.
 enable_traefik_resources: false
 

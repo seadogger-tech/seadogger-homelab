@@ -72,8 +72,22 @@ class TestB0MemoryReductions(unittest.TestCase):
         cls.rows = yaml.safe_load(FIXTURE.read_text())["containers"]
 
     def test_every_container_is_cut_and_above_1_25x_peak(self):
+        # B3 deliberately remeasures and resizes these chart rows using live
+        # working-set P. Their current values are covered by the B3 tests;
+        # applying B0's older memory.peak ceiling to them would reject the
+        # approved later-stage limit reductions and request increases.
+        b3_rows = {
+            "ceph-exporter (x3)", "rook-ceph-tools",
+            "csi-rbdplugin", "csi-rbdplugin liveness-prometheus",
+            "csi-cephfsplugin", "csi-cephfsplugin liveness-prometheus",
+            "argocd application-controller", "argocd repo-server",
+            "argocd server", "argocd dex-server",
+            "argocd notifications-controller",
+        }
         for spec in self.rows:
             with self.subTest(spec["name"]):
+                if spec["name"] in b3_rows:
+                    continue
                 got = resources_for(spec)
                 self.assertLess(got["limit"], spec["old_limit_mi"], "limit must come down")
                 if not spec.get("request_raised_by_b1"):

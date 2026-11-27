@@ -102,10 +102,10 @@ cephClusterSpec:
     mgr:
       limits:
         cpu: "1"
-        memory: "1536Mi"
+        memory: "680Mi"
       requests:
         cpu: "150m"      # was 500m; measured 56-73m
-        memory: "512Mi"  # was 768Mi; measured 469-632Mi
+        memory: "544Mi"  # live P 542.17Mi; rounded to 8Mi
     mon:
       # Ceph defaults mon_memory_target to 2Gi. Unlike the MDS, Rook does NOT
       # auto-tune the mons from the container limit, so nothing reconciles the
@@ -119,17 +119,18 @@ cephClusterSpec:
       # it, matching the MDS pattern.
       limits:
         cpu: "1"
-        memory: "1536Mi"  # was 1Gi; must exceed mon_memory_target (1Gi) + overhead
+        memory: "1280Mi"  # mon_memory_target stays 1Gi; limit = 1.25 x target
       requests:
         cpu: "100m"      # was 500m; measured 26-36m
         # 256Mi -> 512Mi (2026-10-31). The 70-92Mi measured just after the
         # 1Gi target was pinned did not last: the mons grew back to 403-508Mi
         # working set, 556-742Mi peak, so 256Mi under-counted every mon and
         # let the scheduler overpack the workers.
-        memory: "512Mi"
+        memory: "560Mi"  # live P 554.45Mi; rounded to 8Mi
     osd:
-      # The limit MUST stay above `osd_memory_target` (set to 2Gi in
-      # rook_ceph_deploy_part1.yml), not merely above measured usage.
+      # The request is deliberately `osd_memory_target` (1280Mi). Rook passes
+      # POD_MEMORY_REQUEST into Ceph as --osd-memory-target; this is the cache
+      # trim, and the known under-count is the intended tradeoff.
       #
       # This was limit 2Gi against a 4Gi osd_memory_target - Ceph's default.
       # The OSDs grew toward 4Gi exactly as configured and were OOM-killed at
@@ -140,15 +141,7 @@ cephClusterSpec:
       # each kill writes a kernel stack trace, which is why the nodes with the
       # most kills sat pinned at the 500MB journal cap.
       #
-      # osd_memory_target governs BlueStore cache, not total RSS, so the
-      # container needs roughly 30-50% headroom above it for everything else
-      # the process allocates. 2Gi target / 3Gi limit gives that.
-      #
-      # 2026-10-31: osd_memory_target lowered 2Gi -> 1.5Gi. At 2Gi the OSDs ran
-      # 2.1-2.4Gi working set and peaked at 3.08Gi - right at this limit - on
-      # every worker, while the 8GB workers had no memory left for the OS.
-      # A smaller BlueStore cache costs some random-read speed; Nextcloud and
-      # Jellyfin mostly stream large files.
+      # Live working-set P is 2336.14Mi; the 2928Mi limit is ceil8(1.25 x P).
       #
       # THE REQUEST IS THE TARGET. Rook passes POD_MEMORY_REQUEST into the OSD
       # and Ceph uses it as osd_memory_target, overriding the mon config value
@@ -157,10 +150,10 @@ cephClusterSpec:
       # target, a known, bounded under-count per OSD.
       limits:
         cpu: "1"
-        memory: "3Gi"    # must exceed osd_memory_target (1.5Gi) + overhead
+        memory: "2928Mi"  # ceil8(1.25 x live OSD P)
       requests:
         cpu: "150m"      # was 500m; measured 24-44m
-        memory: "1536Mi" # = osd_memory_target (see above)
+        memory: "1280Mi"  # = osd_memory_target (see above)
     prepareosd:
       limits:
         cpu: "500m"
@@ -171,10 +164,10 @@ cephClusterSpec:
     mgr-sidecar:
       limits:
         cpu: "500m"
-        memory: "512Mi"
+        memory: "80Mi"
       requests:
         cpu: "50m"
-        memory: "64Mi"   # was 256Mi; the watch-active sidecar is tiny
+        memory: "64Mi"   # live watch-active P 59.42Mi; rounded to 8Mi
     # Stage B0 (OCE-369): limits cut to 1.25 x the memory.peak read over the
     # long windows; CPU comes from the chart defaults. See the "Stage B0
     # immediate reductions" section in docs/wiki/30-Cluster-Resource-Monitor.md.
@@ -185,9 +178,9 @@ cephClusterSpec:
         memory: "32Mi"   # was 100Mi
     exporter:
       limits:
-        memory: "64Mi"   # was 128Mi; peak 33.1Mi
+        memory: "40Mi"   # live P 26.28Mi; 1.25 x request rounded to 8Mi
       requests:
-        memory: "48Mi"   # was 50Mi
+        memory: "32Mi"   # live ceph-exporter P 26.28Mi; rounded to 8Mi
     # Set explicitly at the effective values the namespace LimitRange `default`
     # (512Mi) gives the detect-version and network Jobs today, so cutting that
     # default cannot reach them. Remove this key only after the rook-ceph
@@ -312,22 +305,14 @@ cephFileSystems:
       metadataServer:
         activeCount: 1
         activeStandby: true
-        # These MUST stay in step with `mds_cache_memory_limit` in Ceph's own
-        # config. They were 256Mi against a 4Gi cache limit - a 16x mismatch.
-        # The MDS grew its metadata cache toward 4Gi exactly as configured, hit
-        # the 256Mi cgroup ceiling, and was OOMKilled: 35 restarts on mds-a and
-        # 33 on mds-b over 18 days, each one failing CephFS over to the standby
-        # and stalling all 11 clients. It was also a steady source of dead
-        # containers, whose overlay layers are what filled the node disks.
-        #
-        # Raising the container to 4Gi is not an option on 8GB Pi nodes, so the
-        # cache limit was lowered to 1Gi instead (see rook_ceph_deploy_part2)
-        # and the container given 1.5Gi - cache is not the MDS's only memory
-        # use, so the container needs headroom above the cache figure.
+        # Rook derives mds_cache_memory_limit per daemon as 0.5 x the
+        # container limit (640Mi at the B3 limit below). The MDS request stays
+        # 1Gi; the 1280Mi limit is the B3 trim and does not change the global
+        # cache setting.
         resources:
           limits:
             cpu: "1000m"
-            memory: "1536Mi"
+            memory: "1280Mi"
           requests:
             cpu: "100m"
             # 512Mi -> 1Gi (2026-10-31): measured 972-1147Mi working set with
@@ -417,10 +402,19 @@ monitoring:
 
 toolbox:
   enabled: true
+  affinity:
+    nodeAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          preference:
+            matchExpressions:
+              - key: kubernetes.io/hostname
+                operator: In
+                values: [yoda]
   resources:
     limits:
       cpu: "200m"
-      memory: "136Mi"   # was 256Mi; peak 105.6Mi (Stage B0)
+      memory: "56Mi"    # live P 34.14Mi; 1.25 x request rounded to 8Mi
     requests:
       cpu: "50m"
-      memory: "64Mi"
+      memory: "40Mi"    # live P 34.14Mi; rounded to 8Mi

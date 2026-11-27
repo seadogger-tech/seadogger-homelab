@@ -11,7 +11,7 @@ argocd_helm_values:
       requests:
         memory: 64Mi
       limits:
-        memory: 184Mi  # peak 146.5Mi (Stage B0, OCE-369)
+        memory: 80Mi
   # Behind Traefik's TLS termination. Set here as well as by the patch
   # tasks in argocd_native_deploy.yml, because a helm upgrade rewrites these
   # ConfigMaps and a values-less upgrade put server.insecure back to false
@@ -28,9 +28,9 @@ argocd_helm_values:
     resources:
       requests:
         cpu: 100m
-        memory: 384Mi  # below the 631.5Mi peak; raising it is Stage B
+        memory: 512Mi  # live P 507.13Mi; rounded to 8Mi
       limits:
-        memory: 792Mi  # was 1Gi (Stage B0, OCE-369)
+        memory: 640Mi
   # Stage B0 (OCE-369): these components had no resources and took the argocd
   # LimitRange (64Mi request, 1Gi limit). Requests stay at that 64Mi (redis
   # drops to 32Mi); limits are 1.25 x the 15+ day memory.peak. CPU still comes
@@ -38,21 +38,33 @@ argocd_helm_values:
   repoServer:
     resources:
       requests:
-        memory: 64Mi
+        memory: 152Mi
       limits:
-        memory: 408Mi  # peak 321.0Mi
+        memory: 192Mi
+    copyutil:
+      resources:
+        requests:
+          memory: 152Mi
+        limits:
+          memory: 192Mi
   dex:
     resources:
       requests:
-        memory: 64Mi
+        memory: 128Mi
       limits:
         memory: 160Mi  # peak 124.2Mi
+    copyutil:
+      resources:
+        requests:
+          memory: 128Mi
+        limits:
+          memory: 160Mi
   notifications:
     resources:
       requests:
-        memory: 64Mi
+        memory: 40Mi
       limits:
-        memory: 88Mi   # peak 69.7Mi
+        memory: 56Mi
   applicationSet:
     resources:
       requests:
