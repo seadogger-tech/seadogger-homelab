@@ -931,7 +931,7 @@ described here without measured P values:
 | Paperclip and paperclip-db | Their higher ratios protect concurrent agent runs and Postgres's observed worst-case memory; Postgres was OOM-killed at 1Gi. |
 | Jellyfin app | ffmpeg transcode use scales with concurrent streams, which the sampling window does not bound. |
 | Kopia maintenance Job | The Nextcloud repository grows each Sunday; its first maintenance after a weekly backup is outside the window. |
-| CSI nodeplugin `csi-*plugin` | B1's 1.5× allowance prevents an OOM from breaking every mount on that node. |
+| CSI nodeplugin `rook-ceph.*.csi.ceph.com-nodeplugin` | B1's 1.5× allowance prevents an OOM from breaking every mount on that node. |
 | Containers under 64Mi | 8Mi rounding can produce a ratio up to 1.5×. |
 | MDS standby, Nextcloud and Redis / Nextcloud DB | Their requests may exceed P: standby-replay must be sized to take over the active rank, while the application requests include their internal memory budgets. |
 
