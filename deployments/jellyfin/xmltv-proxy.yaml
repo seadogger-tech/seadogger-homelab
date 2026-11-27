@@ -83,6 +83,14 @@ spec:
       labels:
         app: xmltv-proxy
     spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: NotIn
+                    values: [rey.local]
       containers:
       - name: proxy
         image: python:3.11-alpine

@@ -54,6 +54,8 @@ KUBECTL_STUB = """#!/bin/sh
 case "$*" in *ceph*) ;; *) [ -n "$METALLB_STUB_STATE" ] && exec python3 "$METALLB_STUB" "$@" ;; esac
 echo "kubectl $*" >> "$STUB_LOG"
 case "$*" in
+  *"ceph health detail"*) echo "$CEPH_HEALTH_DETAIL_JSON" ;;
+  *"ceph osd stat"*) echo "$CEPH_OSD_STAT_JSON" ;;
   *"ceph health"*) echo "$CEPH_HEALTH" ;;
   *"ceph status"*|*"ceph -s"*|*"ceph pg stat"*) cat "$PG_JSON" ;;
 esac
@@ -261,6 +263,44 @@ class RunWithStubs(unittest.TestCase):
                 actual = yaml.safe_load((Path("/tmp") / f"{name}.yaml").read_text())
                 self.assertEqual(actual, expected)
 
+    def test_rook_recovery_accepts_one_osd_down_and_hands_the_b3_pair_to_helm(self):
+        health = {"status": "HEALTH_WARN", "checks": {"OSD_DOWN": {"severity": "HEALTH_WARN"}}}
+        osds = {"num_osds": 3, "num_up_osds": 2}
+        result, calls = self.run_flag(
+            "rook", extra=("rook_values_set=previous", "rook_recovery=true"),
+            CEPH_HEALTH_DETAIL_JSON=json.dumps(health), CEPH_OSD_STAT_JSON=json.dumps(osds),
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(len([call for call in calls if call.startswith("helm upgrade")]), 2, calls)
+        for name in ("rook-ceph-operator-values", "rook-ceph-cluster-values"):
+            with self.subTest(values=name):
+                expected = yaml.safe_load((self.checkout / "deployments/rook-ceph" / f"{name}.previous.yaml").read_text())
+                actual = yaml.safe_load((Path("/tmp") / f"{name}.yaml").read_text())
+                self.assertEqual(actual, expected)
+        operator = yaml.safe_load((Path("/tmp") / "rook-ceph-operator-values.yaml").read_text())
+        self.assertNotIn("provisionerNodeAffinity", operator["csi"])
+        cluster = yaml.safe_load((Path("/tmp") / "rook-ceph-cluster-values.yaml").read_text())
+        resources = cluster["cephClusterSpec"]["resources"]
+        self.assertEqual(resources["osd"]["requests"]["memory"], "1280Mi")
+        mds = cluster["cephFileSystems"][0]["spec"]["metadataServer"]["resources"]
+        self.assertEqual(mds["limits"]["memory"], "1280Mi")
+
+    def test_rook_recovery_refusals_happen_before_any_helm_upgrade(self):
+        cases = (
+            ({"status": "HEALTH_ERR", "checks": {"OSD_DOWN": {}}}, {"num_osds": 3, "num_up_osds": 2}),
+            ({"status": "HEALTH_WARN", "checks": {"MON_DOWN": {}}}, {"num_osds": 3, "num_up_osds": 3}),
+            ({"status": "HEALTH_WARN", "checks": {"OSD_DOWN": {}}}, {"num_osds": 3, "num_up_osds": 1}),
+        )
+        for health, osds in cases:
+            with self.subTest(health=health, osds=osds):
+                self.log.unlink(missing_ok=True)
+                result, calls = self.run_flag(
+                    "rook", extra=("rook_values_set=previous", "rook_recovery=true"),
+                    CEPH_HEALTH_DETAIL_JSON=json.dumps(health), CEPH_OSD_STAT_JSON=json.dumps(osds),
+                )
+                self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertFalse([call for call in calls if call.startswith("helm upgrade")], calls)
+
     def test_rook_rejects_unknown_values_set_and_recovery_without_previous(self):
         for extra in (("rook_values_set=unknown",), ("rook_recovery=true",)):
             with self.subTest(extra=extra):
@@ -300,13 +340,14 @@ class RunWithStubs(unittest.TestCase):
                 self.assertFalse(calls, calls)
 
     def test_metallb_previous_values_file_is_what_helm_gets(self):
-        for name, memory in (("metallb_helm_values.previous.yml", "80Mi"), ("metallb_helm_values.yml", "88Mi")):
+        for name in ("metallb_helm_values.previous.yml", "metallb_helm_values.yml"):
             with self.subTest(name):
                 result, _ = self.run_flag("metallb", extra=(f"metallb_values_file={name}",))
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
                 sent = yaml.safe_load(Path("/tmp/metallb-helm-values.yml").read_text())
                 self.assertEqual(sent["speaker"]["updateStrategy"], {"type": "OnDelete"})
-                self.assertEqual(sent["speaker"]["resources"]["requests"]["memory"], memory)
+                self.assertEqual(sent["speaker"]["resources"]["requests"]["memory"], "88Mi")
+                self.assertEqual(sent, yaml.safe_load((self.checkout / "ansible/vars" / name).read_text())["metallb_helm_values"])
 
     def test_metallb_helm_wait_follows_the_helm_major_version(self):
         for version, wanted, banned in (("v3.17.3+gabc", ["--atomic", "--wait"], ["--wait=legacy", "--rollback-on-failure"]),

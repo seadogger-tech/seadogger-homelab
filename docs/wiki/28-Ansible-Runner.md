@@ -78,7 +78,13 @@ All five default to `false` in `main.yml` and `example.config.yml`.
 `enable_traefik_resources` writes one object, the HelmChartConfig `kube-system/traefik`, from `ansible/vars/traefik_helmchartconfig_values.yml` (the cold-start `traefik_dashboard_deploy.yml` loads the same file). It is not `enable_traefik_dashboard`, which is an untagged task in a play that also runs other applications, so `--tags` cannot narrow it. It downloads nothing and creates no dashboard object.
 
 `enable_cert_manager_resources` applies exactly the checked-out
-`certificates/cert-manager-application.yml` with one Kubernetes apply. It does
+`certificates/cert-manager-application.yml` with one Kubernetes apply. The runner
+reads the file with `lookup('file', ...)` and hands the module a parsed
+`definition`: the module runs on yoda, where the runner's checkout does not exist,
+so a `src` path would fail there. `ansible/tests/test_b3_apply_task_paths.py`
+fails any `*_resources.yml` task that passes a controller path (`playbook_dir`,
+`role_path`, `/work/`) to a Kubernetes or Helm module without copying the file to
+the host first. It does
 not read `/root/pki`, patch webhook arguments or touch the webhook Deployment
 directly. The live Application was diffed against the tracked pre-B3 file; the
 diff was empty, so B3 adds only resources and preferred yoda affinity. Its
@@ -113,19 +119,73 @@ current values file (default) or `traefik_helmchartconfig_values.previous.yml`.
 Any other name fails before an apply. `guard.py` refuses none of these selectors
 or the new apply flag.
 
-**B3 rollback revisions.** Run Rook with `rook_values_set=previous` at the
-core landing SHA; add `rook_recovery=true` only if Ceph is not HEALTH_OK and
-the recovery pre-gate permits it. At that same landing SHA, run
-`enable_cert_manager_resources` with
-`cert_manager_application_file=cert-manager-application.previous.yml`, and
-`enable_traefik_resources` with
-`traefik_values_file=traefik_helmchartconfig_values.previous.yml`. ArgoCD and
-the pinned-revision plays roll back at the core revert SHA, where their
-pre-B3 values are checked out. The two Rook `.previous` files are the values
-from the base branch before B3; cert-manager `.previous` is the reconciled
-pre-B3 Application; Traefik `.previous` is the base branch's current values.
-The runbook at [Cluster Resource Monitor](30-Cluster-Resource-Monitor.md#stage-b3-fit-the-four-nodes)
-contains the B3 activity diagram and full C2/C3 checks.
+**Rollback revisions.** Use the 40-character re-plan landing SHA `<LAND>` for
+steps 1 and 2, then the 40-character core revert SHA `<REVERT>` for step 4.
+Rook and cert-manager roll back before the revert. The Rook `.previous` pair
+is byte-identical to `f883ee2`'s B3 current values: it keeps B3 sizing and has
+no ctrlplugin placement rule. The current operator values differ only at
+`csi.provisionerNodeAffinity`; the current cluster values equal `.previous`.
+Cert-manager `.previous` remains the reconciled pre-B3 Application.
+
+1. At `<LAND>`, run Rook with `rook_values_set=previous`:
+
+   ```bash
+   ansible-playbook -i hosts.ini main.yml --tags enable_rook_ceph_resources \
+     -e '{"enable_rook_ceph_resources": true, "rook_values_set": "previous"}'
+   ```
+
+   If Ceph is not HEALTH_OK, add `"rook_recovery": true` to the same `-e`
+   object. The recovery gate allows only its listed HEALTH_WARN codes and at
+   most one OSD down. If it refuses, stop before any Helm upgrade and before
+   reverting; do not override it. Check [R1](30-Cluster-Resource-Monitor.md#b3-rollback-gates)
+   before proceeding.
+
+2. At `<LAND>`, run cert-manager with its pre-B3 Application:
+
+   ```bash
+   ansible-playbook -i hosts.ini main.yml --tags enable_cert_manager_resources \
+     -e '{"enable_cert_manager_resources": true, "cert_manager_application_file": "cert-manager-application.previous.yml"}'
+   ```
+
+   Check [R2](30-Cluster-Resource-Monitor.md#b3-rollback-gates).
+
+3. Revert Core on `master`, producing `<REVERT>`, then hard-refresh Pi-hole
+   and Nextcloud.
+
+4. At `<REVERT>`, run MetalLB and ArgoCD with their default values, one flag
+   per run:
+
+   ```bash
+   ansible-playbook -i hosts.ini main.yml --tags enable_metallb_resources \
+     -e '{"enable_metallb_resources": true}'
+   ansible-playbook -i hosts.ini main.yml --tags enable_argocd_resources \
+     -e '{"enable_argocd_resources": true}'
+   ```
+
+   After the raw-blob check, run each remaining play separately:
+
+   ```bash
+   ansible-playbook -i hosts.ini main.yml --tags nextcloud_postgresql \
+     -e '{"enable_internal_pki":false,"enable_pihole":false,"enable_nextcloud":false,"enable_nextcloud_postgresql":true,"enable_nextcloud_redis":false,"enable_nextcloud_s3_backup":false,"enable_jellyfin":false,"enable_jellyfin_secrets":false,"enable_jellyfin_xmltv_proxy":false,"enable_jellyfin_hdhomerun_hls":false,"enable_traefik_dashboard":false,"enable_home_assistant":false,"enable_mealie":false,"enable_nut_ups":false,"enable_rook_ceph_resources":false,"enable_metallb_resources":false,"enable_traefik_resources":false,"enable_argocd_resources":false,"enable_cert_manager_resources":false,"nextcloud_postgresql_revision":"<PRIOR_DB_PIN>"}'
+   ansible-playbook -i hosts.ini main.yml --tags nextcloud_redis \
+     -e '{"enable_internal_pki":false,"enable_pihole":false,"enable_nextcloud":false,"enable_nextcloud_postgresql":false,"enable_nextcloud_redis":true,"enable_nextcloud_s3_backup":false,"enable_jellyfin":false,"enable_jellyfin_secrets":false,"enable_jellyfin_xmltv_proxy":false,"enable_jellyfin_hdhomerun_hls":false,"enable_traefik_dashboard":false,"enable_home_assistant":false,"enable_mealie":false,"enable_nut_ups":false,"enable_rook_ceph_resources":false,"enable_metallb_resources":false,"enable_traefik_resources":false,"enable_argocd_resources":false,"enable_cert_manager_resources":false,"nextcloud_redis_revision":"<PRIOR_REDIS_PIN>"}'
+   ansible-playbook -i hosts.ini main.yml \
+     -e '{"enable_internal_pki":false,"enable_pihole":false,"enable_nextcloud":false,"enable_nextcloud_postgresql":false,"enable_nextcloud_redis":false,"enable_nextcloud_s3_backup":true,"enable_jellyfin":false,"enable_jellyfin_secrets":false,"enable_jellyfin_xmltv_proxy":false,"enable_jellyfin_hdhomerun_hls":false,"enable_traefik_dashboard":false,"enable_home_assistant":false,"enable_mealie":false,"enable_nut_ups":false,"enable_rook_ceph_resources":false,"enable_metallb_resources":false,"enable_traefik_resources":false,"enable_argocd_resources":false,"enable_cert_manager_resources":false}'
+   ansible-playbook -i hosts.ini main.yml \
+     -e '{"enable_internal_pki":false,"enable_pihole":false,"enable_nextcloud":false,"enable_nextcloud_postgresql":false,"enable_nextcloud_redis":false,"enable_nextcloud_s3_backup":false,"enable_jellyfin":false,"enable_jellyfin_secrets":false,"enable_jellyfin_xmltv_proxy":true,"enable_jellyfin_hdhomerun_hls":false,"enable_traefik_dashboard":false,"enable_home_assistant":false,"enable_mealie":false,"enable_nut_ups":false,"enable_rook_ceph_resources":false,"enable_metallb_resources":false,"enable_traefik_resources":false,"enable_argocd_resources":false,"enable_cert_manager_resources":false}'
+   ```
+
+   The database and Redis rollback pins are the 40-character values recorded
+   before rollout in the prior-state record (wiki 05, *Rollback* column). Use
+   `<PRIOR_DB_PIN>` and `<PRIOR_REDIS_PIN>` in their respective commands; do not
+   use `<REVERT>` or a configured pin. Run s3-backup and xmltv only after the
+   raw-blob check passes, and only if those plays ran at rollout.
+
+   Check [R3](30-Cluster-Resource-Monitor.md#b3-rollback-gates).
+
+Rook and cert-manager are not rerun at `<REVERT>`. The [Cluster Resource
+Monitor](30-Cluster-Resource-Monitor.md#stage-b3-placement) runbook records
+the R1–R3 checks and stop conditions.
 
 **How to run one.** Follow *Running* below with the arguments `main.yml -i hosts.ini --tags enable_metallb_resources -e '{"enable_metallb_resources": true}'` (one flag, with its tag, per run). Afterwards run the Helm diff for that release; it should be empty and no pod should restart. The flag changes only what the repo's values say, so a non-empty diff means the cluster had drifted from the repo.
 

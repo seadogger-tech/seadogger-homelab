@@ -4,8 +4,9 @@ metadata:
   name: nextcloud-s3-backup
   namespace: nextcloud
 spec:
-  # Run every night at 2 AM
-  schedule: "0 2 * * *"
+  # Run every night at 3 AM New York time
+  schedule: "0 3 * * *"
+  timeZone: America/New_York
   successfulJobsHistoryLimit: 3
   failedJobsHistoryLimit: 3
   concurrencyPolicy: Forbid
@@ -16,6 +17,14 @@ spec:
           labels:
             app: nextcloud-s3-backup
         spec:
+          affinity:
+            nodeAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                nodeSelectorTerms:
+                  - matchExpressions:
+                      - key: kubernetes.io/hostname
+                        operator: NotIn
+                        values: [rey.local]
           restartPolicy: OnFailure
           securityContext:
             runAsUser: 33
