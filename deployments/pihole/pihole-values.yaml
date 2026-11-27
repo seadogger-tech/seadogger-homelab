@@ -140,7 +140,7 @@ persistentVolumeClaim:
 resources:
   limits:
     cpu: 500m
-    memory: 120Mi   # Stage B3: 1.25 x request (was 1Gi)
+    memory: 1Gi   # B3 exception: FTL's startup goes well past a 1.25 x limit and OOM-kills it (OCE-857)
   requests:
     cpu: 100m
     memory: 96Mi   # Stage B3: request = P rounded up to 8Mi (P: Pro memory-sizing record)

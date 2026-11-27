@@ -2,7 +2,7 @@
 
 Asserts, per row of the B3 spec 3.2 table:
   - the manifest or values file carries the B3 request and limit;
-  - limit <= ceil8(1.25 x request), except the listed exceptions (Jellyfin 1.5x, containers under 64Mi);
+  - limit <= ceil8(1.25 x request), except the listed exceptions (Jellyfin 1.5x, Pi-hole 1Gi, containers under 64Mi);
   - request >= the app's own memory budget where it has one (PHP memory_limit, Redis maxmemory,
     Postgres args);
 and that the Nextcloud cron sidecar is sized through the chart's real key and Jellyfin is held to
@@ -26,6 +26,9 @@ WIKI = CORE / "docs/wiki/05-GitOps-and-IaC.md"
 PHP_MEMORY_LIMIT_MI = 512  # image env PHP_MEMORY_LIMIT, read from the live pod (512M)
 POSTGRES_BASELINE_MI = 20  # postmaster, per-backend overhead and catalog caches beyond the settings
 
+# Pi-hole: FTL's startup goes past a 1.25x limit and OOM-kills it (OCE-857), so it keeps the pre-B3 1Gi.
+PIHOLE_EXCEPTION = {"request": 96, "limit": 1024}
+
 # name: (file, expected request, expected limit, allowed ratio)
 ROWS = {
     "nextcloud": ("nextcloud/nextcloud-values.yaml", 512, 640, 1.25),
@@ -35,7 +38,7 @@ ROWS = {
     "s3-sync": ("nextcloud/s3-backup-cronjob.yaml", 80, 104, 1.25),
     "jellyfin": ("jellyfin/jellyfin-values.yaml", 968, 1456, 1.5),
     "xmltv-proxy": ("jellyfin/xmltv-proxy.yaml", 24, 32, 1.5),
-    "pihole": ("pihole/pihole-values.yaml", 96, 120, 1.25),
+    "pihole": ("pihole/pihole-values.yaml", 96, 1024, 1.25),  # explicit exception, see PIHOLE_EXCEPTION
     "home-assistant": ("home-assistant/home-assistant-values.yaml", 1144, 1432, 1.25),
     "mealie": ("mealie/deployment.yaml", 312, 392, 1.25),
 }
@@ -136,6 +139,9 @@ class TestRows(unittest.TestCase):
             request, limit = resources_of(name)
             with self.subTest(name):
                 self.assertEqual(request % 8, 0)
+                if name == "pihole":
+                    self.assertEqual((request, limit), (PIHOLE_EXCEPTION["request"], PIHOLE_EXCEPTION["limit"]))
+                    continue
                 self.assertLessEqual(limit, up8(ratio * request))
                 if ratio == 1.25 and request >= 64:
                     self.assertLessEqual(limit, up8(1.25 * request))
