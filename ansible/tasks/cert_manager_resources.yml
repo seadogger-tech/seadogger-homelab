@@ -21,4 +21,6 @@
     kubeconfig: "{{ KUBECONFIG }}"
     state: present
     # The file is read on the runner (controller); the module runs on yoda, where the checkout does not exist.
-    definition: "{{ lookup('file', playbook_dir ~ '/../certificates/' ~ (cert_manager_application_file | default('cert-manager-application.yml', true))) | from_yaml }}"
+    definition: >-
+      {{ lookup('file', playbook_dir ~ '/../certificates/' ~
+      (cert_manager_application_file | default('cert-manager-application.yml', true))) | from_yaml }}

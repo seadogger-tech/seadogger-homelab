@@ -58,7 +58,7 @@ class CertManagerApply(unittest.TestCase):
     def test_application_is_a_definition_built_from_the_file_on_the_controller(self):
         k8s = self.apply_task()
         self.assertNotIn("src", k8s)
-        self.assertRegex(k8s["definition"], r"lookup\('file'.*playbook_dir")
+        self.assertRegex(k8s["definition"], r"lookup\(.file.[\s\S]*playbook_dir")
         self.assertIn("from_yaml", k8s["definition"])
 
     def test_definition_renders_to_the_selected_application_without_a_file_on_the_module_side(self):
