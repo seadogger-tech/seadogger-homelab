@@ -1,5 +1,26 @@
 # Cluster Resource Monitor
 
+## Stage B3: placement
+
+### Keep Paperclip off the OSD-0 node
+
+Paperclip stays off the node that runs Ceph OSD-0 and the active MDS. Its agent
+processes can use substantial memory at the same time as Ceph needs memory to
+serve storage and recover from failures. Separating them protects both the
+control plane's work and the storage path.
+
+Paperclip's required pod anti-affinity prevents a newly scheduled Paperclip pod
+from sharing a hostname with OSD-0. Its preferred anti-affinity steers it away
+from the MDS when another eligible node is available. Kubernetes applies pod
+anti-affinity when it schedules a pod; it does not evict an already running pod
+if an OSD or MDS later moves onto that node.
+
+Requests sized at observed peaks reserve nearly all worker capacity. That leaves
+no N−1 headroom: if a worker goes down, its larger pods can remain Pending until
+the worker returns. Placement keeps the workloads separated during normal
+operation, but does not make the remaining nodes large enough to absorb a
+failed worker.
+
 The cluster resource monitor records node and container measurements before
 daily cleanup, preserves short lived containers in history, and reports gaps
 that prevent a clean measurement window. Pro owns the host collector and the
