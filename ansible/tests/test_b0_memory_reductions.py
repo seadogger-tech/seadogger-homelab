@@ -174,11 +174,19 @@ class TestB0HelmRender(unittest.TestCase):
         values = load_yaml("ansible/vars/argocd_helm_values.yml")["argocd_helm_values"]
         by = {s["name"]: s for s in yaml.safe_load(FIXTURE.read_text())["containers"]}
         seen = dict(self.containers(self.render("argocd", values), ("Deployment", "StatefulSet")))
-        for cname, row in (("application-controller", "argocd application-controller"),
-                           ("repo-server", "argocd repo-server"), ("server", "argocd server"),
-                           ("dex-server", "argocd dex-server"),
-                           ("notifications-controller", "argocd notifications-controller"),
-                           ("applicationset-controller", "argocd applicationset-controller"),
+        b3_expected = {
+            "application-controller": (512, 640),
+            "repo-server": (152, 192),
+            "dex-server": (128, 160),
+            "server": (64, 80),
+            "notifications-controller": (40, 56),
+        }
+        for cname, (request, limit) in b3_expected.items():
+            with self.subTest(cname):
+                self.assertIn(cname, seen)
+                self.assertEqual(to_mi(seen[cname]["requests"]["memory"]), request)
+                self.assertEqual(to_mi(seen[cname]["limits"]["memory"]), limit)
+        for cname, row in (("applicationset-controller", "argocd applicationset-controller"),
                            ("redis", "argocd redis")):
             with self.subTest(cname):
                 self.assertIn(cname, seen)
@@ -193,7 +201,7 @@ class TestB0HelmRender(unittest.TestCase):
         self.assertEqual(to_mi(res["cmd-reporter"]["requests"]["memory"]), 64)
         self.assertEqual(to_mi(res["cmd-reporter"]["limits"]["memory"]), 512)
         self.assertEqual(to_mi(res["logcollector"]["limits"]["memory"]), 40)
-        self.assertEqual(to_mi(res["exporter"]["limits"]["memory"]), 64)
+        self.assertEqual(to_mi(res["exporter"]["limits"]["memory"]), 40)
         for k in ("logcollector", "exporter"):  # CPU is kept from the chart defaults
             self.assertIn("cpu", res[k]["requests"])
 
