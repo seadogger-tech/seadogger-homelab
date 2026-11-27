@@ -591,7 +591,7 @@ cronjob:
   sidecar:
     ## Cronjob sidecar resource requests and limits. The chart reads this key; the
     ## cronjob.resources key it replaces was never read, so the sidecar ran on the
-    ## namespace LimitRange defaults. Stage B3: P 69Mi -> 72/96 (1.25x).
+    ## Stage B3: request = P rounded up to 8Mi; limit 1.25x (P: Pro memory-sizing record).
     ## ref: http://kubernetes.io/docs/user-guide/compute-resources/
     ##
     resources:
@@ -661,7 +661,8 @@ persistence:
     size: 8Gi
 
 resources:
-  # Stage B3: request = max(P 196Mi, PHP memory_limit 512M). The image sets PHP_MEMORY_LIMIT=512M,
+  # Stage B3: request = max(P, PHP memory_limit), limit 1.25x (P: Pro memory-sizing record).
+  # The image sets PHP_MEMORY_LIMIT=512M,
   # a budget Kubernetes cannot see, so the request covers it and the limit is 1.25x.
   requests:
     memory: 512Mi
@@ -965,4 +966,3 @@ rbac:
 
 ## @param securityContext for nextcloud pod @deprecated Use `nextcloud.podSecurityContext` instead
 securityContext: {}
-

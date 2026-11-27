@@ -38,7 +38,7 @@ persistence:
 resources:
   requests:
     cpu: "100m"
-    memory: "1144Mi"   # Stage B3: P 1,140Mi (was 1Gi)
+    memory: "1144Mi"   # Stage B3: request = P rounded up to 8Mi (P: Pro memory-sizing record)
   limits:
     cpu: "1000m"
     memory: "1432Mi"   # 1.25 x request (was 2Gi)

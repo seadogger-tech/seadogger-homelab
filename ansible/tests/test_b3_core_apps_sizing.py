@@ -3,7 +3,6 @@
 Asserts, per row of the B3 spec 3.2 table:
   - the manifest or values file carries the B3 request and limit;
   - limit <= ceil8(1.25 x request), except the listed exceptions (Jellyfin 1.5x, containers under 64Mi);
-  - request >= P, where P is the highest working set read live at build time (peaks below);
   - request >= the app's own memory budget where it has one (PHP memory_limit, Redis maxmemory,
     Postgres args);
 and that the Nextcloud cron sidecar is sized through the chart's real key and Jellyfin is held to
@@ -27,19 +26,52 @@ WIKI = CORE / "docs/wiki/05-GitOps-and-IaC.md"
 PHP_MEMORY_LIMIT_MI = 512  # image env PHP_MEMORY_LIMIT, read from the live pod (512M)
 POSTGRES_BASELINE_MI = 20  # postmaster, per-backend overhead and catalog caches beyond the settings
 
-# name: (file, P in Mi, expected request, expected limit, allowed ratio)
+# name: (file, expected request, expected limit, allowed ratio)
 ROWS = {
-    "nextcloud": ("nextcloud/nextcloud-values.yaml", 196.3, 512, 640, 1.25),
-    "nextcloud-cron": ("nextcloud/nextcloud-values.yaml", 69.4, 72, 96, 1.25),
-    "nextcloud-db": ("nextcloud/postgresql/statefulset.yaml", 73, 192, 240, 1.25),
-    "nextcloud-redis": ("nextcloud/redis/deployment.yaml", 9, 64, 80, 1.25),
-    "s3-sync": ("nextcloud/s3-backup-cronjob.yaml", 76, 80, 104, 1.25),
-    "jellyfin": ("jellyfin/jellyfin-values.yaml", 961, 968, 1456, 1.5),
-    "xmltv-proxy": ("jellyfin/xmltv-proxy.yaml", 21, 24, 32, 1.5),
-    "pihole": ("pihole/pihole-values.yaml", 94, 96, 120, 1.25),
-    "home-assistant": ("home-assistant/home-assistant-values.yaml", 1140, 1144, 1432, 1.25),
-    "mealie": ("mealie/deployment.yaml", 306, 312, 392, 1.25),
+    "nextcloud": ("nextcloud/nextcloud-values.yaml", 512, 640, 1.25),
+    "nextcloud-cron": ("nextcloud/nextcloud-values.yaml", 72, 96, 1.25),
+    "nextcloud-db": ("nextcloud/postgresql/statefulset.yaml", 192, 240, 1.25),
+    "nextcloud-redis": ("nextcloud/redis/deployment.yaml", 64, 80, 1.25),
+    "s3-sync": ("nextcloud/s3-backup-cronjob.yaml", 80, 104, 1.25),
+    "jellyfin": ("jellyfin/jellyfin-values.yaml", 968, 1456, 1.5),
+    "xmltv-proxy": ("jellyfin/xmltv-proxy.yaml", 24, 32, 1.5),
+    "pihole": ("pihole/pihole-values.yaml", 96, 120, 1.25),
+    "home-assistant": ("home-assistant/home-assistant-values.yaml", 1144, 1432, 1.25),
+    "mealie": ("mealie/deployment.yaml", 312, 392, 1.25),
 }
+
+PUBLIC_P_FILES = (
+    CORE / "ansible/tests/test_b3_core_apps_sizing.py",
+    CORE / "ansible/tests/test_b3_runner_chart_sizing.py",
+    CORE / "ansible/vars/argocd_helm_values.yml",
+    CORE / "deployments/home-assistant/home-assistant-values.yaml",
+    CORE / "deployments/jellyfin/jellyfin-values.yaml",
+    CORE / "deployments/mealie/deployment.yaml",
+    CORE / "deployments/nextcloud/nextcloud-values.yaml",
+    CORE / "deployments/nextcloud/postgresql/statefulset.yaml",
+    CORE / "deployments/pihole/pihole-values.yaml",
+    CORE / "deployments/rook-ceph/rook-ceph-cluster-values.yaml",
+)
+
+
+class TestMeasuredPeaksStayPrivate(unittest.TestCase):
+    def test_public_b3_files_do_not_contain_measured_p(self):
+        measured_p_patterns = (
+            re.compile(r"live " + "P"),
+            re.compile(r"\b" + "P" + r"\s*[0-9]"),
+            re.compile("Measured " + "P is"),
+        )
+        for path in PUBLIC_P_FILES:
+            if ".previous" in path.name:
+                continue
+            with self.subTest(path=path.relative_to(CORE)):
+                contents = path.read_text()
+                for pattern in measured_p_patterns:
+                    self.assertIsNone(pattern.search(contents), f"{pattern.pattern} found in {path.relative_to(CORE)}")
+
+    def test_b3_rows_do_not_have_a_measured_p_column(self):
+        self.assertTrue(all(len(row) == 4 for row in ROWS.values()),
+                        "ROWS must contain only file, request, limit and ratio")
 
 
 def mi(value):
@@ -95,15 +127,14 @@ def resources_of(name):
 
 class TestRows(unittest.TestCase):
     def test_each_row_has_the_b3_request_and_limit(self):
-        for name, (_, _, req, lim, _) in ROWS.items():
+        for name, (_, req, lim, _) in ROWS.items():
             with self.subTest(name):
                 self.assertEqual(resources_of(name), (req, lim))
 
     def test_each_row_follows_the_sizing_rule(self):
-        for name, (_, peak, req, _, ratio) in ROWS.items():
+        for name, (_, req, _, ratio) in ROWS.items():
             request, limit = resources_of(name)
             with self.subTest(name):
-                self.assertGreaterEqual(request, peak)
                 self.assertEqual(request % 8, 0)
                 self.assertLessEqual(limit, up8(ratio * request))
                 if ratio == 1.25 and request >= 64:
@@ -122,7 +153,7 @@ class TestRows(unittest.TestCase):
         budget = (size("shared_buffers") + int(setting["max_connections"]) * size("work_mem")
                   + size("maintenance_work_mem") + size("autovacuum_work_mem") + POSTGRES_BASELINE_MI)
         request, limit = resources_of("nextcloud-db")
-        self.assertEqual(up8(max(73, budget)), request)
+        self.assertGreaterEqual(request, budget)
         self.assertEqual(up8(1.25 * request), limit)
 
     def test_cron_sidecar_uses_the_chart_key_and_the_dead_key_is_gone(self):

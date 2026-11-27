@@ -133,7 +133,7 @@ resources:
     memory: 120Mi   # Stage B3: 1.25 x request (was 1Gi)
   requests:
     cpu: 100m
-    memory: 96Mi   # Stage B3: P 94Mi (was 128Mi)
+    memory: 96Mi   # Stage B3: request = P rounded up to 8Mi (P: Pro memory-sizing record)
 
 adlists:
     - https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/ultimate.txt

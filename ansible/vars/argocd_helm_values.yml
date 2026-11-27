@@ -28,7 +28,7 @@ argocd_helm_values:
     resources:
       requests:
         cpu: 100m
-        memory: 512Mi  # live P 507.13Mi; rounded to 8Mi
+        memory: 512Mi  # Stage B3: request = P rounded up to 8Mi (P: Pro memory-sizing record)
       limits:
         memory: 640Mi
   # Stage B0 (OCE-369): these components had no resources and took the argocd
