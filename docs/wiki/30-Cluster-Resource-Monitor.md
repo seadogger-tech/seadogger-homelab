@@ -888,14 +888,16 @@ flowchart TD
 
 The portal presents the monitor's read-only API in three views. The browser
 refreshes both endpoints every 30 seconds while the page is visible. A request
-has a five-second timeout; a busy 503 keeps the last successful data. Data is
-marked stale after 90 seconds. A failure without usable data is shown as
-unavailable, never as an empty table or zero.
+has a five-second timeout; a busy 503 keeps the last successful data. The stale
+banner is measured from each response's `generatedAt`, not from when the browser
+received it; data older than 90 seconds, or data without a parseable
+`generatedAt`, is stale. A failure without usable data is shown as unavailable,
+never as an empty table or zero.
 
 | Tab | Meaning | Source | View |
 |---|---|---|---|
 | **Active memory** | The containers' current use, shown as the Metrics API's **working set**: an estimate of memory in use (cgroup usage minus inactive file cache), sampled about every 15 seconds. | `memory.v1` working sets and limits | Per node, working set / allocatable with a bar. Per pod, working set / limit, sorted by its percentage of limit; expand a pod for container values. |
-| **Reserved memory** | Memory the scheduler has set aside: the sum of container requests. Limits remain visible because they are the maximum each container may use before an OOM kill. | Running and Pending pod specs in `memory.v1` | Per node, requests / allocatable and limits / allocatable. Per pod, request, limit and QoS. |
+| **Reserved memory** | Memory the scheduler has set aside: the sum of container requests. Limits remain visible because they are the maximum each container may use before an OOM kill. | Running and Pending pod specs in `memory.v1` | Per node, requests / allocatable and limits / allocatable. Per pod, scheduler-effective request and limit totals (including init-container scheduling effects) and QoS. |
 | **OOM drops** | Confirmed memory incidents: OOM-killed containers, memory-pressure evictions and unmatched kernel OOM events. | `oom.v1` incidents and coverage | Last seven days, newest first, with local time, kind, cause, node, namespace, workload, pod, container, limit and repeat count. |
 
 Working set is not the OOM threshold. The kernel kills when charged memory
