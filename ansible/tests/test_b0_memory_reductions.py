@@ -107,9 +107,15 @@ class TestB0MemoryReductions(unittest.TestCase):
         text = WIKI.read_text()
         self.assertIn("Stage B0 immediate reductions", text)
         self.assertIn("rollback", text.lower())
+        left = text.split("### Left for Stage B", 1)[1].split("### Rollout", 1)[0]
         for spec in self.rows:
             with self.subTest(spec["name"]):
-                self.assertIn(f"| {spec['name']} |", text)
+                if spec["name"].startswith(("csi-rbdplugin", "csi-cephfsplugin")):
+                    # the Driver CRs apply these keys to the controllerPlugin only: the nodeplugin rows are Stage B's
+                    self.assertIn(f"`{spec['name']}`", left)
+                    self.assertNotIn(f"| {spec['name']} |", text.split("### Left for Stage B", 1)[0])
+                else:
+                    self.assertIn(f"| {spec['name']} |", text)
 
 
 @unittest.skipUnless(shutil.which("helm"), "helm not installed")
