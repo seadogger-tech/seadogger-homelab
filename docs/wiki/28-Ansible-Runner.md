@@ -166,14 +166,20 @@ Cert-manager `.previous` remains the reconciled pre-B3 Application.
 
    ```bash
    ansible-playbook -i hosts.ini main.yml --tags nextcloud_postgresql \
-     -e '{"enable_nextcloud_postgresql": true}'
+     -e '{"enable_internal_pki":false,"enable_pihole":false,"enable_nextcloud":false,"enable_nextcloud_postgresql":true,"enable_nextcloud_redis":false,"enable_nextcloud_s3_backup":false,"enable_jellyfin":false,"enable_jellyfin_secrets":false,"enable_jellyfin_xmltv_proxy":false,"enable_jellyfin_hdhomerun_hls":false,"enable_traefik_dashboard":false,"enable_home_assistant":false,"enable_mealie":false,"enable_nut_ups":false,"enable_rook_ceph_resources":false,"enable_metallb_resources":false,"enable_traefik_resources":false,"enable_argocd_resources":false,"enable_cert_manager_resources":false,"nextcloud_postgresql_revision":"<PRIOR_DB_PIN>"}'
    ansible-playbook -i hosts.ini main.yml --tags nextcloud_redis \
-     -e '{"enable_nextcloud_redis": true}'
+     -e '{"enable_internal_pki":false,"enable_pihole":false,"enable_nextcloud":false,"enable_nextcloud_postgresql":false,"enable_nextcloud_redis":true,"enable_nextcloud_s3_backup":false,"enable_jellyfin":false,"enable_jellyfin_secrets":false,"enable_jellyfin_xmltv_proxy":false,"enable_jellyfin_hdhomerun_hls":false,"enable_traefik_dashboard":false,"enable_home_assistant":false,"enable_mealie":false,"enable_nut_ups":false,"enable_rook_ceph_resources":false,"enable_metallb_resources":false,"enable_traefik_resources":false,"enable_argocd_resources":false,"enable_cert_manager_resources":false,"nextcloud_redis_revision":"<PRIOR_REDIS_PIN>"}'
    ansible-playbook -i hosts.ini main.yml \
-     -e '{"enable_nextcloud_s3_backup": true}'
+     -e '{"enable_internal_pki":false,"enable_pihole":false,"enable_nextcloud":false,"enable_nextcloud_postgresql":false,"enable_nextcloud_redis":false,"enable_nextcloud_s3_backup":true,"enable_jellyfin":false,"enable_jellyfin_secrets":false,"enable_jellyfin_xmltv_proxy":false,"enable_jellyfin_hdhomerun_hls":false,"enable_traefik_dashboard":false,"enable_home_assistant":false,"enable_mealie":false,"enable_nut_ups":false,"enable_rook_ceph_resources":false,"enable_metallb_resources":false,"enable_traefik_resources":false,"enable_argocd_resources":false,"enable_cert_manager_resources":false}'
    ansible-playbook -i hosts.ini main.yml \
-     -e '{"enable_jellyfin_xmltv_proxy": true}'
+     -e '{"enable_internal_pki":false,"enable_pihole":false,"enable_nextcloud":false,"enable_nextcloud_postgresql":false,"enable_nextcloud_redis":false,"enable_nextcloud_s3_backup":false,"enable_jellyfin":false,"enable_jellyfin_secrets":false,"enable_jellyfin_xmltv_proxy":true,"enable_jellyfin_hdhomerun_hls":false,"enable_traefik_dashboard":false,"enable_home_assistant":false,"enable_mealie":false,"enable_nut_ups":false,"enable_rook_ceph_resources":false,"enable_metallb_resources":false,"enable_traefik_resources":false,"enable_argocd_resources":false,"enable_cert_manager_resources":false}'
    ```
+
+   The database and Redis rollback pins are the 40-character values recorded
+   before rollout in the prior-state record (wiki 05, *Rollback* column). Use
+   `<PRIOR_DB_PIN>` and `<PRIOR_REDIS_PIN>` in their respective commands; do not
+   use `<REVERT>` or a configured pin. Run s3-backup and xmltv only after the
+   raw-blob check passes, and only if those plays ran at rollout.
 
    Check [R3](30-Cluster-Resource-Monitor.md#b3-rollback-gates).
 
