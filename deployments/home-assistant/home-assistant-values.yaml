@@ -38,10 +38,10 @@ persistence:
 resources:
   requests:
     cpu: "100m"
-    memory: "1Gi"
+    memory: "1144Mi"   # Stage B3: P 1,140Mi (was 1Gi)
   limits:
     cpu: "1000m"
-    memory: "2Gi"
+    memory: "1432Mi"   # 1.25 x request (was 2Gi)
 
 ingress:
   enabled: false

@@ -83,6 +83,7 @@ class TestB0MemoryReductions(unittest.TestCase):
             "argocd application-controller", "argocd repo-server",
             "argocd server", "argocd dex-server",
             "argocd notifications-controller",
+            "mealie",
         }
         for spec in self.rows:
             with self.subTest(spec["name"]):

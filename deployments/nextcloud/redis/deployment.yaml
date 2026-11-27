@@ -88,10 +88,12 @@ spec:
           resources:
             requests:
               cpu: 25m
-              memory: 96Mi
+              # Request = maxmemory 64mb in the command above (Stage B3); P is 9Mi.
+              # Limit = 1.25 x request.
+              memory: 64Mi
             limits:
               cpu: 250m
-              memory: 192Mi
+              memory: 80Mi
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
