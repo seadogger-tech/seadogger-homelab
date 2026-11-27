@@ -51,7 +51,7 @@ spec:
           resources:
             requests:
               cpu: "50m"
-              memory: "312Mi"   # Stage B3: P 306Mi working set (2026-10-31), was 320Mi
+              memory: "312Mi"   # Stage B3: request = P rounded up to 8Mi (P: Pro memory-sizing record)
             limits:
               cpu: "1000m"
               memory: "392Mi"   # 1.25 x request (was 408Mi)

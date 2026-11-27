@@ -105,7 +105,7 @@ cephClusterSpec:
         memory: "680Mi"
       requests:
         cpu: "150m"      # was 500m; measured 56-73m
-        memory: "544Mi"  # live P 542.17Mi; rounded to 8Mi
+        memory: "544Mi"  # Stage B3: request = P rounded up to 8Mi (P: Pro memory-sizing record)
     mon:
       # Ceph defaults mon_memory_target to 2Gi. Unlike the MDS, Rook does NOT
       # auto-tune the mons from the container limit, so nothing reconciles the
@@ -126,7 +126,7 @@ cephClusterSpec:
         # 1Gi target was pinned did not last: the mons grew back to 403-508Mi
         # working set, 556-742Mi peak, so 256Mi under-counted every mon and
         # let the scheduler overpack the workers.
-        memory: "560Mi"  # live P 554.45Mi; rounded to 8Mi
+        memory: "560Mi"  # Stage B3: request = P rounded up to 8Mi (P: Pro memory-sizing record)
     osd:
       # The request is deliberately `osd_memory_target` (1280Mi). Rook passes
       # POD_MEMORY_REQUEST into Ceph as --osd-memory-target; this is the cache
@@ -167,7 +167,7 @@ cephClusterSpec:
         memory: "80Mi"
       requests:
         cpu: "50m"
-        memory: "64Mi"   # live watch-active P 59.42Mi; rounded to 8Mi
+        memory: "64Mi"   # Stage B3: request = P rounded up to 8Mi (P: Pro memory-sizing record)
     # Stage B0 (OCE-369): limits cut to 1.25 x the memory.peak read over the
     # long windows; CPU comes from the chart defaults. See the "Stage B0
     # immediate reductions" section in docs/wiki/30-Cluster-Resource-Monitor.md.
@@ -178,9 +178,9 @@ cephClusterSpec:
         memory: "32Mi"   # was 100Mi
     exporter:
       limits:
-        memory: "40Mi"   # live P 26.28Mi; 1.25 x request rounded to 8Mi
+        memory: "40Mi"   # Stage B3: request = P rounded up to 8Mi; limit 1.25x (Pro record)
       requests:
-        memory: "32Mi"   # live ceph-exporter P 26.28Mi; rounded to 8Mi
+        memory: "32Mi"   # Stage B3: request = P rounded up to 8Mi (P: Pro memory-sizing record)
     # Set explicitly at the effective values the namespace LimitRange `default`
     # (512Mi) gives the detect-version and network Jobs today, so cutting that
     # default cannot reach them. Remove this key only after the rook-ceph
@@ -414,7 +414,7 @@ toolbox:
   resources:
     limits:
       cpu: "200m"
-      memory: "56Mi"    # live P 34.14Mi; 1.25 x request rounded to 8Mi
+      memory: "56Mi"    # Stage B3: request = P rounded up to 8Mi; limit 1.25x (Pro record)
     requests:
       cpu: "50m"
-      memory: "40Mi"    # live P 34.14Mi; rounded to 8Mi
+      memory: "40Mi"    # Stage B3: request = P rounded up to 8Mi (P: Pro memory-sizing record)

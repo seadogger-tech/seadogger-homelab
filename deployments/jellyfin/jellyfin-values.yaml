@@ -73,7 +73,7 @@ controllers:
         env:
           TZ: America/New_York
         resources:
-          # Stage B3: request = P 961Mi, rounded up. Limit 1.5x, a listed exception: ffmpeg
+          # Stage B3: request = P rounded up to 8Mi; limit 1.5x (P: Pro memory-sizing record)
           # transcodes scale with concurrent streams, which the sampler window does not bound.
           requests: { cpu: "50m", memory: "968Mi" }
           limits:   { cpu: "2",    memory: "1456Mi" }
