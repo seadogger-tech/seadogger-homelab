@@ -36,6 +36,8 @@ def csi_values(path, key):
 
 # Commit the Map branch was cut from (merge-base of master and map/OCE-369-b3-fit): the pre-B3 state.
 PRE_B3_BASE = "518f325d5b85de472214584283891b2f01d79fb2"
+# Master when the OCE-859 task branch was cut; keep the rollback file stable after merge.
+TASK_BASE = "acc65211d433bb98dc48e9bf3ab2203d248af431"
 
 
 def base_yaml(path):
@@ -111,7 +113,7 @@ class TestB3SizingValues(unittest.TestCase):
         self.assertEqual(values["resources"]["requests"]["memory"], "32Mi")
         self.assertEqual(values["resources"]["limits"]["memory"], "40Mi")
         self.assertEqual(values["cainjector"]["resources"]["requests"]["memory"], "72Mi")
-        self.assertEqual(values["cainjector"]["resources"]["limits"]["memory"], "96Mi")
+        self.assertEqual(values["cainjector"]["resources"]["limits"]["memory"], "256Mi")
         self.assertEqual(values["webhook"]["resources"]["requests"]["memory"], "32Mi")
         self.assertEqual(values["webhook"]["resources"]["limits"]["memory"], "40Mi")
         for component in (values, values["cainjector"], values["webhook"]):
@@ -131,15 +133,15 @@ class TestB3SizingValues(unittest.TestCase):
         self.assertIn("yoda", str(current["traefik_helmchartconfig_values"].get("affinity")))
 
     def test_traefik_and_cert_manager_previous_files_equal_the_base_branch(self):
-        pairs = (
-            (CORE / "ansible/vars/traefik_helmchartconfig_values.yml",
-             CORE / "ansible/vars/traefik_helmchartconfig_values.previous.yml"),
-            (CORE / "certificates/cert-manager-application.yml",
-             CORE / "certificates/cert-manager-application.previous.yml"),
-        )
-        for source, previous in pairs:
-            with self.subTest(previous=previous.name):
-                self.assertEqual(yaml.safe_load(previous.read_text()), base_yaml(source))
+        traefik_previous = CORE / "ansible/vars/traefik_helmchartconfig_values.previous.yml"
+        self.assertEqual(yaml.safe_load(traefik_previous.read_text()),
+                         base_yaml(CORE / "ansible/vars/traefik_helmchartconfig_values.yml"))
+        cert_manager_previous = CORE / "certificates/cert-manager-application.previous.yml"
+        result = subprocess.run(
+            ["git", "show", f"{TASK_BASE}:certificates/cert-manager-application.yml"],
+            cwd=CORE, capture_output=True, text=True, check=True)
+        with self.subTest(previous=cert_manager_previous.name):
+            self.assertEqual(yaml.safe_load(cert_manager_previous.read_text()), yaml.safe_load(result.stdout))
 
     def test_runner_job_container_and_checkout_init_resources(self):
         job = yaml.safe_load((CORE / "deployments/ansible-runner/job.template.yaml").read_text())
@@ -163,7 +165,10 @@ class TestB3SizingValues(unittest.TestCase):
         ordinary.extend(argo[key]["resources"] for key in ("controller", "repoServer", "dex", "server", "notifications"))
         cert = yaml.safe_load((CORE / "certificates/cert-manager-application.yml").read_text())
         cert_values = yaml.safe_load(cert["spec"]["source"]["helm"]["values"])
-        ordinary.extend((cert_values["resources"], cert_values["cainjector"]["resources"], cert_values["webhook"]["resources"]))
+        ordinary.extend((cert_values["resources"], cert_values["webhook"]["resources"]))
+        cainjector = cert_values["cainjector"]["resources"]
+        self.assertEqual((memory_mi(cainjector["requests"]["memory"]),
+                          memory_mi(cainjector["limits"]["memory"])), (72, 256))
         job = yaml.safe_load((CORE / "deployments/ansible-runner/job.template.yaml").read_text())
         pod = job["spec"]["template"]["spec"]
         ordinary.extend(item["resources"] for item in (pod["containers"][0], pod["initContainers"][0]))
