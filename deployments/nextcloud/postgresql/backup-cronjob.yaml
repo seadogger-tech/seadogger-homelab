@@ -33,7 +33,7 @@ spec:
                   - matchExpressions:
                       - key: kubernetes.io/hostname
                         operator: In
-                        values: [anakin.local, obiwan.local, rey.local]
+                        values: [anakin.local, obiwan.local]
           securityContext:
             runAsUser: 999
             runAsGroup: 999

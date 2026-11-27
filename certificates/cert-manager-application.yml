@@ -24,6 +24,12 @@ spec:
             memory: 40Mi
         affinity:
           nodeAffinity:
+            requiredDuringSchedulingIgnoredDuringExecution:
+              nodeSelectorTerms:
+                - matchExpressions:
+                    - key: kubernetes.io/hostname
+                      operator: NotIn
+                      values: [rey.local]
             preferredDuringSchedulingIgnoredDuringExecution:
               - weight: 100
                 preference:
@@ -39,6 +45,12 @@ spec:
               memory: 96Mi
           affinity:
             nodeAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                nodeSelectorTerms:
+                  - matchExpressions:
+                      - key: kubernetes.io/hostname
+                        operator: NotIn
+                        values: [rey.local]
               preferredDuringSchedulingIgnoredDuringExecution:
                 - weight: 100
                   preference:
@@ -59,6 +71,12 @@ spec:
               memory: 40Mi
           affinity:
             nodeAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                nodeSelectorTerms:
+                  - matchExpressions:
+                      - key: kubernetes.io/hostname
+                        operator: NotIn
+                        values: [rey.local]
               preferredDuringSchedulingIgnoredDuringExecution:
                 - weight: 100
                   preference:

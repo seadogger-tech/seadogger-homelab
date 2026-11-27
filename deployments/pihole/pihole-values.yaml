@@ -33,6 +33,16 @@ serviceDns:
 serviceDHCP:
   enabled: false
 
+# Pi-hole can run on any node except the node reserved for Paperclip.
+affinity:
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: NotIn
+              values: [rey.local]
+
 # DNS over HTTPS configuration
 doh:
   enabled: true

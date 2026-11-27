@@ -34,7 +34,7 @@ spec:
                     values: [arm64]
                   - key: kubernetes.io/hostname
                     operator: In
-                    values: [anakin.local, obiwan.local, rey.local]
+                    values: [anakin.local, obiwan.local]
           preferredDuringSchedulingIgnoredDuringExecution:
             - weight: 100
               preference:

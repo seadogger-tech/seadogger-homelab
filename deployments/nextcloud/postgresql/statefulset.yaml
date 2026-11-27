@@ -34,14 +34,14 @@ spec:
                     values: [arm64]
                   - key: kubernetes.io/hostname
                     operator: In
-                    values: [anakin.local, obiwan.local, rey.local]
+                    values: [anakin.local, obiwan.local]
           preferredDuringSchedulingIgnoredDuringExecution:
             - weight: 100
               preference:
                 matchExpressions:
                   - key: kubernetes.io/hostname
                     operator: In
-                    values: [rey.local]
+                    values: [obiwan.local]
       containers:
         - name: postgres
           image: docker.io/library/postgres:17.11-bookworm@sha256:3645570cccdfa447589da9f57dd740faa29b30938e861289a5574b6ca6b03826

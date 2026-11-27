@@ -2,6 +2,47 @@
 
 ## Stage B3: placement
 
+### Rey reserved for Paperclip
+
+Every reschedulable core workload except Paperclip has a required placement
+rule that excludes `rey.local`. Use `NotIn [rey.local]`, or an `In` allowlist
+that omits rey where the workload already has a required host list. These
+rules apply on the next pod creation; they do not evict running pods.
+
+The small Rook toolbox, Rook operator and ceph-csi-controller-manager remain
+on their existing yoda placements, with memory requests no higher than 168 Mi.
+Ceph daemons pinned by device or Git, mgr-b, Paperclip and DaemonSets also
+remain exceptions; they are not movable core workloads covered by this rule.
+
+This reserves placement, not N−1 capacity. With requests near node capacity,
+loss of an eligible worker can leave a required workload Pending until that
+worker returns. No measured P is published in core.
+
+### B3 rollback gates
+
+Run the Rook and cert-manager rollbacks at the re-plan landing SHA `<LAND>`;
+run the remaining rollbacks at the Core revert SHA `<REVERT>`. Use the exact
+commands in [Ansible Runner](28-Ansible-Runner.md#rollback-revisions). If a
+gate refuses or fails, stop before the next step. Do not override a Rook
+recovery refusal or revert Core until the failed gate is investigated at the
+SHA where it ran.
+
+- **R1 — Rook at `<LAND>`.** Ceph is HEALTH_OK, or the explicit recovery gate
+  accepts the state. The run succeeds through the active+clean post-gate;
+  both Helm releases use the `.previous` pair; RBD and CephFS ctrlplugin
+  Deployments have no node rule and are Ready. Verify B3 sizing remains:
+  OSD 1,280/2,928 Mi, mon limit 1,280 Mi, MDS request 1 Gi and limit 1,280
+  Mi, and mgr 544/680 Mi. OSD, mon, mgr and MDS pod UIDs and restart counts
+  match the prior state, proving no Ceph daemon restarted. If any check fails,
+  stop before reverting and investigate at `<LAND>`.
+- **R2 — cert-manager at `<LAND>`.** The live Application equals
+  `cert-manager-application.previous.yml`, and the webhook admits a test
+  Certificate. If either check fails, stop before reverting.
+- **R3 — remaining workloads at `<REVERT>`.** Each mover is Ready under its
+  rollback placement rule and each Application is Synced/Healthy. Nextcloud
+  `status.php` answers, S3 backup reads Git's `0 2 * * *` schedule, Ceph is no
+  worse than at the trigger, and no workload is in a restart loop.
+
 ### Keep Paperclip off the OSD-0 node
 
 Paperclip stays off the node that runs Ceph OSD-0 and the active MDS. Its agent

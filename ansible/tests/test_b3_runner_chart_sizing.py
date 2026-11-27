@@ -130,10 +130,8 @@ class TestB3SizingValues(unittest.TestCase):
         self.assertEqual(previous, base_yaml(ANSIBLE / "vars/traefik_helmchartconfig_values.yml"))
         self.assertIn("yoda", str(current["traefik_helmchartconfig_values"].get("affinity")))
 
-    def test_rook_and_cert_manager_previous_files_equal_the_base_branch(self):
+    def test_traefik_and_cert_manager_previous_files_equal_the_base_branch(self):
         pairs = (
-            (ROOK_CLUSTER, CORE / "deployments/rook-ceph/rook-ceph-cluster-values.previous.yaml"),
-            (ROOK_OPERATOR, CORE / "deployments/rook-ceph/rook-ceph-operator-values.previous.yaml"),
             (CORE / "ansible/vars/traefik_helmchartconfig_values.yml",
              CORE / "ansible/vars/traefik_helmchartconfig_values.previous.yml"),
             (CORE / "certificates/cert-manager-application.yml",

@@ -33,6 +33,10 @@ ceph-csi-operator:
           memory: 64Mi
 
 csi:
+  # Rook passes this selector to the CSI controller-plugin placement path.
+  # Keep storage-facing CSI controllers on the control plane and workers only;
+  # rey is reserved for Paperclip.
+  provisionerNodeAffinity: kubernetes.io/hostname=anakin.local,obiwan.local,yoda
   provisionerTolerations:
     - key: node-role.kubernetes.io/control-plane
       operator: Exists

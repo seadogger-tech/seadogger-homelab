@@ -5,6 +5,14 @@
 # must carry the same values.
 argocd_helm_values:
   server:
+    affinity:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+            - matchExpressions:
+                - key: kubernetes.io/hostname
+                  operator: NotIn
+                  values: [rey.local]
     service:
       type: ClusterIP
     resources:
@@ -22,6 +30,14 @@ argocd_helm_values:
     cm:
       url: https://argocd.seadogger-homelab
   controller:
+    affinity:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+            - matchExpressions:
+                - key: kubernetes.io/hostname
+                  operator: NotIn
+                  values: [rey.local]
     # The application controller had no resources and fell back to the
     # namespace LimitRange default (64Mi) while using ~350Mi, 606Mi peak
     # (2026-10-31), so every node it landed on was under-counted.
@@ -36,6 +52,14 @@ argocd_helm_values:
   # drops to 32Mi); limits are 1.25 x the 15+ day memory.peak. CPU still comes
   # from the LimitRange, so only memory is set.
   repoServer:
+    affinity:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+            - matchExpressions:
+                - key: kubernetes.io/hostname
+                  operator: NotIn
+                  values: [rey.local]
     resources:
       requests:
         memory: 152Mi
@@ -48,6 +72,14 @@ argocd_helm_values:
         limits:
           memory: 192Mi
   dex:
+    affinity:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+            - matchExpressions:
+                - key: kubernetes.io/hostname
+                  operator: NotIn
+                  values: [rey.local]
     resources:
       requests:
         memory: 128Mi
@@ -60,20 +92,55 @@ argocd_helm_values:
         limits:
           memory: 160Mi
   notifications:
+    affinity:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+            - matchExpressions:
+                - key: kubernetes.io/hostname
+                  operator: NotIn
+                  values: [rey.local]
     resources:
       requests:
         memory: 40Mi
       limits:
         memory: 56Mi
   applicationSet:
+    affinity:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+            - matchExpressions:
+                - key: kubernetes.io/hostname
+                  operator: NotIn
+                  values: [rey.local]
     resources:
       requests:
         memory: 64Mi
       limits:
         memory: 80Mi   # peak 63.5Mi
   redis:
+    affinity:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+            - matchExpressions:
+                - key: kubernetes.io/hostname
+                  operator: NotIn
+                  values: [rey.local]
     resources:
       requests:
         memory: 32Mi   # was 64Mi
       limits:
         memory: 40Mi   # peak 15.4Mi
+  # The chart's pre-install/pre-upgrade secret-init hook runs when the
+  # external Redis host is unset, which is the configuration used here.
+  redisSecretInit:
+    affinity:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+            - matchExpressions:
+                - key: kubernetes.io/hostname
+                  operator: NotIn
+                  values: [rey.local]

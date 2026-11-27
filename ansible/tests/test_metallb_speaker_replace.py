@@ -7,6 +7,7 @@ local HTTP server standing in for Traefik's LoadBalancer IP. No cluster is neede
 Run from the core checkout:  python3 -m unittest discover -s ansible/tests -v
 Needs ansible (ansible-playbook) and PyYAML.
 """
+import hashlib
 import os
 import shutil
 import subprocess
@@ -21,19 +22,7 @@ import metallb_harness as h
 CORE = Path(__file__).resolve().parents[2]
 TASKS = CORE / "ansible" / "tasks"
 VARS = CORE / "ansible" / "vars"
-
-# What Core 6097389 (Stage B0) held in ansible/vars/metallb_helm_values.yml, written out
-# as explicit expectations rather than a snapshot file.
-CORE_6097389_METALLB_VALUES = {
-    "controller": {"resources": {"requests": {"cpu": "25m", "memory": "96Mi"}, "limits": {"memory": "152Mi"}}},
-    "speaker": {
-        "resources": {"requests": {"cpu": "25m", "memory": "80Mi"}, "limits": {"memory": "104Mi"}},
-        "frr": {"resources": {"requests": {"memory": "32Mi"}, "limits": {"memory": "64Mi"}}},
-        "reloader": {"resources": {"requests": {"memory": "32Mi"}, "limits": {"memory": "64Mi"}}},
-        "frrMetrics": {"resources": {"requests": {"memory": "32Mi"}, "limits": {"memory": "48Mi"}}},
-    },
-}
-
+METALLB_BASE_SHA256 = "ec5c4fed08b87e8787cdf42393595483f26bdd64bb6b53b3ab70271ae7eb5944"
 
 def ansible_playbook():
     path = shutil.which("ansible-playbook")
@@ -51,20 +40,21 @@ class MetalLBValuesFiles(unittest.TestCase):
             with self.subTest(name):
                 self.assertEqual(self.load(name)["speaker"]["updateStrategy"], {"type": "OnDelete"})
 
-    def test_previous_is_core_6097389_plus_ondelete_only(self):
+    def test_previous_values_match_base_snapshot_except_controller_affinity(self):
+        current = self.load("metallb_helm_values.yml")
         previous = self.load("metallb_helm_values.previous.yml")
-        del previous["speaker"]["updateStrategy"]
-        self.assertEqual(previous, CORE_6097389_METALLB_VALUES)
+        current["controller"].pop("affinity", None)
+        previous["controller"].pop("affinity", None)
+        self.assertEqual(previous, current)
 
-    def test_previous_matches_the_commit_when_history_is_available(self):
-        shown = subprocess.run(
-            ["git", "show", "6097389:ansible/vars/metallb_helm_values.yml"],
-            cwd=CORE, capture_output=True, text=True)
-        if shown.returncode:
-            self.skipTest("commit 6097389 is not in this checkout (shallow clone)")
-        previous = self.load("metallb_helm_values.previous.yml")
-        del previous["speaker"]["updateStrategy"]
-        self.assertEqual(previous, yaml.safe_load(shown.stdout)["metallb_helm_values"])
+    def test_previous_is_base_current_values_byte_for_byte(self):
+        relative = "ansible/vars/metallb_helm_values.yml"
+        result = subprocess.run(["git", "show", f"f883ee2:{relative}"], cwd=CORE, capture_output=True)
+        previous = (VARS / "metallb_helm_values.previous.yml").read_bytes()
+        if result.returncode == 0:
+            self.assertEqual(previous, result.stdout)
+        else:
+            self.assertEqual(hashlib.sha256(previous).hexdigest(), METALLB_BASE_SHA256)
 
 
 class LoopRun(unittest.TestCase):
