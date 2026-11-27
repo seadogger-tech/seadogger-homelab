@@ -883,3 +883,70 @@ flowchart TD
   style RL fill:#8b4513,color:#fff
   style HOLD fill:#8b4513,color:#fff
 ```
+
+## Portal memory tabs
+
+The portal presents the monitor's read-only API in three views. The browser
+refreshes both endpoints every 30 seconds while the page is visible. A request
+has a five-second timeout; a busy 503 keeps the last successful data. Data is
+marked stale after 90 seconds. A failure without usable data is shown as
+unavailable, never as an empty table or zero.
+
+| Tab | Meaning | Source | View |
+|---|---|---|---|
+| **Active memory** | The containers' current use, shown as the Metrics API's **working set**: an estimate of memory in use (cgroup usage minus inactive file cache), sampled about every 15 seconds. | `memory.v1` working sets and limits | Per node, working set / allocatable with a bar. Per pod, working set / limit, sorted by its percentage of limit; expand a pod for container values. |
+| **Reserved memory** | Memory the scheduler has set aside: the sum of container requests. Limits remain visible because they are the maximum each container may use before an OOM kill. | Running and Pending pod specs in `memory.v1` | Per node, requests / allocatable and limits / allocatable. Per pod, request, limit and QoS. |
+| **OOM drops** | Confirmed memory incidents: OOM-killed containers, memory-pressure evictions and unmatched kernel OOM events. | `oom.v1` incidents and coverage | Last seven days, newest first, with local time, kind, cause, node, namespace, workload, pod, container, limit and repeat count. |
+
+Working set is not the OOM threshold. The kernel kills when charged memory
+cannot be reclaimed below `memory.max`, and that charge includes memory excluded
+from working set. A spike between Metrics API samples can also go unseen, so a
+container can be OOM-killed while the tab shows it below 100% of its limit.
+When metrics are unavailable, the active view says so while requests and limits
+remain available.
+
+The OOM tab counts only incidents whose cause is `memory` as confirmed. An
+eviction written before cause tracking is listed as **cause unknown** and is not
+counted. Evictions for disk or PID pressure are summarized separately. The
+24-hour and seven-day badges each show their confirmed count. If a count's
+coverage is partial, its badge says **partial** and the tooltip gives the local
+time for `observedFrom` and any gaps. An empty complete seven-day window reads
+"No OOM drops in 7 days". An incomplete window reads "No OOM drops observed
+since <observedFrom, local>" and lists any gaps; it must not imply seven days
+were observed.
+
+`observedFrom` is the later of the latest `start` records for the Pod and Event
+streams. A later start means earlier time was unobserved even if there is no gap
+record. A `gap` is shown when it overlaps the requested window. A window is
+complete only when `observedFrom` is at or before the window start and no gap
+overlaps it; the 24-hour and seven-day counts each carry completeness for their
+own window. With no start record or older journal to establish coverage,
+`observedFrom` is null and the window is incomplete.
+
+### Stage P activity
+
+```mermaid
+flowchart TD
+  B0["B0 verified in Production"] --> MAP["Create the Stage P Map branches"]
+  MAP --> DESIGN["Design review: Tuvok and Worf"]
+  DESIGN --> API["Build monitor API, recorder fields, limits and access"]
+  API --> TABS["Build portal Caddy routes and Memory tabs"]
+  TABS --> REVIEW["Map review: Tuvok and Worf; Kirk approves"]
+  REVIEW --> CORE["Land core wiki"]
+  CORE --> PRO["Land Pro; sync resource-monitor, then portal"]
+  PRO --> VERIFY{"Verify memory sums, OOM incidents and coverage,<br/>network boundary, resource limits and rendered tabs"}
+  VERIFY -- yes --> DONE["Stage P verified"]
+  VERIFY -- no --> REVERT["Revert Pro; Argo restores prior monitor and portal"]
+  REVERT --> FIX["Create a fix ticket; journal remains intact"]
+  style B0 fill:#7b1fa2,color:#fff
+  style MAP fill:#1e3a5f,color:#fff
+  style DESIGN fill:#1e3a5f,color:#fff
+  style API fill:#1e3a5f,color:#fff
+  style TABS fill:#1e3a5f,color:#fff
+  style REVIEW fill:#1e3a5f,color:#fff
+  style CORE fill:#1e3a5f,color:#fff
+  style PRO fill:#2d5016,color:#fff
+  style DONE fill:#2d5016,color:#fff
+  style REVERT fill:#8b4513,color:#fff
+  style FIX fill:#8b4513,color:#fff
+```
