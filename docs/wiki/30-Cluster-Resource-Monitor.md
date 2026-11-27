@@ -1013,6 +1013,7 @@ described here without measured P values:
 | coredns, metrics-server, local-path-provisioner | Ratios are above 1.5× and deferred because their `.skip` files on yoda block k3s from upgrading these manifests. |
 | Paperclip and paperclip-db | Their higher ratios protect concurrent agent runs and Postgres's observed worst-case memory; Postgres was OOM-killed at 1Gi. |
 | Pi-hole | The limit stays at the pre-B3 1Gi (request 96Mi). B3's 1.25× limit came from the steady-state peak, but FTL's startup goes well past it, and the container was OOM-killed on restart. |
+| cert-manager cainjector | The limit is restored to the pre-B3 256Mi LimitRange default. B3's 1.25× limit came from the steady-state peak, but startup cache fill exceeds it and the container OOM-looped. |
 | Jellyfin app | ffmpeg transcode use scales with concurrent streams, which the sampling window does not bound. |
 | Kopia maintenance Job | The Nextcloud repository grows each Sunday; its first maintenance after a weekly backup is outside the window. |
 | CSI nodeplugin `rook-ceph.*.csi.ceph.com-nodeplugin` | B1's 1.5× allowance prevents an OOM from breaking every mount on that node. |

@@ -42,7 +42,8 @@ spec:
             requests:
               memory: 72Mi
             limits:
-              memory: 96Mi
+              # Startup cache fill exceeds the steady-state peak; the 96Mi limit caused an OOM loop on 2026-11-27.
+              memory: 256Mi
           affinity:
             nodeAffinity:
               requiredDuringSchedulingIgnoredDuringExecution:

@@ -17,6 +17,47 @@ spec:
           enabled: true
           servicemonitor:
             enabled: false
+        resources:
+          requests:
+            memory: 32Mi
+          limits:
+            memory: 40Mi
+        affinity:
+          nodeAffinity:
+            requiredDuringSchedulingIgnoredDuringExecution:
+              nodeSelectorTerms:
+                - matchExpressions:
+                    - key: kubernetes.io/hostname
+                      operator: NotIn
+                      values: [rey.local]
+            preferredDuringSchedulingIgnoredDuringExecution:
+              - weight: 100
+                preference:
+                  matchExpressions:
+                    - key: kubernetes.io/hostname
+                      operator: In
+                      values: [yoda]
+        cainjector:
+          resources:
+            requests:
+              memory: 72Mi
+            limits:
+              memory: 96Mi
+          affinity:
+            nodeAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                nodeSelectorTerms:
+                  - matchExpressions:
+                      - key: kubernetes.io/hostname
+                        operator: NotIn
+                        values: [rey.local]
+              preferredDuringSchedulingIgnoredDuringExecution:
+                - weight: 100
+                  preference:
+                    matchExpressions:
+                      - key: kubernetes.io/hostname
+                        operator: In
+                        values: [yoda]
         webhook:
           enabled: true
           securePort: 443
@@ -26,6 +67,23 @@ spec:
             requests:
               cpu: 10m
               memory: 32Mi
+            limits:
+              memory: 40Mi
+          affinity:
+            nodeAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                nodeSelectorTerms:
+                  - matchExpressions:
+                      - key: kubernetes.io/hostname
+                        operator: NotIn
+                        values: [rey.local]
+              preferredDuringSchedulingIgnoredDuringExecution:
+                - weight: 100
+                  preference:
+                    matchExpressions:
+                      - key: kubernetes.io/hostname
+                        operator: In
+                        values: [yoda]
   destination:
     server: https://kubernetes.default.svc
     namespace: cert-manager
