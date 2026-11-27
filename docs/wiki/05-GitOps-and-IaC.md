@@ -361,7 +361,7 @@ kubectl -n jellyfin get deploy xmltv-proxy \
   -o jsonpath='{.spec.template.spec.containers[?(@.name=="proxy")].resources}{" ready="}{.status.readyReplicas}{"\n"}'
 ```
 
-The CronJob's `s3-sync` resources must equal the manifest at the SHA you ran, and `xmltv-proxy` must show those resources with `readyReplicas` of at least 1.
+The CronJob runs at 03:00 `America/New_York` (`schedule: "0 3 * * *"`, `timeZone: America/New_York`), the live pre-B3 value. The CronJob's `s3-sync` resources must equal the manifest at the SHA you ran, and `xmltv-proxy` must show those resources with `readyReplicas` of at least 1.
 
 ### 4. Deployment Methods by Component
 

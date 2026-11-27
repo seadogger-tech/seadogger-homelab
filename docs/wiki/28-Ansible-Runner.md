@@ -78,7 +78,13 @@ All five default to `false` in `main.yml` and `example.config.yml`.
 `enable_traefik_resources` writes one object, the HelmChartConfig `kube-system/traefik`, from `ansible/vars/traefik_helmchartconfig_values.yml` (the cold-start `traefik_dashboard_deploy.yml` loads the same file). It is not `enable_traefik_dashboard`, which is an untagged task in a play that also runs other applications, so `--tags` cannot narrow it. It downloads nothing and creates no dashboard object.
 
 `enable_cert_manager_resources` applies exactly the checked-out
-`certificates/cert-manager-application.yml` with one Kubernetes apply. It does
+`certificates/cert-manager-application.yml` with one Kubernetes apply. The runner
+reads the file with `lookup('file', ...)` and hands the module a parsed
+`definition`: the module runs on yoda, where the runner's checkout does not exist,
+so a `src` path would fail there. `ansible/tests/test_b3_apply_task_paths.py`
+fails any `*_resources.yml` task that passes a controller path (`playbook_dir`,
+`role_path`, `/work/`) to a Kubernetes or Helm module without copying the file to
+the host first. It does
 not read `/root/pki`, patch webhook arguments or touch the webhook Deployment
 directly. The live Application was diffed against the tracked pre-B3 file; the
 diff was empty, so B3 adds only resources and preferred yoda affinity. Its
@@ -114,8 +120,8 @@ Any other name fails before an apply. `guard.py` refuses none of these selectors
 or the new apply flag.
 
 **B3 rollback revisions.** Run Rook with `rook_values_set=previous` at the
-core landing SHA; add `rook_recovery=true` only if Ceph is not HEALTH_OK and
-the recovery pre-gate permits it. At that same landing SHA, run
+core landing SHA (the re-plan landing SHA, which carries the fixed flag); add
+`rook_recovery=true` only if Ceph is not HEALTH_OK and the recovery pre-gate permits it. At that same re-plan landing SHA, run
 `enable_cert_manager_resources` with
 `cert_manager_application_file=cert-manager-application.previous.yml`, and
 `enable_traefik_resources` with
