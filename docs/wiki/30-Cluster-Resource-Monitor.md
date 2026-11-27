@@ -161,13 +161,16 @@ Stated from `deployments/resource-monitor/` in the Pro repo.
 
 - **Cluster RBAC.** The ClusterRole `resource-monitor` (`rbac.yaml`) is
   cluster-wide and read-only. It allows `get`, `list` and `watch` on `nodes`,
-  `pods`, `events`, `apps/replicasets` and `batch/jobs`. It has no write verb,
-  no Secret access and no exec. It is bound to the service account
+  `pods`, `events`, `apps/replicasets` and `batch/jobs`, and `get` and `list` on
+  `metrics.k8s.io` `pods` and `nodes` (the portal API's working sets). It has no
+  write verb, no Secret access and no exec. It is bound to the service account
   `resource-monitor:resource-monitor`.
 - **Exporter discovery.** The Role `resource-monitor-endpointslice-reader`
   allows `get` and `list` on `discovery.k8s.io/endpointslices` in the
   `node-sensors` namespace only.
-- **Network.** `networkpolicy.yaml` allows no ingress. Egress goes only to
+- **Network.** `networkpolicy.yaml` allows one ingress rule: the portal's pods
+  (`app=portal` in `portal`) on TCP 8090, for the [Portal API](#portal-api).
+  Egress goes only to
   node-sensors pods on 9100, the Kubernetes API server, `paperclip` pods on 3100
   and kube-dns on 53 (UDP and TCP).
 - **The API-server rule is pinned to addresses.** It allows `10.43.0.1/32` (the
@@ -473,6 +476,267 @@ against a stub receiver for findings, proposal maths, delivery, crash recovery
 (a test-only environment hook exits the process at a named point), the 410
 resume, secret hygiene, the rendered manifests and the provisioning script.
 
+## Portal API
+
+Stage P of OCE-369 gives the portal its memory tabs without any cluster access of
+its own. The portal's Caddy proxies two same-origin routes to a small read-only
+HTTP server inside the resource monitor, and the portal pod gains no service
+account token and no RBAC. The server is `serve` in `monitor.py`, standard
+library only, in the recorder's process, on `0.0.0.0:8090`.
+
+### Stage P block
+
+```mermaid
+flowchart LR
+  subgraph portalns["portal namespace"]
+    UI["portal.html<br/>Memory tabs: Active, Reserved, OOM drops<br/>NEW"]
+    CADDY["Caddy<br/>/api/memory, /api/oom routes<br/>CHANGED"]
+  end
+  subgraph rmns["resource-monitor namespace"]
+    API["monitor.py serve thread :8090<br/>memory.v1; oom.v1 incidents + coverage<br/>single-flight, 4 in flight, 9-day index<br/>NEW"]
+    REC["recorder<br/>+ eviction cause, occurrence time<br/>CHANGED"]
+    EVAL["evaluator, daily report<br/>(Stage A, unchanged)"]
+    J[("journal + history PVC<br/>(Stage A)")]
+    NP["NetworkPolicy<br/>ingress portal to 8090<br/>CHANGED"]
+  end
+  K8S["Kubernetes API<br/>pods, nodes, events"]
+  MS["metrics-server<br/>metrics.k8s.io<br/>NEW read"]
+  UI --> CADDY
+  CADDY -->|GET| API
+  API --> K8S
+  API --> MS
+  API -->|copy new bytes, short lock| J
+  REC -->|append| J
+  REC -->|watch pods, events| K8S
+  EVAL -->|read| J
+  style UI fill:#1e3a5f,color:#fff
+  style CADDY fill:#1e3a5f,color:#fff
+  style API fill:#1e3a5f,color:#fff
+  style NP fill:#1e3a5f,color:#fff
+  style REC fill:#1e3a5f,color:#fff
+  style EVAL fill:#2d5016,color:#fff
+  style J fill:#2d5016,color:#fff
+  style K8S fill:#8b4513,color:#fff
+  style MS fill:#7b1fa2,color:#fff
+```
+
+
+### Request flow
+
+```mermaid
+sequenceDiagram
+  participant B as Browser (portal)
+  participant C as Caddy (portal pod)
+  participant M as resource-monitor :8090
+  participant K as Kubernetes API
+  participant X as metrics-server
+  participant J as journal (PVC)
+  B->>C: GET /api/memory (30 s poll, tab visible)
+  C->>M: GET /api/memory
+  alt 4 requests already in flight
+    M-->>C: 503 Retry-After 5 (from the accept loop)
+  else cache younger than 15 s, or another request is refreshing
+    M-->>C: cached or shared memory.v1
+  else this request refreshes (single-flight)
+    M->>K: list nodes, list pods (paged)
+    M->>X: list PodMetrics, NodeMetrics
+    X-->>M: working sets (or error: metrics unavailable)
+    M-->>C: memory.v1
+  end
+  C-->>B: JSON, no-store
+  B->>C: GET /api/oom?days=7
+  C->>M: GET /api/oom?days=7
+  Note over M: cap, cache and single-flight as for /api/memory
+  M->>J: take the history lock (non-blocking, up to 5 s)
+  J-->>M: new bytes since each file's offset, 9 newest days only (at most 1 MiB per hold)
+  Note over M,J: lock released, then parse outside it
+  Note over M: incidents by key (term key, pod UID, Event UID)<br/>merge status + event evictions, match node OOM to terminations<br/>occurredAt, cause, UID metadata join, coverage and gaps
+  M-->>C: oom.v1 (incidents, counts, coverage)
+  C-->>B: JSON
+  Note over B: complete window - No OOM drops in 7 days<br/>partial window - No OOM drops observed since observedFrom, badge marked partial
+```
+
+
+### Endpoints
+
+Every response carries `Content-Type: application/json`, `Cache-Control:
+no-store` and `X-Content-Type-Options: nosniff`, and the connection is closed
+after it. Only `GET` and `HEAD` are answered (any other method is 405) and only
+these paths (any other path is 404):
+
+| Path | Answer |
+|---|---|
+| `GET /healthz` | 200 `"ok"`: liveness of the server only. The Deployment's liveness probe stays on the recorder's heartbeat. |
+| `GET /api/memory` | `memory.v1` |
+| `GET /api/oom?days=N` | `oom.v1` for the last N days. N is a single digit 1 to 7 (default 7); anything else is 400. |
+
+A 503 (`Retry-After: 5`) means busy or unavailable: the request cap is reached,
+a refresh failed, or a request waited more than 10 s for a refresh.
+
+**`memory.v1`**: `{generatedAt, nodes:[{name, allocatableBytes, requestsBytes,
+limitsBytes, workingSetBytes|null}], pods:[{namespace, pod, workload, node, qos,
+containers:[{name, requestBytes|null, limitBytes|null, workingSetBytes|null}]}],
+metrics:"ok"|"unavailable"}`.
+
+- Node requests and limits sum the Running and Pending Pods bound to the node. A
+  Pod counts as `max(sum of its app containers, its largest init container)`, the
+  scheduler's rule. It is the code path of the evaluator's `limits_sum_bytes`
+  (`pod_memory_bytes`), extended to requests; a request that is absent defaults to
+  the limit. The per-Pod `containers` list holds the app containers only.
+- Working sets come from the Metrics API (`metrics.k8s.io/v1beta1` NodeMetrics
+  and PodMetrics). A working set is an estimate of memory in use, sampled about
+  every 15 s. It is not the OOM threshold: a container can be OOM-killed while
+  it shows below 100 % of its limit. When the Metrics API fails, `metrics` is
+  `unavailable`, every working set is `null` and the rest is still served.
+- `workload` is the Pod's top owner (ReplicaSet to Deployment, Job to CronJob).
+
+**`oom.v1`**: `{generatedAt, window:{from, to}, coverage:{observedFrom|null,
+gaps:[{stream, from, to}], complete}, counts:{h24:{confirmed, unknown, complete},
+d7:{confirmed, unknown, complete}}, excluded:{otherCauseEvictions},
+incidents:[{id, kind, cause, occurredAt, observedAt, timeSource, count, sources,
+node, namespace, workload, pod, container, limitBytes}]}`.
+
+It lists incidents, not journal rows, newest first by `occurredAt`. `counts` is
+the same for every `days`; `window`, `coverage` and `incidents` follow `days`.
+
+### What the recorder adds
+
+New records only; nothing already journalled is rewritten.
+
+- `evict` records gain `cause` (`memory`, `ephemeral-storage`, `pids` or `other`)
+  and `at` (the `lastTransitionTime` of the Pod's `DisruptionTarget` condition, or
+  null). The kubelet's node-pressure message "The node was low on resource:
+  `<name>`." maps the three names to themselves. Anything else is `other`: a
+  container over its ephemeral-storage limit, an admission rejection ("The node
+  had condition: ...", where the Pod never ran) or an unrecognised message.
+- `event` records with reason `Evicted` gain `cause`, classified the same way from
+  the Event's message. Every `event` record gains `last`: `series.lastObservedTime`,
+  then `lastTimestamp`, then `eventTime`, or null.
+- The message text is never journalled or served; only the closed `cause` value
+  is kept. Records written before Stage P have no `cause` and read as `unknown`.
+- The evaluator, preload and the daily report ignore the new fields, so their
+  findings do not change, and the previous code runs unchanged on journals that
+  carry them (rollback needs no rewrite).
+
+### Incident rules
+
+- **OOMKilled**: one `term` record with reason `OOMKilled`, keyed by (Pod UID,
+  container, `finished`). A repeat of the key is the same incident.
+- **Evicted**: keyed by Pod UID, merging the pod-status record (source `status`)
+  with `Evicted` Events whose involved-object UID matches (source `event`).
+  Repeated updates of one Event stay one incident.
+- **NodeOOM**: an `OOMKilling` or `SystemOOM` Event keyed by Event UID. Each
+  record adds occurrences: its count minus the previous record's count, or its
+  whole count for the first record. A count that drops restarts the series.
+- **Correlation**: each NodeOOM occurrence is matched one-to-one, nearest first,
+  to an unmatched `OOMKilled` incident on the same node whose `finished` is within
+  180 s of it. A match adds source `event` to the termination and the occurrence
+  is not counted again. A NodeOOM with no unmatched occurrence is dropped; one
+  left over is still a memory drop (the kernel killed a process that was not a
+  container's main process).
+- **Times**: `occurredAt` is the termination's `finished` (OOMKilled); the Event's
+  `last`, then the status `at` (Evicted); the latest occurrence's time (NodeOOM).
+  The fallback is `observedAt`, the earliest journal `ts` of the incident's
+  records, with `timeSource: "observed"` instead of `"reported"`. The window, the
+  order and the counts all use `occurredAt`.
+- **Cause**: `OOMKilled` and `NodeOOM` incidents are `memory`. For `Evicted` the
+  status cause wins over the Event's, and with neither it is `unknown`. Only
+  `memory` incidents are *confirmed*. `unknown` evictions are listed and counted
+  as `unknown`. An eviction with another known cause is left out of the list and
+  counted in `excluded.otherCauseEvictions`.
+- **Metadata** (workload and the container's memory limit) joins by Pod UID: the
+  newest journal `pod` record, then the live Pod (one Pod list per refresh, only
+  when some incident needs it), then the evaluator's history rows. A field still
+  missing is null, never guessed. For a Pod deleted before the indexed history
+  files began and with no journal `pod` record in the index, the metadata is null.
+- The count is a lower bound: a container that OOM-loops faster than the pod
+  watch sees can lose terminations, because the status keeps only the last one.
+  A journal that cannot be read is a 503, never an empty list.
+
+### Coverage
+
+`observedFrom` is the later of the two streams' latest `start` record. A `start`
+is written only when a stream has no cursor, so the time before a later `start`
+went unobserved and left no `gap` record. When a stream has no `start` in the
+indexed files but an older journal file exists, that stream was observed since
+before the index began, and `observedFrom` reports the start of the index's first
+day (a lower bound, earlier than `window.from`). With neither, `observedFrom` is
+null and nothing is complete. `gaps` lists the `gap` records that overlap the
+window. `complete` is true only when `observedFrom` is at or before `window.from`
+and no gap overlaps the window. Each count carries its own `complete` for its 24 h
+or 7 d window. A UI must say "observed since" when a window is not complete,
+never "none in 7 days".
+
+### Load limits
+
+The portal has no authentication, and the API shares a process, a cgroup and
+the `/history` lock with the recorder, whose liveness depends on its watch
+streams. No request may block a stream on the lock, grow memory without bound or
+start unbounded work.
+
+- **Single-flight refresh.** Each endpoint keeps one cached result and one
+  refresh at a time. A request within 15 s of the last refresh gets the cache;
+  otherwise the first request refreshes and the ones that arrive meanwhile wait up
+  to 10 s for it and share its result. `oom.v1` is built once for 7 days; `days`
+  only filters it. A failed refresh is cached for 15 s too.
+- **Request cap.** At most 4 requests are in flight. The accept loop takes a slot
+  before it starts a handler thread; with none free it answers 503
+  (`Retry-After: 5`) and closes, so a flood never starts more than 4 handler
+  threads. A connection has a 5 s socket timeout and a 5 s total deadline for its
+  request line and headers, and is never kept alive.
+- **Short lock hold.** The API keeps a byte offset per journal file. Under the
+  history lock it only copies at most 1 MiB of new bytes, cut at the last newline,
+  then releases the lock and parses outside it. It takes the lock without
+  blocking, retrying every 100 ms for up to 5 s. When an evaluation holds the lock
+  the refresh serves the last good result with its older `generatedAt` (the UI's
+  stale banner shows), or 503 with none. `journal_append` is never delayed by more
+  than one 1 MiB copy.
+- **Bounded index.** Only the journal files dated from `window.from` minus one day
+  through today are read (at most 9 of the 400 retained days), and only the
+  records `oom.v1` uses are kept: OOMKilled terminations, `evict`, the three Event
+  reasons, Pod records reduced to workload and container limits, `start` and
+  `gap`. A file's records are dropped when it leaves the range. The history-row
+  join reads only the regular history files in the same range, outside the lock,
+  skipping a file pruned mid-read, and is rebuilt only when that set of files
+  changes. Pods are listed a page (50) at a time.
+- **Logging.** Fixed phrases and exception type names only. Requests, paths and
+  queries are never logged, and nothing returned or logged carries tokens, Secret
+  data, environment, the webhook URL, labels or annotations.
+
+### Access and resources
+
+- **RBAC.** The ClusterRole gains `metrics.k8s.io` `pods` and `nodes`, `get` and
+  `list`, and nothing else.
+- **Network.** `networkpolicy.yaml` has one ingress rule: pods `app=portal` in the
+  `portal` namespace, TCP 8090. Egress is unchanged (the Metrics API goes through
+  the API server entry). The Service `resource-monitor` (ClusterIP, 8090) selects
+  the monitor pod.
+- **Resources.** Set from a measurement, not carried over. `tests/measure_resources.py`
+  runs `monitor.py run` against a stub cluster of 500 Pods and 750 containers
+  (about three times this cluster; each Pod padded to a real object's 11 KiB), a
+  400-day journal whose last 9 days run at three times this cluster's record
+  rate, the API under a burst of about 20 requests a second across both
+  endpoints, and a hand-run `monitor.py evaluate` in the same cgroup. Peak RSS:
+  61 MiB for the recorder and scheduler alone, 80 MiB with the API under the
+  burst, 167 MiB with the hand-run evaluation (two processes). Request 192Mi,
+  limit 240Mi (peak plus about 15 %, limit 1.25 x request); it was 80Mi / 100Mi,
+  measured on Pods of 0.5 KiB, which a hand-run evaluation passes with real-sized
+  Pods. CPU: about 5m idle, 0.9 CPU-s for the cold index build, bursts to about
+  425m for a second; request 100m, limit 125m, so the cold build finishes inside
+  the 10 s wait and a burst is throttled rather than refused. The API itself
+  adds about 18 MiB at the 3x rate and about 42 MiB at ten times it.
+
+### Verification and rollback
+
+After rollout, `/api/memory` returns four nodes whose Σ requests and limits match
+the evaluator's figures within 1 Mi; `/api/oom` reports `coverage.observedFrom`
+equal to the journal's first `start` with `complete: false` until 7 days after
+it; a new `evict` record carries `cause`; a Pod outside `portal` cannot reach
+`resource-monitor:8090`; twenty concurrent `GET /api/oom` requests each get 200
+or 503, and the container's working set stays below its request. Rollback is a
+revert of the Pro landing PR: records written meanwhile keep their extra fields,
+and the previous recorder, preload and evaluator ignore them.
+
 ## Stage B0 immediate reductions
 
 Stage B0 of OCE-369 cuts limits (and over-sized requests) in the charts the
@@ -500,12 +764,6 @@ are the fixture `ansible/tests/b0_memory_peaks.yml`, which
 | log-collector (x10) | 100 → 32 | 1024 → 40 | 26.5 | 26.5 | 2.22 d |  |
 | ceph-exporter (x3) | 50 → 48 | 128 → 64 | 33.1 | 33.1 | 10.28 d |  |
 | rook-ceph-tools | 64 → 64 | 256 → 136 | 105.6 | 105.6 | 27.68 d | yes |
-| csi-rbdplugin | 64 → 64 | 1024 → 128 | 102.2 | 102.2 | 25.05 d | yes |
-| csi-rbdplugin driver-registrar | 64 → 32 | 512 → 40 | 24.3 | 18.0 | 25.05 d |  |
-| csi-rbdplugin liveness-prometheus | 32 → 32 | 256 → 48 | 37.9 | 37.9 | 25.05 d | yes |
-| csi-cephfsplugin | 64 → 64 | 1024 → 144 | 110.4 | 110.4 | 25.05 d | yes |
-| csi-cephfsplugin driver-registrar | 64 → 32 | 512 → 40 | 24.3 | 24.3 | 25.05 d |  |
-| csi-cephfsplugin liveness-prometheus | 32 → 32 | 256 → 48 | 37.9 | 37.7 | 25.05 d | yes |
 | metallb speaker | 128 → 80 | 512 → 104 | 68.1 | 68.1 | 7.47 d |  |
 | metallb frr | 32 → 32 | 256 → 64 | 50.2 | 50.2 | 7.48 d | yes |
 | metallb reloader | 32 → 32 | 256 → 64 | 45.3 | 45.2 | 25.04 d | yes |
@@ -531,14 +789,15 @@ Notes:
 - The rbd `driver-registrar` P of 24.3 is above its live 18.0 (likely the
   cephfs registrar's figure). It stays at 24.3: conservative, and the 40Mi
   limit floor applies either way.
-- `csi-*plugin` requests are written at the live 64Mi, not the repo's old
-  128Mi, per the `ROOK_USE_CSI_OPERATOR` note in the operator values. The
-  operator copies the node plugin request into the controller plugin, so the
-  controller's live 128Mi request also falls to 64Mi (its peak is 57.4Mi).
-  Nothing rises. The CSI Driver CRs are rendered by the operator at runtime, so
-  `helm template` cannot show them; after `enable_rook_ceph_resources`, read the
-  Driver CR and confirm the request did not rise. If the operator ignores a
-  key, record it here and leave that container to Stage B.
+- **CSI plugin rows are not delivered by B0.** Under `ROOK_USE_CSI_OPERATOR`,
+  Rook applies `csi.csiRBDPluginResource` and `csi.csiCephFSPluginResource` to
+  the Driver CRs' `controllerPlugin` only. The nodeplugin DaemonSets keep the
+  plugin at 1Gi, the `driver-registrar` at 512Mi and `liveness-prometheus` at
+  256Mi, so the six `csi-rbdplugin` and `csi-cephfsplugin` rows (plugin,
+  driver-registrar, liveness-prometheus) moved to *Left for Stage B*. The
+  controller plugin does take the new values. The CSI Driver CRs are rendered
+  by the operator at runtime, so `helm template` cannot show them; read them
+  after `enable_rook_ceph_resources`.
 - `cmd-reporter` is a new key on the CephCluster CR at 64Mi request / 512Mi
   limit, today's effective values from the `rook-ceph` LimitRange `default`
   (512Mi). It has no measured peak: it is set explicitly so the Pro cut of
@@ -564,6 +823,8 @@ Notes:
 | pihole, cloudflared, portal, mgr `watch-active` | Windows under 7 days. |
 | Nextcloud (app, cron, db, redis), Jellyfin (app, xmltv-proxy) | Values sit inline in `nextcloud_deploy.yml` / `jellyfin_deploy.yml`; whether the runner may run those stages is unverified. |
 | coredns, metrics-server, local-path-provisioner | k3s-bundled manifests: the k3s path is outside the runner. |
+| Nodeplugin DaemonSet containers `csi-rbdplugin`, `csi-rbdplugin driver-registrar`, `csi-rbdplugin liveness-prometheus`, `csi-cephfsplugin`, `csi-cephfsplugin driver-registrar`, `csi-cephfsplugin liveness-prometheus` (plugin 1Gi, driver-registrar 512Mi, liveness 256Mi) | Under `ROOK_USE_CSI_OPERATOR` the Driver CRs apply the plugin resource keys to the `controllerPlugin` only. The nodeplugin values need a per-container setting the operator accepts, which Stage B finds. |
+| `operations-mcp` `kubernetes-mcp-server` (limit 256Mi, B0 target 80Mi) | Pinned Application revision: the `operations-mcp` Application is pinned to Pro commit `0d1938de`, so the B0 cut is not live. It lands when the pin moves. |
 | Every container whose request stays below P | Needs a request raise, which needs Stage B's per-node budget table. |
 
 ### Rollout, verification and rollback
