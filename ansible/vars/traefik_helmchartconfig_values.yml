@@ -15,6 +15,15 @@
 traefik_helmchartconfig_values:
   additionalArguments:
     - "--api.insecure=true"
+  affinity:
+    nodeAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          preference:
+            matchExpressions:
+              - key: kubernetes.io/hostname
+                operator: In
+                values: [yoda]
   resources:
     requests:
       cpu: 500m

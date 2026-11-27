@@ -30,6 +30,8 @@ OPERATOR_VALUES = CORE / "deployments/rook-ceph/rook-ceph-operator-values.yaml"
 METALLB_VALUES = CORE / "ansible/vars/metallb_helm_values.yml"
 TRAEFIK_VALUES = CORE / "ansible/vars/traefik_helmchartconfig_values.yml"
 VARS = CORE / "ansible/vars"
+# Commit the Map branch was cut from (merge-base of master and map/OCE-369-b3-fit): the pre-B3 state.
+PRE_B3_BASE = "518f325d5b85de472214584283891b2f01d79fb2"
 
 
 def to_mi(value):
@@ -112,11 +114,13 @@ class TestNodepluginValues(unittest.TestCase):
             for cname, _, _, _, factor in rows:
                 self.assertEqual(factor == 1.5, cname.endswith("plugin") and cname.startswith("csi-"), cname)
 
-    def test_controller_plugin_keys_are_left_as_b0_set_them(self):
-        for key, plugin in (("csiRBDPluginResource", "csi-rbdplugin"), ("csiCephFSPluginResource", "csi-cephfsplugin")):
+    def test_controller_plugin_keys_use_b3_values(self):
+        expected = (("csiRBDPluginResource", "csi-rbdplugin", 64, 80),
+                    ("csiCephFSPluginResource", "csi-cephfsplugin", 40, 56))
+        for key, plugin, request, limit in expected:
             res = csi_entries(key)[plugin]
-            self.assertEqual(to_mi(res["requests"]["memory"]), 64)
-            self.assertIn(to_mi(res["limits"]["memory"]), (128, 144))
+            self.assertEqual(to_mi(res["requests"]["memory"]), request)
+            self.assertEqual(to_mi(res["limits"]["memory"]), limit)
 
     def test_registrar_is_sized_through_the_nodeplugin_keys(self):
         for key in NODEPLUGIN:
@@ -183,18 +187,15 @@ class TestTraefikGuaranteed(unittest.TestCase):
             self.assertIn("traefik_helmchartconfig_values", text, name)
             self.assertNotIn("memory: 512Mi", text, name)
 
-    def test_previous_values_deep_equal_core_6097389_inline_values(self):
+    def test_previous_values_deep_equal_base_branch_current_values(self):
         shown = subprocess.run(
-            ["git", "show", "6097389:ansible/tasks/traefik_dashboard_deploy.yml"],
+            ["git", "show", f"{PRE_B3_BASE}:ansible/vars/traefik_helmchartconfig_values.yml"],
             cwd=CORE, capture_output=True, text=True)
         if shown.returncode:
-            self.skipTest("commit 6097389 is not in this checkout")
-        task = next(t["kubernetes.core.k8s"] for t in yaml.safe_load(shown.stdout)
-                    if "kubernetes.core.k8s" in t and
-                    t["kubernetes.core.k8s"].get("definition", {}).get("kind") == "HelmChartConfig")
-        expected = yaml.safe_load(task["definition"]["spec"]["valuesContent"])
+            self.skipTest("base branch is not available in this checkout")
+        expected = yaml.safe_load(shown.stdout)
         previous = yaml.safe_load((VARS / "traefik_helmchartconfig_values.previous.yml").read_text())
-        self.assertEqual(previous["traefik_helmchartconfig_values"], expected)
+        self.assertEqual(previous, expected)
 
     def test_unknown_traefik_values_file_fails_before_any_cluster_write(self):
         ansible = shutil.which("ansible-playbook")

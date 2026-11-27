@@ -80,10 +80,10 @@ spec:
 
             resources:
               requests:
-                memory: "512Mi"
+                memory: "80Mi"
                 cpu: "250m"
               limits:
-                memory: "2Gi"
+                memory: "104Mi"
                 cpu: "1000m"
 
           volumes:

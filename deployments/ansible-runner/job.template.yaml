@@ -46,8 +46,8 @@ spec:
                 git -C /work/pro/core rev-parse HEAD
               fi
           resources:
-            requests: {cpu: 100m, memory: 128Mi}
-            limits: {cpu: "1", memory: 512Mi}
+            requests: {cpu: 100m, memory: 208Mi}
+            limits: {cpu: "1", memory: 264Mi}
           volumeMounts:
             - {name: work, mountPath: /work}
             - {name: private, mountPath: /private, readOnly: true}
@@ -83,8 +83,8 @@ spec:
             # The env var overrides the cfg; keep ./ for the repo's vendored collections.
             - {name: ANSIBLE_COLLECTIONS_PATH, value: "./:/usr/share/ansible/collections"}
           resources:
-            requests: {cpu: 250m, memory: 256Mi}
-            limits: {cpu: "2", memory: 1Gi}
+            requests: {cpu: 250m, memory: 208Mi}
+            limits: {cpu: "2", memory: 264Mi}
           volumeMounts:
             - {name: work, mountPath: /work}
             - {name: private, mountPath: /private, readOnly: true}

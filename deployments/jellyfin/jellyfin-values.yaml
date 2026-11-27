@@ -9,6 +9,9 @@ controllers:
       # Keep off yoda. The control plane runs etcd, and Jellyfin's ~1 GiB
       # (up to 4 GiB while transcoding) was a large part of the memory
       # pressure behind k3s losing leader election and restarting.
+      # Stage B3: only anakin or obiwan (Paperclip takes rey), anakin preferred.
+      # anakin has /dev/dri and nothing else on Jellyfin's host ports. The values
+      # are the node names, as the other core apps use (anakin.local, not anakin).
       affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -16,6 +19,16 @@ controllers:
               - matchExpressions:
                   - key: node-role.kubernetes.io/control-plane
                     operator: DoesNotExist
+                  - key: kubernetes.io/hostname
+                    operator: In
+                    values: [anakin.local, obiwan.local]
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: In
+                    values: [anakin.local]
       annotations:
         # media = the read-only mount of Nextcloud's data (3.3 TiB) - Nextcloud
         # owns it and backs it up itself; including it here would duplicate the
@@ -60,8 +73,10 @@ controllers:
         env:
           TZ: America/New_York
         resources:
-          requests: { cpu: "50m", memory: "512Mi" }
-          limits:   { cpu: "2",    memory: "4Gi" }
+          # Stage B3: request = P rounded up to 8Mi; limit 1.5x (P: Pro memory-sizing record)
+          # transcodes scale with concurrent streams, which the sampler window does not bound.
+          requests: { cpu: "50m", memory: "968Mi" }
+          limits:   { cpu: "2",    memory: "1456Mi" }
         securityContext:
           privileged: false
           allowPrivilegeEscalation: false

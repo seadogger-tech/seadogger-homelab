@@ -1,0 +1,426 @@
+operatorNamespace: rook-ceph
+
+cephClusterSpec:
+  cephVersion:
+    image: quay.io/ceph/ceph:v19.2.0
+    allowUnsupported: false
+
+  dataDirHostPath: /var/lib/rook
+
+  mon:
+    count: 3
+    allowMultiplePerNode: false
+
+  # Daemon placement. NOTE: this belongs at cephClusterSpec.placement.<daemon>,
+  # NOT nested inside the mon:/mgr: blocks. The CephCluster CRD silently drops
+  # unknown keys, so a `placement:` under `mon:` is accepted by Helm, written to
+  # the CR, stripped by the API server, and has no effect whatsoever -- which is
+  # how rook-ceph-mon-d ended up on the control plane (yoda) for months while
+  # this file claimed mons were pinned to the workers.
+  #
+  # Verify it actually took with:
+  #   kubectl get cephcluster -n rook-ceph rook-ceph -o jsonpath='{.spec.placement}'
+  # An empty result means the pin is not in effect.
+  #
+  # mons and mgrs are kept off yoda: it is the control-plane node with a 500GB
+  # NVMe and no OSD, so it has neither the storage role nor the spare headroom.
+  placement:
+    mon:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+            - matchExpressions:
+                - key: kubernetes.io/hostname
+                  operator: In
+                  values:
+                    - anakin.local
+                    - obiwan.local
+                    - rey.local
+    # mgrs are also kept off anakin (2026-11-23, OCE-151). A Ceph disruption on
+    # 2026-11-18 rescheduled mgr-b there, adding 576Mi of requests (mgr plus
+    # sidecar) and leaving anakin ~53Mi of request headroom. Velero pins each
+    # per-volume backup pod to its volume's node with nodeName, and the velero
+    # LimitRange gives it a 64Mi request, so anakin's kubelet rejected every
+    # one at admission (OutOfmemory) and no volume on anakin was backed up
+    # from 11-18 on: paperclip-data, Pi-hole and Nextcloud's main volume.
+    # With two mgrs and two eligible nodes there is no spare node for a mgr
+    # while obiwan or rey is down; Ceph runs on one mgr until it returns.
+    mgr:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+            - matchExpressions:
+                - key: kubernetes.io/hostname
+                  operator: In
+                  values:
+                    - obiwan.local
+                    - rey.local
+
+  dashboard:
+    enabled: true
+    ssl: false
+    port: 7000
+    urlPrefix: /
+    security:
+      adminPasswordSecretName: rook-ceph-dashboard-password
+
+  network:
+    provider: ""
+
+  crashCollector:
+    disable: true
+
+  monitoring:
+    enabled: false
+
+  mgr:
+    modules:
+      - name: balancer
+        enabled: true
+    # placement for mgr lives at cephClusterSpec.placement.mgr (see above)
+
+  # Requests right-sized 2026-08-05 against measured steady-state usage.
+  # CPU was reserving ~4 cores cluster-wide that were never used: yoda and
+  # anakin sat at 96-97% CPU-allocated while actually running at 13-16%,
+  # which is why Pi-hole failed to schedule with "Insufficient cpu" during
+  # the 2026-08-04 power-failure recovery.
+  #
+  # Measured (kubectl top, steady state):
+  #   mon  x3   requested 500m / used 26-36m      -> ~18x over
+  #   mgr  x2   requested 500m / used 56-73m      -> ~8x over
+  #   osd  x3   requested 500m / used 24-44m      -> ~15x over
+  #
+  # Memory is deliberately NOT reduced. mons use 445-459Mi of a 512Mi
+  # request (~88%) and are correctly sized. OSDs are the opposite problem:
+  # they request 1Gi but actually use 1.6-1.9Gi, so the scheduler has been
+  # under-counting them by ~1Gi each and packing nodes too tightly. Their
+  # request is raised to match reality.
+  #
+  # Limits are unchanged -- they are the safety ceiling, not the
+  # scheduling input.
+  resources:
+    mgr:
+      limits:
+        cpu: "1"
+        memory: "1536Mi"
+      requests:
+        cpu: "150m"      # was 500m; measured 56-73m
+        memory: "512Mi"  # was 768Mi; measured 469-632Mi
+    mon:
+      # Ceph defaults mon_memory_target to 2Gi. Unlike the MDS, Rook does NOT
+      # auto-tune the mons from the container limit, so nothing reconciles the
+      # two - this was a 2Gi target against a 1Gi ceiling.
+      #
+      # It had not fired yet: the mons sit at 481-492Mi with zero OOM kills on
+      # any node. But it is the same fault that was killing the OSDs, and the
+      # mons are the worst place to leave it latent - losing quorum takes the
+      # entire cluster down, not one replica. mon_memory_target is pinned to 1Gi
+      # in rook_ceph_deploy_part1.yml and the limit raised to 1.5Gi to sit above
+      # it, matching the MDS pattern.
+      limits:
+        cpu: "1"
+        memory: "1536Mi"  # was 1Gi; must exceed mon_memory_target (1Gi) + overhead
+      requests:
+        cpu: "100m"      # was 500m; measured 26-36m
+        # 256Mi -> 512Mi (2026-10-31). The 70-92Mi measured just after the
+        # 1Gi target was pinned did not last: the mons grew back to 403-508Mi
+        # working set, 556-742Mi peak, so 256Mi under-counted every mon and
+        # let the scheduler overpack the workers.
+        memory: "512Mi"
+    osd:
+      # The limit MUST stay above `osd_memory_target` (set to 2Gi in
+      # rook_ceph_deploy_part1.yml), not merely above measured usage.
+      #
+      # This was limit 2Gi against a 4Gi osd_memory_target - Ceph's default.
+      # The OSDs grew toward 4Gi exactly as configured and were OOM-killed at
+      # the 2Gi cgroup wall, over and over: 739 OOM kills on rey, 256 on yoda,
+      # 43 OSD restarts between the three. Every kill drops an OSD, and with
+      # size=3/min_size=2 across only three hosts that means zero redundancy
+      # until it comes back. It was also the main source of journald volume -
+      # each kill writes a kernel stack trace, which is why the nodes with the
+      # most kills sat pinned at the 500MB journal cap.
+      #
+      # osd_memory_target governs BlueStore cache, not total RSS, so the
+      # container needs roughly 30-50% headroom above it for everything else
+      # the process allocates. 2Gi target / 3Gi limit gives that.
+      #
+      # 2026-10-31: osd_memory_target lowered 2Gi -> 1.5Gi. At 2Gi the OSDs ran
+      # 2.1-2.4Gi working set and peaked at 3.08Gi - right at this limit - on
+      # every worker, while the 8GB workers had no memory left for the OS.
+      # A smaller BlueStore cache costs some random-read speed; Nextcloud and
+      # Jellyfin mostly stream large files.
+      #
+      # THE REQUEST IS THE TARGET. Rook passes POD_MEMORY_REQUEST into the OSD
+      # and Ceph uses it as osd_memory_target, overriding the mon config value
+      # (`ceph config show osd.N` reports source "env"). So the request must be
+      # exactly the cache target wanted. Steady RSS sits ~200-300Mi above the
+      # target, a known, bounded under-count per OSD.
+      limits:
+        cpu: "1"
+        memory: "3Gi"    # must exceed osd_memory_target (1.5Gi) + overhead
+      requests:
+        cpu: "150m"      # was 500m; measured 24-44m
+        memory: "1536Mi" # = osd_memory_target (see above)
+    prepareosd:
+      limits:
+        cpu: "500m"
+        memory: "512Mi"
+      requests:
+        cpu: "250m"
+        memory: "256Mi"
+    mgr-sidecar:
+      limits:
+        cpu: "500m"
+        memory: "512Mi"
+      requests:
+        cpu: "50m"
+        memory: "64Mi"   # was 256Mi; the watch-active sidecar is tiny
+    # Stage B0 (OCE-369): limits cut to 1.25 x the memory.peak read over the
+    # long windows; CPU comes from the chart defaults. See the "Stage B0
+    # immediate reductions" section in docs/wiki/30-Cluster-Resource-Monitor.md.
+    logcollector:
+      limits:
+        memory: "40Mi"   # was 1Gi; peak 26.5Mi over 10 log-collector sidecars
+      requests:
+        memory: "32Mi"   # was 100Mi
+    exporter:
+      limits:
+        memory: "64Mi"   # was 128Mi; peak 33.1Mi
+      requests:
+        memory: "48Mi"   # was 50Mi
+    # Set explicitly at the effective values the namespace LimitRange `default`
+    # (512Mi) gives the detect-version and network Jobs today, so cutting that
+    # default cannot reach them. Remove this key only after the rook-ceph
+    # LimitRange default is back at 512Mi and verified.
+    cmd-reporter:
+      limits:
+        memory: "512Mi"
+      requests:
+        memory: "64Mi"
+
+  storage:
+    useAllNodes: false
+    useAllDevices: false
+    config:
+      osdsPerDevice: "1"
+      storeType: "bluestore"
+      deviceClass: "nvme"
+    nodes:
+      - name: anakin.local
+        devices:
+          - name: /dev/nvme0n1p3
+            config:
+              deviceClass: "nvme"
+      - name: obiwan.local
+        devices:
+          - name: /dev/nvme0n1p3
+            config:
+              deviceClass: "nvme"
+      - name: rey.local
+        devices:
+          - name: /dev/nvme0n1p3
+            config:
+              deviceClass: "nvme"
+
+# ────────────────────────────────────────────────────────────────────────────────
+# CEPH BLOCK (RBD)
+# Pool: ceph-block-data
+# StorageClass: ceph-block-data  (default)
+# ────────────────────────────────────────────────────────────────────────────────
+cephBlockPools:
+  - name: ceph-block-data
+    spec:
+      replicated:
+        size: 3
+      parameters:
+        pg_autoscale_mode: "on"
+        target_size_ratio: "0.005"
+        pg_num: "16"
+        pg_num_min: "8"
+      enableRBDStats: true
+    storageClass:
+      enabled: true
+      name: ceph-block-data
+      isDefault: true
+      reclaimPolicy: Retain
+      allowVolumeExpansion: true
+      parameters:
+        imageFeatures: layering,exclusive-lock,object-map,fast-diff
+        csi.storage.k8s.io/provisioner-secret-name: rook-csi-rbd-provisioner
+        csi.storage.k8s.io/provisioner-secret-namespace: rook-ceph
+        csi.storage.k8s.io/controller-expand-secret-name: rook-csi-rbd-provisioner
+        csi.storage.k8s.io/controller-expand-secret-namespace: rook-ceph
+        csi.storage.k8s.io/node-stage-secret-name: rook-csi-rbd-node
+        csi.storage.k8s.io/node-stage-secret-namespace: rook-ceph
+        csi.storage.k8s.io/fstype: ext4
+
+# ────────────────────────────────────────────────────────────────────────────────
+# CEPH FILESYSTEMS
+# Filesystem: ceph-fs
+# Pools:
+#   - ceph-fs-metadata          (replicated)
+#   - ceph-fs-data-replicated   (replicated – default CephFS data pool)
+#   - ceph-fs-data-ec           (erasure-coded data pool)
+# StorageClasses:
+#   - ceph-fs-data-replicated   (primary SC created via values)
+#   - ceph-fs-data-ec           (additional SC; see 'additionalStorageClasses' below)
+# NOTE on names: we set short pool names (metadata, data-replicated, data-ec).
+# Rook prefixes them with the filesystem name, producing the exact final names.
+# ────────────────────────────────────────────────────────────────────────────────
+cephFileSystems:
+  - name: ceph-fs
+    spec:
+      # Keep pools if the CR is deleted (recommended during bring-up)
+      preservePoolsOnDelete: true
+
+      # Replicated metadata pool -> final name: ceph-fs-metadata
+      metadataPool:
+        name: metadata
+        replicated:
+          size: 3
+        parameters:
+          pg_autoscale_mode: "on"
+          pg_num: "8"
+          pg_num_min: "4"
+
+      # Data pools
+      dataPools:
+        # Replicated data pool -> final name: ceph-fs-data-replicated
+        - name: data-replicated
+          replicated:
+            size: 3
+          parameters:
+            pg_autoscale_mode: "on"
+            target_size_ratio: "0.005"
+            pg_num: "16"
+            pg_num_min: "8"
+
+        # Erasure-coded data pool -> final name: ceph-fs-data-ec
+        - name: data-ec
+          failureDomain: host
+          erasureCoded:
+            dataChunks: 2
+            codingChunks: 1
+          parameters:
+            pg_autoscale_mode: "on"
+            target_size_ratio: "0.005"
+            pg_num: "32"
+            pg_num_min: "16"
+            allow_ec_overwrites: "true"
+            bulk: "true"
+
+      metadataServer:
+        activeCount: 1
+        activeStandby: true
+        # These MUST stay in step with `mds_cache_memory_limit` in Ceph's own
+        # config. They were 256Mi against a 4Gi cache limit - a 16x mismatch.
+        # The MDS grew its metadata cache toward 4Gi exactly as configured, hit
+        # the 256Mi cgroup ceiling, and was OOMKilled: 35 restarts on mds-a and
+        # 33 on mds-b over 18 days, each one failing CephFS over to the standby
+        # and stalling all 11 clients. It was also a steady source of dead
+        # containers, whose overlay layers are what filled the node disks.
+        #
+        # Raising the container to 4Gi is not an option on 8GB Pi nodes, so the
+        # cache limit was lowered to 1Gi instead (see rook_ceph_deploy_part2)
+        # and the container given 1.5Gi - cache is not the MDS's only memory
+        # use, so the container needs headroom above the cache figure.
+        resources:
+          limits:
+            cpu: "1000m"
+            memory: "1536Mi"
+          requests:
+            cpu: "100m"
+            # 512Mi -> 1Gi (2026-10-31): measured 972-1147Mi working set with
+            # the 768Mi auto-tuned cache, so 512Mi under-counted each MDS.
+            memory: "1Gi"
+        placement:
+          nodeAffinity:
+            requiredDuringSchedulingIgnoredDuringExecution:
+              nodeSelectorTerms:
+                - matchExpressions:
+                    - key: kubernetes.io/hostname
+                      operator: In
+                      values:
+                        - anakin.local
+                        - obiwan.local
+                        - rey.local
+          # Active and standby MDS must never share a node: after reboots both
+          # landed on obiwan (2.2Gi reserved together), starving its sensor pod
+          # and losing HA. Required (not preferred) so the scheduler refuses to
+          # co-locate them; 3 eligible nodes leave room for failover.
+          # Verify with:
+          #   kubectl get cephfilesystem -n rook-ceph ceph-fs -o jsonpath='{.spec.metadataServer.placement}'
+          podAntiAffinity:
+            requiredDuringSchedulingIgnoredDuringExecution:
+              - labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - rook-ceph-mds
+                topologyKey: kubernetes.io/hostname
+
+    # Primary CephFS StorageClass (replicated)
+    storageClass:
+      enabled: true
+      name: ceph-fs-data-replicated
+      reclaimPolicy: Retain
+      allowVolumeExpansion: true
+      parameters:
+        clusterID: rook-ceph
+        fsName: ceph-fs
+        pool: ceph-fs-data-replicated
+        csi.storage.k8s.io/provisioner-secret-name: rook-csi-cephfs-provisioner
+        csi.storage.k8s.io/provisioner-secret-namespace: rook-ceph
+        csi.storage.k8s.io/controller-expand-secret-name: rook-csi-cephfs-provisioner
+        csi.storage.k8s.io/controller-expand-secret-namespace: rook-ceph
+        csi.storage.k8s.io/node-stage-secret-name: rook-csi-cephfs-node
+        csi.storage.k8s.io/node-stage-secret-namespace: rook-ceph
+
+    # Additional CephFS StorageClass (EC)
+    # If your chart version supports only one CephFS SC via values,
+    # you can still keep this here for alignment and generate a manifest from it.
+    additionalStorageClasses:
+      - name: ceph-fs-data-ec
+        reclaimPolicy: Retain
+        allowVolumeExpansion: true
+        parameters:
+          clusterID: rook-ceph
+          fsName: ceph-fs
+          pool: ceph-fs-data-ec
+          csi.storage.k8s.io/provisioner-secret-name: rook-csi-cephfs-provisioner
+          csi.storage.k8s.io/provisioner-secret-namespace: rook-ceph
+          csi.storage.k8s.io/controller-expand-secret-name: rook-csi-cephfs-provisioner
+          csi.storage.k8s.io/controller-expand-secret-namespace: rook-ceph
+          csi.storage.k8s.io/node-stage-secret-name: rook-csi-cephfs-node
+          csi.storage.k8s.io/node-stage-secret-namespace: rook-ceph
+
+# The chart's default object store (ceph-objectstore + RGW + ceph-bucket
+# StorageClass) was never used: no ObjectBucketClaims, no buckets, no PVCs.
+# Its gateway held ~280Mi and a 484Mi request on an 8GB worker. Removed
+# 2026-10-31; re-add a cephObjectStores entry if S3 is ever needed.
+cephObjectStores: []
+
+csi:
+  enableCephfsDriver: true
+  enableRbdDriver: true
+  enableCephfsSnapshotter: false
+  enableRBDSnapshotter: true
+  enableNFSDriver: false
+  # CSI plugin/provisioner container resources are set via the operator
+  # release (rook-ceph-operator-values.yaml: csi.csiRBDPluginResource etc.)
+  # - this chart's provisionerResources/pluginResources keys are not wired
+  # to the operator's per-container CSI_*_RESOURCE env vars and were a no-op.
+
+monitoring:
+  enabled: false
+
+toolbox:
+  enabled: true
+  resources:
+    limits:
+      cpu: "200m"
+      memory: "136Mi"   # was 256Mi; peak 105.6Mi (Stage B0)
+    requests:
+      cpu: "50m"
+      memory: "64Mi"

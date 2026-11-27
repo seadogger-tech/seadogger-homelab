@@ -63,7 +63,7 @@ The guard fails closed: an unparseable argument string or a guard error also sto
 
 ### What it can run: the helm-upgrade-only apply flags
 
-Four flags change a chart's or a HelmChartConfig's running values without a cold start. `guard.py` does not refuse them, because they are not on its lists, so the runner may run them. `enable_k3s_*` and `enable_rook_ceph_part1` stay refused.
+Five flags change a chart's, HelmChartConfig's or cert-manager Application's running values without a cold start. `guard.py` does not refuse them, because they are not on its lists, so the runner may run them. `enable_k3s_*` and `enable_rook_ceph_part1` stay refused.
 
 | Flag | Task file | Release (namespace) | Chart pin |
 | --- | --- | --- | --- |
@@ -71,10 +71,18 @@ Four flags change a chart's or a HelmChartConfig's running values without a cold
 | `enable_metallb_resources` | `ansible/tasks/metallb_resources.yml` | `metallb` (`metallb-system`) | 0.15.2, equal to `metallb_native_deploy.yml` |
 | `enable_argocd_resources` | `ansible/tasks/argocd_resources.yml` | `argocd` (`argocd`) | 8.5.8, equal to `argocd_native_deploy.yml` |
 | `enable_traefik_resources` | `ansible/tasks/traefik_resources.yml` | HelmChartConfig `traefik` (`kube-system`), not a Helm release | none: k3s's helm controller upgrades Traefik |
+| `enable_cert_manager_resources` | `ansible/tasks/cert_manager_resources.yml` | Argo Application `cert-manager` (`cert-manager`) | `cert-manager-application.yml` from this checkout |
 
-All four default to `false` in `main.yml` and `example.config.yml`.
+All five default to `false` in `main.yml` and `example.config.yml`.
 
 `enable_traefik_resources` writes one object, the HelmChartConfig `kube-system/traefik`, from `ansible/vars/traefik_helmchartconfig_values.yml` (the cold-start `traefik_dashboard_deploy.yml` loads the same file). It is not `enable_traefik_dashboard`, which is an untagged task in a play that also runs other applications, so `--tags` cannot narrow it. It downloads nothing and creates no dashboard object.
+
+`enable_cert_manager_resources` applies exactly the checked-out
+`certificates/cert-manager-application.yml` with one Kubernetes apply. It does
+not read `/root/pki`, patch webhook arguments or touch the webhook Deployment
+directly. The live Application was diffed against the tracked pre-B3 file; the
+diff was empty, so B3 adds only resources and preferred yoda affinity. Its
+`startupapicheck` init container remains on the namespace LimitRange.
 
 **What they may do.** Run `helm upgrade` on a release that already exists, with the values from the checked-out repo (Helm runs on the control-plane host, so each values file is first copied from the runner's checkout to `/tmp` on that host): `deployments/rook-ceph/*.yaml` for Rook, and the shared vars files `ansible/vars/metallb_helm_values.yml` and `ansible/vars/argocd_helm_values.yml` for MetalLB and ArgoCD (the cold-start tasks load the same files, so the two paths cannot drift). Values therefore come from the pinned Core commit the Job checked out, never from the raw `master` URL.
 
@@ -85,6 +93,39 @@ All four default to `false` in `main.yml` and `example.config.yml`.
 **What they may not do.** Install (`helm install`, `--install`), wipe anything, or touch or restart k3s. If the release is missing, `helm status` fails and the run stops with `helm release <name> is not installed`. Nothing else in the run changes either: a run is a no-op upgrade when the cluster already matches the repo.
 
 **Rook gates.** Before the upgrade, `ceph health` (through `deploy/rook-ceph-tools`) must print `HEALTH_OK`, or the run fails and nothing is upgraded. After the upgrade, the run polls `ceph status -f json` until every PG is `active+clean`, for up to 30 minutes (180 tries, 10 s apart), and fails loudly if they are not.
+
+The Rook task accepts `rook_values_set=current|previous` (default `current`);
+any other value fails before a write. It copies the selected operator and
+cluster values pair from the checkout. `rook_recovery=true` is valid only with
+`rook_values_set=previous`; it replaces the HEALTH_OK pre-gate with a fixture-
+testable check of `ceph health detail -f json` and `ceph osd stat -f json`.
+Recovery proceeds only when status is not `HEALTH_ERR`, every raised code is
+one of `MDS_CACHE_OVERSIZED`, `MDS_SLOW_REQUEST`, `MDS_SLOW_METADATA_IO`,
+`MDS_TRIM`, `SLOW_OPS`, `MDS_INSUFFICIENT_STANDBY`, `FS_DEGRADED`, `OSD_DOWN`,
+`PG_DEGRADED` or `RECENT_CRASH`, and at most one OSD is down. Refusals name
+the raised codes. Without recovery, the original HEALTH_OK pre-gate remains.
+The task changes none of the steps after that gate.
+
+The B3 value selectors are deliberately narrow. `cert_manager_application_file`
+accepts `cert-manager-application.yml` (default) or
+`cert-manager-application.previous.yml`; `traefik_values_file` accepts its
+current values file (default) or `traefik_helmchartconfig_values.previous.yml`.
+Any other name fails before an apply. `guard.py` refuses none of these selectors
+or the new apply flag.
+
+**B3 rollback revisions.** Run Rook with `rook_values_set=previous` at the
+core landing SHA; add `rook_recovery=true` only if Ceph is not HEALTH_OK and
+the recovery pre-gate permits it. At that same landing SHA, run
+`enable_cert_manager_resources` with
+`cert_manager_application_file=cert-manager-application.previous.yml`, and
+`enable_traefik_resources` with
+`traefik_values_file=traefik_helmchartconfig_values.previous.yml`. ArgoCD and
+the pinned-revision plays roll back at the core revert SHA, where their
+pre-B3 values are checked out. The two Rook `.previous` files are the values
+from the base branch before B3; cert-manager `.previous` is the reconciled
+pre-B3 Application; Traefik `.previous` is the base branch's current values.
+The runbook at [Cluster Resource Monitor](30-Cluster-Resource-Monitor.md#stage-b3-fit-the-four-nodes)
+contains the B3 activity diagram and full C2/C3 checks.
 
 **How to run one.** Follow *Running* below with the arguments `main.yml -i hosts.ini --tags enable_metallb_resources -e '{"enable_metallb_resources": true}'` (one flag, with its tag, per run). Afterwards run the Helm diff for that release; it should be empty and no pod should restart. The flag changes only what the repo's values say, so a non-empty diff means the cluster had drifted from the repo.
 

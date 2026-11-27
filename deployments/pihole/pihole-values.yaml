@@ -130,10 +130,10 @@ persistentVolumeClaim:
 resources:
   limits:
     cpu: 500m
-    memory: 1Gi
+    memory: 120Mi   # Stage B3: 1.25 x request (was 1Gi)
   requests:
     cpu: 100m
-    memory: 128Mi   # was 256Mi; measured 100Mi
+    memory: 96Mi   # Stage B3: request = P rounded up to 8Mi (P: Pro memory-sizing record)
 
 adlists:
     - https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/ultimate.txt

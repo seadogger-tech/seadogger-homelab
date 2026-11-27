@@ -1,5 +1,26 @@
 # Cluster Resource Monitor
 
+## Stage B3: placement
+
+### Keep Paperclip off the OSD-0 node
+
+Paperclip stays off the node that runs Ceph OSD-0 and the active MDS. Its agent
+processes can use substantial memory at the same time as Ceph needs memory to
+serve storage and recover from failures. Separating them protects both the
+control plane's work and the storage path.
+
+Paperclip's required pod anti-affinity prevents a newly scheduled Paperclip pod
+from sharing a hostname with OSD-0. Its preferred anti-affinity steers it away
+from the MDS when another eligible node is available. Kubernetes applies pod
+anti-affinity when it schedules a pod; it does not evict an already running pod
+if an OSD or MDS later moves onto that node.
+
+Requests sized at observed peaks reserve nearly all worker capacity. That leaves
+no N−1 headroom: if a worker goes down, its larger pods can remain Pending until
+the worker returns. Placement keeps the workloads separated during normal
+operation, but does not make the remaining nodes large enough to absorb a
+failed worker.
+
 The cluster resource monitor records node and container measurements before
 daily cleanup, preserves short lived containers in history, and reports gaps
 that prevent a clean measurement window. Pro owns the host collector and the
@@ -197,18 +218,42 @@ Environment, arguments, annotations and Event or termination messages are never
 journaled and never appear in a report.
 
 Every 60 seconds it writes `journal/cursor.json` atomically: each stream's last
-`resourceVersion` and a heartbeat (the older of the two streams' last sign of
-life). A stream's version moves only after the records up to it are fsynced to
+`resourceVersion`, each stream's last-alive time and a heartbeat (the older of
+the two streams' alive times; see the watch deadline below). A stream's version moves only after the records up to it are fsynced to
 the journal, and one lock guards every cursor change and the heartbeat's
 snapshot, so a heartbeat during an evaluation can never save a version whose
 records are still unwritten. If an append fails, the cursor stays and the watch
 retries from the old version, and the record is journaled once. After a dropped
 watch or a restart it resumes from the cursor. If the API
-answers `410 Gone` it relists and journals a **gap** from the last heartbeat to
-the relist. The first start opens coverage and journals a `start` record;
-nothing earlier counts as observed. The liveness probe fails when the heartbeat
-is more than 3 minutes old, so a stuck watch restarts the pod and its gap is
-recorded.
+answers `410 Gone` it relists and journals a **gap** from the stream's last
+alive time to the relist. The first start opens coverage and journals a `start`
+record; nothing earlier counts as observed. The liveness probe fails when the
+heartbeat is more than 3 minutes old, so a stuck watch restarts the pod and its
+gap is recorded.
+
+**The watch deadline and the heartbeat.** The watch asks the server to end it
+after `WATCH_TIMEOUT_SECONDS` (300). The socket timeout is that plus
+`WATCH_GRACE_SECONDS` (30, never below 1), so 330 s, always above the server's
+deadline. A socket timeout below it (the old 90 s) killed every quiet Events
+watch before the server did and produced false gaps. When a watch opens, the
+stream records its **watch deadline**: the OPEN time plus the socket timeout.
+When `cursor.json` is written, a stream counts as alive *now* while its watch is
+open and inside that deadline; otherwise it counts as alive at its last OPEN or
+event time (a clean server close inside the deadline counts as alive at the
+close). The heartbeat is the minimum over the two streams. So a healthy idle
+watch, with no events and no bookmarks, keeps the heartbeat fresh until the
+server closes it at 300 s and it reopens. A stalled watch (connected, nothing
+arriving) ends at its socket deadline and reopens. A stream that cannot reopen,
+or a thread stuck past its deadline, stops refreshing, and the probe restarts the
+pod when the heartbeat is 180 s old, within its 3 x 30 s failure window. The
+probe's 180 s and the healthcheck's `HEARTBEAT_STALE_SECONDS` stay equal.
+
+**When an `events` gap is real.** Kubernetes keeps Events for a TTL (k3s default
+1 hour, `EVENT_TTL_SECONDS`). A relist after a blind interval no longer than the
+TTL still sees every Event, so the monitor journals no gap for the `events`
+stream then. A blind interval longer than the TTL journals exactly one gap. The
+`pods` stream has no such cover (a Pod deleted while nobody watched is gone), so
+every `pods` relist after a `410 Gone` journals its gap.
 
 ### The evaluator
 
@@ -238,24 +283,58 @@ metric on one node therefore are two rows.
 | Type | Fires when |
 |---|---|
 | `exited_up`, `disk_up` | A node's exited-container count or root-disk use rose since yesterday, before cleanup. |
-| `ratio_over_threshold` | A live container's limit/request is above 1.5, or it has no limit. |
+| `ratio_over_threshold` | A live container's limit/request is above 1.5, or it has no limit, unless it is a [listed exception](#listed-exceptions) within its `max_ratio`. |
 | `peak_over_request` | The working-set high-water mark is above the request. Ended containers are checked once, when first merged. |
-| `peak_unmeasured` | The journal shows a container that ran, but no host record overlaps its run (it lived under one sample interval). |
+| `peak_unmeasured` | The journal shows a container that ran for at least one host sampling interval (60 s), but no host record overlaps its run. Runs of a CronJob or Job are counted per family: one finding per CronJob (or Job) and container, with the number of unmeasured runs, not one per Pod. A run shorter than the sampling interval can be missed legitimately and is never flagged, and neither is a container that ended before the first evaluation (before the evaluation window, or on the first evaluation before the recorder's own `start`). |
 | `besteffort` | A live Pod has QoS BestEffort. |
 | `node_overcommitted` | The sum of Pod memory limits on a node is above its allocatable memory. |
-| `evicted`, `oom_killed` | From the journal (Pod status, terminations, Events) and from the host's `oom_kill` counts, ended containers included. One incident seen by several sources is one finding that lists every source (`journal`, `host`, `event`, `api`). An eviction is counted once, in the evaluation that first sees it: the finding carries the Pod UID, and a Pod that stays visible as Evicted in the API raises no new finding once an earlier history file has one for that UID, so it leaves the 7-day window with its first day. |
+| `evicted`, `oom_killed` | From the journal (Pod status, terminations, Events) and from the host's `oom_kill` counts, ended containers included. One incident seen by several sources is one finding that lists every source (`journal`, `host`, `event`, `api`). An eviction is counted once, in the evaluation that first sees it: the finding carries the Pod UID, and once an earlier history file has a finding for that UID, no source (journal, Event or API) raises another, so the incident leaves the 7-day window with its first day. The window counts distinct Pod UIDs. |
 | `collector_stale` | A node has no scrape, its `daily` timestamp is missing or over 26 h old, or its `sample` timestamp is over 10 min old. |
 | `observation_gap` | A journal gap, a rise in `node_housekeeping_sampler_gap_seconds_total`, a stale collector, or a missed evaluation day. |
 | `delivery_backlog` | A report part has been pending for more than 24 h. |
+| `exception_stale` | A row of the exceptions file matches no live container. Reported once, in the evaluation that first finds it stale. |
 | `test_finding` | Added only by `--test-finding`. |
 
 A container that restarts gets a new container ID and a fresh peak, so a lower
 peak under a new ID is reported as a restart, never as a drop. Day-over-day
 change is shown only between the same container ID on consecutive days.
 
+### Listed exceptions
+
+Some containers are over 1.5x on purpose (the Ceph OSD and mon, the Velero
+node-agent, the k3s-bundled pods that cannot be changed through Git). They are
+listed in `deployments/resource-monitor/exceptions.yaml` in Pro, mounted
+read-only at `/etc/resource-monitor/exceptions.yaml` from the same ConfigMap as
+the values map. The monitor image has no YAML library, so the file is a flat
+list in exactly this shape (one value per line, no folded text):
+
+```yaml
+exceptions:
+  - namespace: example-ns          # fnmatch glob
+    workload: example-workload     # glob; the Pod's top owner (Deployment, StatefulSet, DaemonSet, CronJob)
+    container: example-container   # glob
+    max_ratio: 2.0                 # number: the listed limit/request
+    reason: One line a reviewer can check
+```
+
+A live container that matches a row and whose limit/request is at or under
+`max_ratio` appears in the daily report under **Listed exceptions**, not as a
+`ratio_over_threshold` finding. Above `max_ratio`, or with no limit at all, it
+is still a finding and says which max it broke. Listed exceptions never start a
+report on their own: they ride along when a report is sent for something else. A
+row that matches no live container is reported once as `exception_stale`. A
+malformed file is logged and ignored, which turns every listed container back
+into a finding.
+
+To add a row, a reviewer copies the block above into `exceptions.yaml`, takes
+namespace, workload and container from the finding id
+(`ratio_over_threshold/<node>/<namespace>/<workload>/<pod>/<container>`), sets
+`max_ratio` just above today's ratio, writes the reason, and merges it through
+the Pro repo. The ConfigMap name carries a hash, so the Deployment rolls.
+
 ### Window status
 
-Every history file records the trailing 7 days: eviction count, OOM count and
+Every history file records the trailing 7 days: distinct evicted Pod count, OOM count and
 the list of observation gaps (a missing day inside the window counts as a gap).
 `clean` is true only when all three are empty. A gap makes `clean` false even
 with zero evictions and zero OOM kills, because nothing can be concluded about
@@ -797,6 +876,180 @@ succeeds, the live HelmChartConfig deep-equals `.previous.yml`, Traefik is Ready
 core revert: the revert removes `traefik_values_file`. Only after the applicable R5 gate and the R5b gate
 pass, revert core (R6). At the revert SHA, R7 runs only the Rook flag and, if the MetalLB step ran, the
 MetalLB flag; it no longer runs the Traefik flag.
+
+## Stage B3: fit the four nodes
+
+Stage B3 sizes the remaining runner-applied charts and workloads from live
+working-set peaks. This page keeps the rule and mechanisms; the measured P,
+per-node sums and rollout receipts belong on the Paperclip tickets and in the
+private Pro `docs/operations/memory-sizing.md`. Numbers in the tables below are
+placeholders, not measurements.
+
+### Sizing rule
+
+`P` is the highest `node_housekeeping_container_working_set_peak_bytes` for a
+container over the sampler window, across every replica and node. Re-read it at
+build time. If OCE-550 or OCE-551 recorded a higher long-window working-set
+peak, that is the floor. B3 does not use `memory.peak`: for the large
+containers it is mostly reclaimable page cache.
+
+- Change a container only when its limit/request ratio is above 1.25 or P is
+  above its request. Leave values already within the rule alone; keep B1 values.
+- For a regular container, request = P rounded up to 8Mi and limit = 1.25 ×
+  request rounded up to 8Mi.
+- For an app with an internal memory budget, request = max(P, budget) rounded
+  up to 8Mi; limit = 1.25 × request rounded up to 8Mi. This covers Nextcloud
+  PHP `memory_limit`, Redis `maxmemory`, and Nextcloud Postgres settings.
+- Init containers take their main container's resources. ArgoCD `copyutil` and
+  the Velero plugin init are explicit so their admitted limits do not hold the
+  pod above its main container.
+- Below 64Mi, 8Mi rounding can produce ratios up to 1.5× (for example 16/24).
+  This is an explicit rounding exception.
+
+| B3 row | Request / limit (Mi) |
+|---|---:|
+| OSD | `<request>` / `<limit>` |
+| MDS | `<request>` / `<limit>` |
+| mon, mgr, `mgr-sidecar`, exporter, toolbox, operator | `<request>` / `<limit>` per container |
+| CSI controller plugins and liveness | `<request>` / `<limit>` per container |
+| ArgoCD components and copyutil | `<request>` / `<limit>` per container |
+| cert-manager, cainjector, webhook | `<request>` / `<limit>` per container |
+| ansible-runner and checkout init | `<request>` / `<limit>` per container |
+| Traefik | `<request>` / `<limit>` (resources unchanged in B3) |
+
+### §3.4 exceptions
+
+The exceptions are recorded in the monitor's Git-held exceptions list and are
+described here without measured P values:
+
+| Container | Exception and reason |
+|---|---|
+| Ceph OSD | Ratio is above 1.5×. The request is deliberately the `osd_memory_target`, not P: Rook passes `POD_MEMORY_REQUEST` to Ceph as `--osd-memory-target`, so raising the request to P would grow the BlueStore cache. The limit is 1.25 × live P. The OSD remains system-node-critical and is evicted last. |
+| Ceph mon | Ratio is above 1.5× because `mon_memory_target` (1Gi) floors its limit. The target is in the Ceph config DB and has no GitOps path; current evidence does not show that lowering it is safe. |
+| Velero node-agent | Ratio is above 1.5×. Kopia streams whole volumes and has no memory knob; the weekly 13-hour Nextcloud backup falls outside the sampler window. |
+| coredns, metrics-server, local-path-provisioner | Ratios are above 1.5× and deferred because their `.skip` files on yoda block k3s from upgrading these manifests. |
+| Paperclip and paperclip-db | Their higher ratios protect concurrent agent runs and Postgres's observed worst-case memory; Postgres was OOM-killed at 1Gi. |
+| Jellyfin app | ffmpeg transcode use scales with concurrent streams, which the sampling window does not bound. |
+| Kopia maintenance Job | The Nextcloud repository grows each Sunday; its first maintenance after a weekly backup is outside the window. |
+| CSI nodeplugin `rook-ceph.*.csi.ceph.com-nodeplugin` | B1's 1.5× allowance prevents an OOM from breaking every mount on that node. |
+| Containers under 64Mi | 8Mi rounding can produce a ratio up to 1.5×. |
+| MDS standby, Nextcloud and Redis / Nextcloud DB | Their requests may exceed P: standby-replay must be sized to take over the active rank, while the application requests include their internal memory budgets. |
+
+### Ceph mechanisms and chart paths
+
+For the OSD, `cephClusterSpec.resources.osd.requests.memory` is the cache
+target. B3 sets it to `<request>`; Rook passes it into Ceph as
+`--osd-memory-target`. The separate OSD limit is `<limit>` from live P and
+provides headroom for non-cache allocations. Do not infer an OSD request from
+P.
+
+For MDS, the Rook limit is `<limit>` and Rook derives
+`mds_cache_memory_limit` as 0.5 × that limit (`<cache-limit>`). B3 does not
+change the global MDS cache config. The `mon_memory_target` also stays as set.
+
+Rook 1.18.1 crosses the CSI resource keys: `csiRBDPluginResource` and
+`csiCephFSPluginResource` render `Driver.spec.controllerPlugin.resources`;
+`csiRBDProvisionerResource` and `csiCephFSProvisionerResource` render the
+nodeplugin resources. B3 changes only the controller-plugin entries
+`csi-rbdplugin`, `csi-cephfsplugin` and `liveness-prometheus`. The
+`csi-provisioner`, `csi-resizer`, `csi-attacher`, `csi-snapshotter` and all
+nodeplugin values stay as they are.
+
+The Rook operator's v1.19.2 chart has no supported affinity value (it exposes
+nodeSelector and tolerations only), so B3 leaves operator placement unchanged.
+Toolbox, Traefik and all cert-manager components prefer yoda; the operator
+placement request for obiwan is not represented in the chart.
+
+### B3 delivery map
+
+```mermaid
+flowchart LR
+  subgraph core["core repo (public: values and guidance only)"]
+    RV["rook-ceph values<br/>OSD request 1280 (trim), MDS limit 1280 (trim),<br/>mon/mgr/exporter/toolbox/operator/ctrlplugin (changed)"]
+    RVP["rook values .previous pair (new)<br/>rook task: rook_values_set + recovery pre-gate (changed)"]
+    AV["argocd_helm_values.yml (changed)"]
+    CMF["cert_manager_resources.yml + flag (new)<br/>applies only cert-manager Application<br/>or its .previous file (new)"]
+    TV["traefik values: prefer yoda (changed)<br/>.previous = today (changed)"]
+    APPS["nextcloud / jellyfin / pihole / HA / mealie values<br/>nextcloud-db, redis, s3-backup, xmltv manifests (changed)"]
+    W["wiki 30, 28, 05 (changed)"]
+  end
+  subgraph pro["Pro repo (private)"]
+    PC["paperclip Deployment + DB<br/>requests at P, anti-affinity OSD-0 (changed)"]
+    PA["company-memory, google-mcp, portal,<br/>node-sensors, velero, ember-trail (changed)"]
+    RM["resource-monitor: watch deadline + liveness,<br/>eviction, peak fixes; exceptions.yaml (new)"]
+    DOC["docs/operations/memory-sizing.md B3 (changed)"]
+  end
+  RUN["Ansible runner"] --> RV & AV & CMF & TV
+  RUN -. "rollback C2 at landing SHA" .-> RVP
+  RVP --> CEPH
+  RUN -- "pinned revision plays;<br/>s3-backup + xmltv apply raw master" --> APPS
+  ARGO["ArgoCD"] -- "valueFiles on master / HEAD" --> APPS
+  ARGO -- "HEAD" --> PC & PA & RM
+  RV --> CEPH["OSD x3, MDS x2, mon x3, mgr x2"]
+  PC -- "required: not on OSD-0 node" --> REY["rey"]
+  APPS -- "Jellyfin: anakin or obiwan" --> ANA["anakin"]
+  RM -. "daily report, findings to Spock" .-> CEPH & PC & PA
+  style core fill:#1e3a5f,color:#fff
+  style pro fill:#7b1fa2,color:#fff
+  style RUN fill:#8b4513,color:#fff
+  style ARGO fill:#8b4513,color:#fff
+  style RM fill:#2d5016,color:#fff
+  style CMF fill:#2d5016,color:#fff
+  style RVP fill:#2d5016,color:#fff
+```
+
+### B3 rollout and rollback
+
+```mermaid
+flowchart TD
+  A["Kirk approves Merge to main"] --> P["record prior state (private)"]
+  P --> L1["land core; hard refresh valueFiles apps"]
+  L1 --> C1{"C1: apps at B3 values; Jellyfin Pending only?"}
+  C1 -- no --> RC
+  C1 -- yes --> R1["runner: rook (wait for operator reconcile)"]
+  R1 --> D1C{"D1 Ceph: HEALTH_OK, PGs clean, targets set,<br/>MDS active + standby-replay, no cache/slow-op warning 15 min?"}
+  D1C -- no --> RC
+  D1C -- yes --> R2["runner: argocd, cert-manager, traefik, pinned plays (key check passed)"]
+  R2 --> D1R{"D1 rest: Synced/Healthy, webhook admits,<br/>Traefik answers, plays at B3 values?"}
+  D1R -- no --> RC
+  D1R -- yes --> D2{"D2: rey room for Paperclip + 128,<br/>anakin fits JF + DB, no other run live?"}
+  D2 -- no --> HOLD["Pro not landed; post numbers; re-plan"]
+  D2 -- yes --> L2["land Pro (Paperclip restart ends this run)"]
+  L2 --> D3{"D3: Paperclip Ready on rey, DB Ready,<br/>Jellyfin on anakin, Pro apps Healthy?"}
+  D3 -- no --> RP["Pro rollback P1"]
+  RP --> Q{"core also failing?"}
+  Q -- yes --> RC
+  Q -- no --> OKP["prior Pro state restored"]
+  D3 -- yes --> V{"per-node requests fit, no BestEffort,<br/>no OOM/eviction, report clean?"}
+  V -- no --> RP
+  V -- yes --> CL["Production, Retro, closing Gist: met / not met"]
+  RC["core rollback: C1 git revert; hard refresh"] --> CG{"Ceph HEALTH_OK?"}
+  CG -- yes --> C2R["C2 at landing SHA: rook_values_set=previous"]
+  CG -- no --> RG{"recovery pre-gate: not HEALTH_ERR,<br/>only listed codes, at most 1 OSD down?"}
+  RG -- no --> STOP
+  RG -- yes --> C2X["C2 at landing SHA: rook previous + rook_recovery"]
+  C2R & C2X --> C2O["C2: argocd + pinned plays at revert SHA;<br/>cert-manager and Traefik .previous at landing SHA"]
+  C2O --> RAW{"raw master serves revert blob<br/>(s3-backup, xmltv manifests)?"}
+  RAW -- "not yet: wait, re-check" --> RAW
+  RAW -- yes --> C2A["C2.6 at revert SHA: s3-backup, xmltv plays<br/>(only those run at rollout)"]
+  C2A --> RCG{"C3: prior record matches (Ceph targets, pods,<br/>cert-manager App + Deployments, Traefik,<br/>db/redis pins, s3-backup CronJob, xmltv Deployment),<br/>HEALTH_OK in 30 min, mounts, webhook admits, xmltv Ready?"}
+  RCG -- yes --> OKC["prior core state restored"]
+  RCG -- no --> STOP["stop; investigate; post on the Map"]
+  style A fill:#1e3a5f,color:#fff
+  style R1 fill:#8b4513,color:#fff
+  style R2 fill:#8b4513,color:#fff
+  style L2 fill:#7b1fa2,color:#fff
+  style CL fill:#2d5016,color:#fff
+  style RC fill:#8b4513,color:#fff
+  style C2R fill:#8b4513,color:#fff
+  style C2X fill:#8b4513,color:#fff
+  style C2O fill:#8b4513,color:#fff
+  style C2A fill:#8b4513,color:#fff
+  style RP fill:#8b4513,color:#fff
+  style OKC fill:#2d5016,color:#fff
+  style OKP fill:#2d5016,color:#fff
+  style STOP fill:#8b4513,color:#fff
+```
 
 The core revert changes the MetalLB strategy back to `RollingUpdate`, which is not part of the pod
 template, so it replaces no speaker. To go back to B0 for the speakers while keeping the rest of B1,

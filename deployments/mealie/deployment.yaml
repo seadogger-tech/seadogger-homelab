@@ -51,10 +51,10 @@ spec:
           resources:
             requests:
               cpu: "50m"
-              memory: "320Mi"   # was 256Mi; measured 306Mi working set (2026-10-31)
+              memory: "312Mi"   # Stage B3: request = P rounded up to 8Mi (P: Pro memory-sizing record)
             limits:
               cpu: "1000m"
-              memory: "408Mi"   # was 1Gi; peak 325.5Mi over 20 days, 1.25x (Stage B0)
+              memory: "392Mi"   # 1.25 x request (was 408Mi)
           readinessProbe:
             httpGet:
               path: /api/app/about

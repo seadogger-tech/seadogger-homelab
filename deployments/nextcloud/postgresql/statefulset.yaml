@@ -91,12 +91,16 @@ spec:
           resources:
             requests:
               cpu: 100m
-              # 512Mi -> 192Mi (2026-10-31): shared_buffers is 64MB and the
-              # database measured 78Mi working set, 142Mi peak.
+              # Request = the budget in args (Stage B3): shared_buffers 64 +
+              # max_connections 30 x work_mem 2 + maintenance_work_mem 32 +
+              # autovacuum_work_mem 16 + 20 baseline = 192Mi. Request = max(budget, P),
+              # limit = 1.25x (P: Pro memory-sizing record).
+              # the budget decides. Limit = 1.25 x request. Change the args and this
+              # together.
               memory: 192Mi
             limits:
               cpu: '1'
-              memory: 1Gi
+              memory: 240Mi
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
