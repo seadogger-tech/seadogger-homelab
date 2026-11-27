@@ -53,7 +53,7 @@ flowchart TD
   HO -- no --> RG{"recovery gate allows?<br/>(not ERR, listed codes, ≤1 OSD down)"}
   RG -- no --> ST["stop: no revert;<br/>post refusal; investigate at LAND"]
   RG -- yes --> RRR["Rook previous + rook_recovery at LAND"]
-  RR & RRR --> R1G{"R1: values = prior, ctrlplugins unpinned,<br/>B3 sizing, no Ceph daemon restarted, PGs clean?"}
+  RR & RRR --> R1G{"R1: .previous pair = prior, ctrlplugins have no node rule<br/>and are Ready, B3 sizing, PGs clean,<br/>Ceph UIDs/restarts unchanged?"}
   R1G -- no --> ST
   R1G -- yes --> R2A["cert-manager .previous at LAND (R2)"]
   R2A --> R2G{"R2: Application = .previous;<br/>webhook admits test Certificate?"}
@@ -1108,9 +1108,9 @@ flowchart TD
   RC["core rollback: prepare at landing SHA"] --> CG{"Ceph HEALTH_OK?"}
   CG -- yes --> C2R["Rook .previous at LAND"]
   CG -- no --> RG{"recovery pre-gate: not HEALTH_ERR,<br/>only listed codes, at most 1 OSD down?"}
-  RG -- no --> STOP
+  RG -- no --> STOP["stop: no revert; post refusal;<br/>investigate at LAND"]
   RG -- yes --> C2X["Rook .previous + rook_recovery at LAND"]
-  C2R & C2X --> R1G{"R1: run and active+clean gate pass,<br/>values = prior, ctrlplugins Ready,<br/>B3 sizing, Ceph UIDs/restarts unchanged?"}
+  C2R & C2X --> R1G{"R1: run and active+clean gate pass,<br/>.previous pair = prior, ctrlplugins have no node rule<br/>and are Ready, B3 sizing, PGs clean,<br/>Ceph UIDs/restarts unchanged?"}
   R1G -- no --> STOP
   R1G -- yes --> CMR["cert-manager .previous at LAND"]
   CMR --> R2G{"R2: Application = .previous;<br/>webhook admits test Certificate?"}
@@ -1121,7 +1121,7 @@ flowchart TD
   RAW -- yes --> C2A["at REVERT: metallb, argocd, pinned plays<br/>(only plays run at rollout)"]
   C2A --> R3G{"R3: movers Ready under prior placement,<br/>apps Healthy, Nextcloud answers,<br/>S3 0 2 * * *, Ceph no worse, no restart loop?"}
   R3G -- yes --> OKC["prior core state restored"]
-  R3G -- no --> STOP["stop; investigate; post on the Map"]
+  R3G -- no --> STOP3["stop; investigate; post on the Map"]
   style A fill:#1e3a5f,color:#fff
   style R1 fill:#8b4513,color:#fff
   style R2 fill:#8b4513,color:#fff
@@ -1133,10 +1133,11 @@ flowchart TD
   style CMR fill:#8b4513,color:#fff
   style RV fill:#8b4513,color:#fff
   style C2A fill:#8b4513,color:#fff
+  style STOP fill:#8b0000,color:#fff
+  style STOP3 fill:#8b4513,color:#fff
   style RP fill:#8b4513,color:#fff
   style OKC fill:#2d5016,color:#fff
   style OKP fill:#2d5016,color:#fff
-  style STOP fill:#8b4513,color:#fff
 ```
 
 The core revert changes the MetalLB strategy back to `RollingUpdate`, which is not part of the pod
