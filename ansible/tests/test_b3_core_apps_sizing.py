@@ -38,7 +38,7 @@ ROWS = {
     "xmltv-proxy": ("jellyfin/xmltv-proxy.yaml", 21, 24, 32, 1.5),
     "pihole": ("pihole/pihole-values.yaml", 94, 96, 120, 1.25),
     "home-assistant": ("home-assistant/home-assistant-values.yaml", 1140, 1144, 1432, 1.25),
-    "mealie": ("mealie/deployment.yaml", 255, 256, 320, 1.25),
+    "mealie": ("mealie/deployment.yaml", 306, 312, 392, 1.25),
 }
 
 

@@ -30,6 +30,8 @@ OPERATOR_VALUES = CORE / "deployments/rook-ceph/rook-ceph-operator-values.yaml"
 METALLB_VALUES = CORE / "ansible/vars/metallb_helm_values.yml"
 TRAEFIK_VALUES = CORE / "ansible/vars/traefik_helmchartconfig_values.yml"
 VARS = CORE / "ansible/vars"
+# Commit the Map branch was cut from (merge-base of master and map/OCE-369-b3-fit): the pre-B3 state.
+PRE_B3_BASE = "518f325d5b85de472214584283891b2f01d79fb2"
 
 
 def to_mi(value):
@@ -187,7 +189,7 @@ class TestTraefikGuaranteed(unittest.TestCase):
 
     def test_previous_values_deep_equal_base_branch_current_values(self):
         shown = subprocess.run(
-            ["git", "show", "origin/map/OCE-369-b3-fit:ansible/vars/traefik_helmchartconfig_values.yml"],
+            ["git", "show", f"{PRE_B3_BASE}:ansible/vars/traefik_helmchartconfig_values.yml"],
             cwd=CORE, capture_output=True, text=True)
         if shown.returncode:
             self.skipTest("base branch is not available in this checkout")
