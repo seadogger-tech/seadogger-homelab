@@ -1,0 +1,197 @@
+crds:
+  enabled: true
+
+image:
+  repository: rook/ceph
+  tag: v1.18.1
+  pullPolicy: IfNotPresent
+
+resources:
+  limits:
+    # 200m -> 1 CPU (2026-10-31): at 200m the operator was throttled in 88% of
+    # CFS periods (31 min in its first hour), which made every Ceph change
+    # roll slowly. It idles near zero; the limit only matters while reconciling.
+    cpu: "1"
+    memory: 256Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+discover:
+  tolerations:
+    - key: node-role.kubernetes.io/control-plane
+      operator: Exists
+      effect: NoSchedule
+
+csi:
+  provisionerTolerations:
+    - key: node-role.kubernetes.io/control-plane
+      operator: Exists
+      effect: NoSchedule
+  pluginTolerations:
+    - key: node-role.kubernetes.io/control-plane
+      operator: Exists
+      effect: NoSchedule
+
+  # CSI plugin/provisioner containers are control-plane shims (attach/mount
+  # bookkeeping), not I/O-critical daemons like OSD/mon/mgr - safe to run
+  # lean. Rook's built-in defaults (250m plugin, 100m per provisioner
+  # sidecar) reserved ~2.4 cores cluster-wide for components that measured
+  # near 0m actual usage even during active recovery.
+  csiRBDPluginResource: |
+    - name : driver-registrar
+      resource:
+        requests:
+          memory: 32Mi   # was 128Mi; peak 24.3Mi (B0 limit 512Mi -> 40Mi)
+          cpu: 25m
+        limits:
+          memory: 40Mi
+    - name : csi-rbdplugin
+      resource:
+        requests:
+          memory: 64Mi   # live request; the repo's 128Mi is not what the Driver CR carries
+          cpu: 100m
+        limits:
+          memory: 128Mi   # was 1Gi; peak 102.2Mi (B0)
+    - name : liveness-prometheus
+      resource:
+        requests:
+          memory: 32Mi   # was 128Mi; measured 5-21Mi
+          cpu: 25m
+        limits:
+          memory: 48Mi   # was 256Mi; peak 37.9Mi (B0)
+  # NOTE: with ROOK_USE_CSI_OPERATOR (Rook 1.18, pkg/operator/ceph/csi/operator_driver.go) the
+  # operator re-renders the Driver CRs on every start from these keys, and the two
+  # pairs are crossed:
+  #   *ProvisionerResource -> Driver spec.nodePlugin.resources (entries named
+  #                           "*plugin" -> plugin, "driver-registrar" -> registrar,
+  #                           "liveness*" -> liveness; every other name is ignored)
+  #   *PluginResource      -> Driver spec.controllerPlugin.resources
+  # So the node plugin pods are sized by the *ProvisionerResource entries below, the
+  # controller plugin by the *PluginResource entries above, and the csi-provisioner,
+  # csi-resizer, csi-attacher and csi-snapshotter entries have no effect.
+  # Stage B1 sizes the node plugin: requests = P rounded up to 8Mi, limits 1.25 x
+  # request (1.5 x for the two plugin containers, whose mount work scales with the
+  # volume count); see docs/wiki/30-Cluster-Resource-Monitor.md, Stage B1.
+  csiRBDProvisionerResource: |
+    - name : csi-provisioner
+      resource:
+        requests:
+          memory: 32Mi   # measured 13-45Mi working set, <=63Mi peak (2026-10-31)
+          cpu: 50m
+        limits:
+          memory: 256Mi
+    - name : csi-resizer
+      resource:
+        requests:
+          memory: 32Mi   # measured 13-45Mi working set, <=63Mi peak (2026-10-31)
+          cpu: 50m
+        limits:
+          memory: 256Mi
+    - name : csi-attacher
+      resource:
+        requests:
+          memory: 32Mi   # measured 13-45Mi working set, <=63Mi peak (2026-10-31)
+          cpu: 50m
+        limits:
+          memory: 256Mi
+    - name : csi-snapshotter
+      resource:
+        requests:
+          memory: 32Mi   # measured 13-45Mi working set, <=63Mi peak (2026-10-31)
+          cpu: 50m
+        limits:
+          memory: 256Mi
+    - name : csi-rbdplugin
+      resource:
+        requests:
+          memory: 104Mi
+          cpu: 100m
+        limits:
+          memory: 160Mi
+    - name : liveness-prometheus
+      resource:
+        requests:
+          memory: 40Mi
+          cpu: 25m
+        limits:
+          memory: 56Mi
+    - name : driver-registrar
+      resource:
+        requests:
+          memory: 32Mi
+          cpu: 25m
+        limits:
+          memory: 40Mi
+  csiCephFSPluginResource: |
+    - name : driver-registrar
+      resource:
+        requests:
+          memory: 32Mi   # was 128Mi; peak 24.3Mi (B0 limit 512Mi -> 40Mi)
+          cpu: 25m
+        limits:
+          memory: 40Mi
+    - name : csi-cephfsplugin
+      resource:
+        requests:
+          memory: 64Mi   # live request; the repo's 128Mi is not what the Driver CR carries
+          cpu: 100m
+        limits:
+          memory: 144Mi   # was 1Gi; peak 110.4Mi (B0)
+    - name : liveness-prometheus
+      resource:
+        requests:
+          memory: 32Mi   # was 128Mi; measured 5-21Mi
+          cpu: 25m
+        limits:
+          memory: 48Mi   # was 256Mi; peak 37.9Mi (B0)
+  csiCephFSProvisionerResource: |
+    - name : csi-provisioner
+      resource:
+        requests:
+          memory: 32Mi   # measured 13-45Mi working set, <=63Mi peak (2026-10-31)
+          cpu: 50m
+        limits:
+          memory: 256Mi
+    - name : csi-resizer
+      resource:
+        requests:
+          memory: 32Mi   # measured 13-45Mi working set, <=63Mi peak (2026-10-31)
+          cpu: 50m
+        limits:
+          memory: 256Mi
+    - name : csi-attacher
+      resource:
+        requests:
+          memory: 32Mi   # measured 13-45Mi working set, <=63Mi peak (2026-10-31)
+          cpu: 50m
+        limits:
+          memory: 256Mi
+    - name : csi-snapshotter
+      resource:
+        requests:
+          memory: 32Mi   # measured 13-45Mi working set, <=63Mi peak (2026-10-31)
+          cpu: 50m
+        limits:
+          memory: 256Mi
+    - name : csi-cephfsplugin
+      resource:
+        requests:
+          memory: 112Mi
+          cpu: 100m
+        limits:
+          memory: 168Mi
+    - name : liveness-prometheus
+      resource:
+        requests:
+          memory: 40Mi
+          cpu: 25m
+        limits:
+          memory: 56Mi
+    - name : driver-registrar
+      resource:
+        requests:
+          memory: 32Mi
+          cpu: 25m
+        limits:
+          memory: 40Mi

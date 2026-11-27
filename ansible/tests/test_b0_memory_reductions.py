@@ -72,8 +72,22 @@ class TestB0MemoryReductions(unittest.TestCase):
         cls.rows = yaml.safe_load(FIXTURE.read_text())["containers"]
 
     def test_every_container_is_cut_and_above_1_25x_peak(self):
+        # B3 deliberately remeasures and resizes these chart rows using live
+        # working-set P. Their current values are covered by the B3 tests;
+        # applying B0's older memory.peak ceiling to them would reject the
+        # approved later-stage limit reductions and request increases.
+        b3_rows = {
+            "ceph-exporter (x3)", "rook-ceph-tools",
+            "csi-rbdplugin", "csi-rbdplugin liveness-prometheus",
+            "csi-cephfsplugin", "csi-cephfsplugin liveness-prometheus",
+            "argocd application-controller", "argocd repo-server",
+            "argocd server", "argocd dex-server",
+            "argocd notifications-controller",
+        }
         for spec in self.rows:
             with self.subTest(spec["name"]):
+                if spec["name"] in b3_rows:
+                    continue
                 got = resources_for(spec)
                 self.assertLess(got["limit"], spec["old_limit_mi"], "limit must come down")
                 if not spec.get("request_raised_by_b1"):
@@ -160,11 +174,19 @@ class TestB0HelmRender(unittest.TestCase):
         values = load_yaml("ansible/vars/argocd_helm_values.yml")["argocd_helm_values"]
         by = {s["name"]: s for s in yaml.safe_load(FIXTURE.read_text())["containers"]}
         seen = dict(self.containers(self.render("argocd", values), ("Deployment", "StatefulSet")))
-        for cname, row in (("application-controller", "argocd application-controller"),
-                           ("repo-server", "argocd repo-server"), ("server", "argocd server"),
-                           ("dex-server", "argocd dex-server"),
-                           ("notifications-controller", "argocd notifications-controller"),
-                           ("applicationset-controller", "argocd applicationset-controller"),
+        b3_expected = {
+            "application-controller": (512, 640),
+            "repo-server": (152, 192),
+            "dex-server": (128, 160),
+            "server": (64, 80),
+            "notifications-controller": (40, 56),
+        }
+        for cname, (request, limit) in b3_expected.items():
+            with self.subTest(cname):
+                self.assertIn(cname, seen)
+                self.assertEqual(to_mi(seen[cname]["requests"]["memory"]), request)
+                self.assertEqual(to_mi(seen[cname]["limits"]["memory"]), limit)
+        for cname, row in (("applicationset-controller", "argocd applicationset-controller"),
                            ("redis", "argocd redis")):
             with self.subTest(cname):
                 self.assertIn(cname, seen)
@@ -179,7 +201,7 @@ class TestB0HelmRender(unittest.TestCase):
         self.assertEqual(to_mi(res["cmd-reporter"]["requests"]["memory"]), 64)
         self.assertEqual(to_mi(res["cmd-reporter"]["limits"]["memory"]), 512)
         self.assertEqual(to_mi(res["logcollector"]["limits"]["memory"]), 40)
-        self.assertEqual(to_mi(res["exporter"]["limits"]["memory"]), 64)
+        self.assertEqual(to_mi(res["exporter"]["limits"]["memory"]), 40)
         for k in ("logcollector", "exporter"):  # CPU is kept from the chart defaults
             self.assertIn("cpu", res[k]["requests"])
 
