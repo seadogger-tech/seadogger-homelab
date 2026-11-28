@@ -591,15 +591,17 @@ cronjob:
   sidecar:
     ## Cronjob sidecar resource requests and limits. The chart reads this key; the
     ## cronjob.resources key it replaces was never read, so the sidecar ran on the
-    ## Stage B3: request = P rounded up to 8Mi; limit 1.25x (P: Pro memory-sizing record).
+    ## Explicit exception to the B3 1.25x rule (OCE-947): the cron process runs under PHP
+    ## memory_limit 512M, the same budget the app container is sized to (512/640), and B3's
+    ## 1.25x limit from the steady-state peak OOM-killed it on 2026-11-28.
     ## ref: http://kubernetes.io/docs/user-guide/compute-resources/
     ##
     resources:
       requests:
         cpu: 20m
-        memory: 72Mi
-      limits:
         memory: 96Mi
+      limits:
+        memory: 640Mi
 
   # Allow configuration of lifecycle hooks
   # ref: https://kubernetes.io/docs/tasks/configure-pod-container/attach-handler-lifecycle-event/
