@@ -29,10 +29,13 @@ POSTGRES_BASELINE_MI = 20  # postmaster, per-backend overhead and catalog caches
 # Pi-hole: FTL's startup goes past a 1.25x limit and OOM-kills it (OCE-857), so it keeps the pre-B3 1Gi.
 PIHOLE_EXCEPTION = {"request": 96, "limit": 1024}
 
+# Nextcloud cron sidecar: background jobs run to PHP's memory_limit, so the limit follows it (OCE-947).
+NEXTCLOUD_CRON_EXCEPTION = {"request": 96, "limit": 640}
+
 # name: (file, expected request, expected limit, allowed ratio)
 ROWS = {
     "nextcloud": ("nextcloud/nextcloud-values.yaml", 512, 640, 1.25),
-    "nextcloud-cron": ("nextcloud/nextcloud-values.yaml", 72, 96, 1.25),
+    "nextcloud-cron": ("nextcloud/nextcloud-values.yaml", 96, 640, 1.25),  # explicit exception, see NEXTCLOUD_CRON_EXCEPTION
     "nextcloud-db": ("nextcloud/postgresql/statefulset.yaml", 192, 240, 1.25),
     "nextcloud-redis": ("nextcloud/redis/deployment.yaml", 64, 80, 1.25),
     "s3-sync": ("nextcloud/s3-backup-cronjob.yaml", 80, 104, 1.25),
@@ -142,6 +145,11 @@ class TestRows(unittest.TestCase):
                 if name == "pihole":
                     self.assertEqual((request, limit), (PIHOLE_EXCEPTION["request"], PIHOLE_EXCEPTION["limit"]))
                     continue
+                if name == "nextcloud-cron":
+                    self.assertEqual((request, limit),
+                                     (NEXTCLOUD_CRON_EXCEPTION["request"], NEXTCLOUD_CRON_EXCEPTION["limit"]))
+                    self.assertGreaterEqual(limit, PHP_MEMORY_LIMIT_MI)
+                    continue
                 self.assertLessEqual(limit, up8(ratio * request))
                 if ratio == 1.25 and request >= 64:
                     self.assertLessEqual(limit, up8(1.25 * request))
@@ -200,7 +208,7 @@ class TestRenders(unittest.TestCase):
         self.assertEqual((mi(containers["nextcloud"]["requests"]["memory"]), mi(containers["nextcloud"]["limits"]["memory"])),
                          (512, 640))
         cron = containers["nextcloud-cron"]
-        self.assertEqual((mi(cron["requests"]["memory"]), mi(cron["limits"]["memory"])), (72, 96))
+        self.assertEqual((mi(cron["requests"]["memory"]), mi(cron["limits"]["memory"])), (96, 640))
 
     def test_jellyfin_renders_required_and_preferred_affinity_and_resources(self):
         rendered = self.render("app-template", "https://bjw-s-labs.github.io/helm-charts", "4.3.0",
